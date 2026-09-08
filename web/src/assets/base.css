@@ -1,0 +1,391 @@
+/* ============================================================
+   CloudPan · 基础层（主题无关）
+   - :root 默认 token 取 Windows 12 值（.theme-win12 不覆盖即默认）
+   - 外壳结构类（.window/.win-resize/.ctx-menu/.np-*）供各主题复用，
+     定位与外观由 themes/<id>/<id>.css 覆盖
+   - 应用内部类（.app-root/.tool-btn/.file-grid 等）被 apps/*.vue 使用，保持全局
+   ============================================================ */
+:root {
+  /* 基础（浅色主题默认） */
+  --text: #000000;
+  --text-2: #333333;
+  --text-3: #7a7a7a;
+  --bg: #ffffff;
+  --bg50: #ffffffb0;
+  --bg70: #ffffffc9;
+  --unfoc: #eaeaea;
+  --card: #efefef75;
+  --hover: #ffffff65;
+  --hover-b: #1111110f;
+  --contextmenu: #f7f7f7bb;
+  --stroke: #99999950;
+  --stroke-b: #0000001a;
+  --shadow: 0 4px 12px 4px #00000018;
+  --theme-1: #ad6eca;  /* 主题渐变：紫 */
+  --theme-2: #3b91d8;  /* 主题渐变：蓝 */
+  --danger: #d80d1c;
+  --danger-bg: #d80d1c20;
+
+  /* 圆角 token */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-2xl: 18px;
+  --radius-3xl: 22px;
+  --radius-4xl: 28px;
+
+  /* 字体（各主题覆盖） */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* 动画曲线与时长（各主题覆盖） */
+  --anim-pop: cubic-bezier(0.16, 1, 0.3, 1);      /* Win11 标准 pop 曲线 */
+  --anim-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Dock/Launchpad 弹簧 */
+  --anim-in-dur: 0.2s;
+  --anim-out-dur: 0.14s;
+
+  /* 单色图标描边宽度（各主题覆盖；AppIcon 的 .i-sw 组读取） */
+  --icon-sw: 1.5;
+
+  /* Mica 噪点纹理（真实 Win11 Mica 的标志性细颗粒，128px 平铺；.mica::after 用 CSS opacity 控制） */
+  --noise-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* 壁纸用柔化噪点（不透明度 7% 烘焙进 SVG，作 background-image 层用） */
+  --noise-soft-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23m)' opacity='0.07'/%3E%3C/svg%3E");
+
+  /* 外壳保留区（各主题 CSS 覆盖；须与 themes/<id>/index.ts 的 geometry 一致） */
+  --shell-top: 0px;
+  --shell-bottom: 48px;
+  --shell-left: 0px;
+  --shell-right: 0px;
+}
+.dark {
+  --text: #ffffff;
+  --text-2: #dedede;
+  --text-3: #9b9b9b;
+  --bg: #111111;
+  --bg50: #3b3b3bb0;
+  --bg70: #333333c9;
+  --unfoc: #333333;
+  --card: #46464675;
+  --hover: #8f8f9465;
+  --hover-b: #ffffff14;
+  --contextmenu: #2c2c2cbb;
+  --stroke: #76767675;
+  --stroke-b: #ffffff26;
+  --shadow: 0 4px 12px 4px #0000002e;
+  --danger-bg: #d80d1c40;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #app { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+  background: #e7e9f2;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.dark body { background: #0a0e1a; }
+button, input, textarea, select { font-family: inherit; color: inherit; outline: none; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: rgba(120,120,130,0.45); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(120,120,130,0.7); background-clip: content-box; border: 2px solid transparent; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.glass {
+  background: var(--bg50);
+  backdrop-filter: blur(28px) saturate(2);
+  -webkit-backdrop-filter: blur(28px) saturate(2);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+}
+/* Mica 材质：半透明底 + 模糊 + 噪点颗粒层（::after，pointer-events:none 不影响内容） */
+.mica {
+  position: relative;
+  background: var(--bg50);
+  -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  backdrop-filter: blur(30px) saturate(1.4);
+  border: 1px solid var(--stroke-b);
+  box-shadow: var(--shadow);
+}
+.mica::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: var(--noise-url); background-size: 128px 128px;
+  opacity: 0.045; border-radius: inherit;
+}
+/* 单色图标描边宽度（AppIcon 的 .i-sw 组；子元素自带 stroke-width 属性的笔画不受影响） */
+.i-sw { stroke-width: var(--icon-sw, 1.6); }
+
+/* ============ 按钮与输入 ============ */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--stroke);
+  background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px;
+  transition: background 0.12s, transform 0.08s;
+}
+.btn:hover { background: var(--hover-b); }
+.btn:active { transform: scale(0.98); }
+/* 主按钮 = accent 纯色（三套真实 OS 的形态；渐变已废弃） */
+.btn.primary {
+  background: var(--theme-2);
+  border: none; color: #fff;
+}
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.danger { color: var(--danger); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.input {
+  background: var(--bg); border: 1px solid var(--stroke); color: var(--text);
+  border-radius: var(--radius-sm); padding: 7px 12px; font-size: 13px; min-width: 0;
+}
+.input:focus { border-color: var(--theme-2); }
+select.input { cursor: pointer; }
+
+/* ============ 开机屏（基座，外观细节由主题提供） ============ */
+.boot-screen {
+  position: fixed; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 42px; z-index: 9999;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============ 登录/注册/锁屏（基座卡片） ============ */
+.login-screen {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; background-size: cover; background-position: center;
+}
+.login-card {
+  display: flex; flex-direction: column; align-items: center; gap: 15px;
+  padding: 42px 52px; border-radius: var(--radius-4xl);
+  background: var(--bg70); backdrop-filter: blur(48px) saturate(2);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+  animation: rise 0.5s ease;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; } }
+.avatar {
+  width: 96px; height: 96px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; font-weight: 300; color: #fff;
+  background: var(--theme-2);
+  box-shadow: 0 4px 20px #00000030;
+}
+.shake { animation: shake 0.4s; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 50%{transform:translateX(8px)} 75%{transform:translateX(-5px)} }
+
+/* ============ 桌面（基座） ============ */
+.desktop { position: fixed; inset: 0; background-size: cover; background-position: center; }
+/* 壁纸质感层：细颗粒噪点 + 两处柔光（摄影感），覆盖桌面/登录/锁屏全部壁纸，垫在内容之下 */
+.desktop::before, .login-screen::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    var(--noise-soft-url),
+    radial-gradient(1100px 650px at 76% 16%, rgba(255,255,255,0.075), transparent 62%),
+    radial-gradient(850px 560px at 14% 86%, rgba(255,255,255,0.05), transparent 58%);
+  background-size: 160px 160px, auto, auto;
+}
+.desktop-icons {
+  position: absolute; top: 84px; left: 8px; bottom: calc(var(--shell-bottom) + 14px);
+  display: flex; flex-direction: column; flex-wrap: wrap; align-content: flex-start; gap: 4px;
+}
+.desk-icon {
+  width: 84px; padding: 8px 4px; border-radius: var(--radius-sm); text-align: center; cursor: default;
+  border: 1px solid transparent;
+}
+.desk-icon:hover { background: rgba(120,120,120,0.14); }
+.desk-icon.selected { background: rgba(59,145,216,0.25); border-color: rgba(59,145,216,0.45); }
+.desk-icon .ico { width: 44px; height: 44px; margin: 0 auto 8px; }
+/* 桌面图标从壁纸上"浮起"（真实 OS 均有轻投影） */
+.desk-icon .ico svg { filter: drop-shadow(0 1.5px 3px rgba(0,0,0,0.45)); }
+.desk-icon .lbl {
+  font-size: 12px; font-weight: 500; line-height: 1.25; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.55), 0 0 10px rgba(0,0,0,0.25); word-break: break-all;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ============ 窗口（结构基座，标题栏/控制按钮布局由主题提供） ============ */
+.window {
+  position: fixed; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--unfoc);
+  border-radius: var(--radius-2xl);
+  border: 1.5px solid var(--stroke-b);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.22), 0 2px 10px rgba(0,0,0,0.1);
+  /* 几何过渡 = 最大化/还原/贴边分屏的平滑动画；拖拽时由 .win-dragging 关闭 */
+  transition: background 0.2s, backdrop-filter 0.2s, box-shadow 0.2s,
+    left 0.22s var(--anim-pop), top 0.22s var(--anim-pop),
+    width 0.22s var(--anim-pop), height 0.22s var(--anim-pop),
+    border-radius 0.22s var(--anim-pop);
+}
+/* 入场动画只挂 .entering（播完摘除），避免最小化/恢复的动画类撤掉后重放入场 */
+.window.entering { animation: win-in var(--anim-in-dur) var(--anim-pop); }
+/* 拖拽/缩放期间禁用几何过渡（最大化动画配套） */
+.window.win-dragging, .window.win-dragging * { transition: none !important; }
+/* 最小化飞离 / 恢复飞入（默认飞向底部；mac/deepin 覆盖飞行方向） */
+.window.minimizing { animation: win-min-out 0.28s var(--anim-pop) forwards; pointer-events: none; }
+.window.restoring { animation: win-min-in 0.28s var(--anim-pop) forwards; }
+@keyframes win-min-out { to { opacity: 0; transform: scale(0.15) translateY(46vh); } }
+@keyframes win-min-in { from { opacity: 0; transform: scale(0.15) translateY(46vh); } }
+.window.foc {
+  background: var(--bg70);
+  backdrop-filter: saturate(4) blur(60px) contrast(0.9);
+  -webkit-backdrop-filter: saturate(4) blur(60px) contrast(0.9);
+  box-shadow: 0 18px 64px rgba(0,0,0,0.28), 0 4px 16px rgba(0,0,0,0.12);
+}
+.window.minimized { display: none; }
+@keyframes win-in { from { opacity: 0; transform: scale(0.98) translateY(8px); } to { opacity: 1; transform: none; } }
+.win-body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.win-resize { position: absolute; z-index: 10; }
+.win-resize.n { top: -3px; left: 10px; right: 10px; height: 6px; cursor: n-resize; }
+.win-resize.s { bottom: -3px; left: 10px; right: 10px; height: 6px; cursor: s-resize; }
+.win-resize.e { right: -3px; top: 10px; bottom: 10px; width: 6px; cursor: e-resize; }
+.win-resize.w { left: -3px; top: 10px; bottom: 10px; width: 6px; cursor: w-resize; }
+.win-resize.ne { top: -3px; right: -3px; width: 14px; height: 14px; cursor: ne-resize; }
+.win-resize.nw { top: -3px; left: -3px; width: 14px; height: 14px; cursor: nw-resize; }
+.win-resize.se { bottom: -3px; right: -3px; width: 14px; height: 14px; cursor: se-resize; }
+.win-resize.sw { bottom: -3px; left: -3px; width: 14px; height: 14px; cursor: sw-resize; }
+
+/* ============ 右键菜单（基座，主题可覆盖外观） ============ */
+.ctx-menu {
+  position: fixed; z-index: 9000; min-width: 210px; padding: 5px; border-radius: var(--radius);
+  background: var(--contextmenu);
+  backdrop-filter: blur(30px) saturate(2);
+  -webkit-backdrop-filter: blur(30px) saturate(2);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+  animation: ctx-in 0.14s ease;
+  transform-origin: top left;
+}
+@keyframes ctx-in { from { opacity: 0; transform: scale(0.92) translateY(-4px); } to { opacity: 1; transform: scale(1); } }
+.ctx-item {
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: var(--radius-sm);
+  font-size: 13px; cursor: pointer; color: var(--text); position: relative; white-space: nowrap;
+}
+.ctx-item:hover { background: var(--hover-b); }
+.ctx-item.danger { color: var(--danger); }
+.ctx-item.disabled { opacity: 0.4; pointer-events: none; }
+.ctx-item .ci-ico { width: 16px; height: 16px; opacity: 0.85; flex: none; }
+.ctx-item .ci-label { flex: 1; }
+.ctx-item .ci-arrow { width: 12px; height: 12px; opacity: 0.55; flex: none; }
+.ctx-sub {
+  left: calc(100% - 4px) !important; top: -6px !important; position: absolute;
+  min-width: 150px; display: block;
+}
+.ctx-sep { height: 1px; background: var(--stroke-b); margin: 5px 8px; }
+
+/* ============ 通知中心（条目基座，面板定位由主题提供） ============ */
+@keyframes np-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.np-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 8px; font-size: 13.5px; font-weight: 600;
+}
+.np-all {
+  border: none; background: transparent; color: var(--theme-2); font-size: 12px; cursor: pointer;
+  padding: 3px 8px; border-radius: var(--radius-sm);
+}
+.np-all:hover { background: var(--hover-b); }
+.np-actions { display: flex; gap: 4px; align-items: center; }
+.np-clear { color: var(--text-3); }
+.np-clear:hover { color: var(--danger, #e05252); background: var(--hover-b); }
+.np-body { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+.np-empty { padding: 28px 0; text-align: center; color: var(--text-3); font-size: 13px; }
+.np-item {
+  padding: 10px 12px; border-radius: var(--radius); cursor: pointer; margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+.np-item:hover { background: var(--hover-b); }
+.np-item.unread { background: var(--hover-b); border-color: var(--stroke-b); }
+.np-title { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+.np-content { margin: 4px 0 3px 22px; font-size: 12.5px; color: var(--text-2); line-height: 1.45; word-break: break-all; }
+.np-time { margin-left: 22px; font-size: 11px; color: var(--text-3); }
+
+/* ============ 传输浮窗 ============ */
+.transfer-panel {
+  position: fixed; right: 14px; bottom: calc(var(--shell-bottom) + 12px); width: 380px; max-height: 420px;
+  border-radius: var(--radius-2xl); z-index: 7000; display: flex; flex-direction: column; overflow: hidden;
+}
+.transfer-item { padding: 10px 14px; border-bottom: 1px solid var(--stroke-b); }
+.transfer-item:last-child { border-bottom: none; }
+.progress-track { height: 4px; border-radius: 2px; background: var(--hover-b); overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 2px; background: var(--theme-2); transition: width 0.2s; }
+
+/* ============ 应用内通用 ============ */
+.app-root { flex: 1; display: flex; flex-direction: column; overflow: hidden; color: var(--text); }
+.app-toolbar {
+  display: flex; align-items: center; gap: 4px; padding: 6px 10px; flex: none;
+  border-bottom: 1px solid var(--stroke-b);
+}
+.tool-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm);
+  background: transparent; border: none; color: var(--text); font-size: 13px; cursor: pointer;
+}
+.tool-btn:hover { background: var(--hover-b); }
+.tool-btn:disabled { opacity: 0.35; cursor: default; }
+.tool-btn:disabled:hover { background: transparent; }
+.tool-sep { width: 1px; height: 20px; background: var(--stroke-b); margin: 0 4px; }
+.crumb { display: flex; align-items: center; gap: 2px; font-size: 13px; color: var(--text-2); overflow: hidden; }
+.crumb span { padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; }
+.crumb span:hover { background: var(--hover-b); color: var(--text); }
+.statusbar {
+  flex: none; display: flex; align-items: center; gap: 16px; padding: 5px 14px;
+  border-top: 1px solid var(--stroke-b); font-size: 12px; color: var(--text-3);
+}
+
+/* ============ 对话框 ============ */
+.dialog-mask {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.25); z-index: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.dialog {
+  width: 420px; max-width: 90%; border-radius: var(--radius-2xl); padding: 20px 22px;
+  background: var(--bg50); backdrop-filter: blur(48px) saturate(2);
+  -webkit-backdrop-filter: blur(48px) saturate(2);
+  border: 1px solid var(--stroke); box-shadow: var(--shadow);
+  animation: rise 0.18s ease;
+}
+.dialog h3 { font-size: 15px; margin-bottom: 14px; font-weight: 600; }
+.dialog .row { margin-bottom: 12px; }
+.dialog .row label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 5px; }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* ============ 文件视图 ============ */
+.file-grid {
+  flex: 1; overflow: auto; padding: 10px; display: grid;
+  grid-template-columns: repeat(auto-fill, 100px); gap: 4px; align-content: start;
+}
+.file-item {
+  width: 100px; padding: 10px 4px 8px; border-radius: var(--radius-sm); text-align: center;
+  border: 1px solid transparent; cursor: default; position: relative;
+}
+.file-item:hover { background: var(--hover-b); }
+.file-item.selected { background: color-mix(in srgb, var(--theme-2) 19%, transparent); border-color: color-mix(in srgb, var(--theme-2) 38%, transparent); }
+.file-item .f-ico { width: 46px; height: 46px; margin: 0 auto 6px; }
+.file-item .f-name {
+  font-size: 12px; line-height: 1.3; word-break: break-all; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.file-list { flex: 1; overflow: auto; }
+.file-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.file-list th {
+  text-align: left; padding: 7px 14px; font-weight: 400; color: var(--text-3);
+  border-bottom: 1px solid var(--stroke-b); position: sticky; top: 0; z-index: 1;
+  background: var(--bg70); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); font-size: 12px;
+}
+.file-list td { padding: 7px 14px; border-bottom: 1px solid var(--hover-b); color: var(--text); }
+.file-list tr:hover td { background: var(--hover-b); }
+.file-list tr.selected td { background: color-mix(in srgb, var(--theme-2) 19%, transparent); }
+
+.empty-hint {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px;
+  align-items: center; justify-content: center; color: var(--text-3); pointer-events: none;
+}
+
+/* ============ 照片壁纸（Unsplash 免费授权下载，存 public/wallpapers/） ============
+   key 全局唯一（ph- 前缀），三主题共用；cover 铺满，桌面 ::before 噪点层自动叠加 */
+.wp-ph-alpine   { background: url('/wallpapers/win12/alpine.jpg') center / cover no-repeat; }
+.wp-ph-mist     { background: url('/wallpapers/win12/mist.jpg') center / cover no-repeat; }
+.wp-ph-valley   { background: url('/wallpapers/win12/valley.jpg') center / cover no-repeat; }
+.wp-ph-coast    { background: url('/wallpapers/win12/coast.jpg') center / cover no-repeat; }
+.wp-ph-yosemite { background: url('/wallpapers/macos/yosemite.jpg') center / cover no-repeat; }
+.wp-ph-field    { background: url('/wallpapers/macos/field.jpg') center / cover no-repeat; }
+.wp-ph-forest   { background: url('/wallpapers/macos/forest.jpg') center / cover no-repeat; }
+.wp-ph-starry   { background: url('/wallpapers/macos/starry.jpg') center / cover no-repeat; }
+.wp-ph-lake     { background: url('/wallpapers/deepin/lake.jpg') center / cover no-repeat; }
+.wp-ph-sea      { background: url('/wallpapers/deepin/sea.jpg') center / cover no-repeat; }
+.wp-ph-peak     { background: url('/wallpapers/deepin/peak.jpg') center / cover no-repeat; }
+.wp-ph-wave     { background: url('/wallpapers/deepin/wave.jpg') center / cover no-repeat; }

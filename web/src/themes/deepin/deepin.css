@@ -1,0 +1,363 @@
+/* ============================================================
+   Deepin (DDE 25 / "DDE 7.0") 主题外壳
+   按最新 DDE 源码布局还原（2026-09 调研 dde-shell/treeland/dde-launcher）：
+   - 无顶部面板；底部全宽 48px 任务栏（dock 即任务栏），Crystal 磨砂
+   - 任务栏三段：左=启动器入口 / 中=应用（居中）/ 右=托盘+时钟+显示桌面窄条
+   - 图标 hover=白色圆角底块（无放大）；运行指示=图标底部横向小药丸
+   - 主菜单=全屏启动器（顶部搜索 + 左侧分类 + 7 列网格 + 右下用户电源）
+   - 窗口：标题栏 40px、标题居中无图标、右侧细线按钮、close hover 纯红、圆角 12px
+   - 登录/锁屏：左 40% 大时钟 / 右 60% 头像+密码 / 右下圆形毛玻璃按钮 / 左下 logo
+   - 通知中心：屏幕右侧贴边
+   - 强调色 #1F6EE7（DDE 25 默认活动色），DTK 高亮 #0081FF
+   ============================================================ */
+.theme-deepin {
+  --shell-top: 0px;
+  --shell-bottom: 48px;
+  --shell-left: 0px;
+  --shell-right: 0px;
+  --font-ui: "Source Han Sans SC", "Noto Sans CJK SC", "Deepin Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --theme-1: #1F6EE7;
+  --theme-2: #1F6EE7;
+  --radius-sm: 5px;
+  --radius: 9px;
+  --radius-2xl: 12px;
+  --radius-3xl: 14px;
+  --radius-4xl: 16px;
+}
+.theme-deepin.dark { --theme-1: #3d8bff; --theme-2: #3d8bff; }
+
+/* ============ 底部任务栏（DDE 25 dock：全宽贴边长条，Crystal 磨砂） ============ */
+.dde-taskbar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 48px; z-index: 5000;
+  display: flex; align-items: stretch;
+  background: rgba(235,235,235,0.62);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  border-top: 1px solid rgba(0,0,0,0.12);
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.10);
+}
+.dark .dde-taskbar { background: rgba(10,10,10,0.34); border-top-color: rgba(0,0,0,0.68); }
+
+/* 左区：启动器入口 */
+.tb-launcher {
+  width: 58px; flex: none; display: flex; align-items: center; justify-content: center;
+  cursor: default; color: var(--text);
+}
+.tb-launcher:hover { background: rgba(120,120,128,0.16); }
+.tb-launcher .ico { width: 26px; height: 26px; }
+
+/* 中区：应用（居中） */
+.dde-tb-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 0; }
+.dd-app {
+  position: relative; width: 40px; height: 40px; flex: none; margin: 0 2px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; cursor: default;
+}
+/* DDE hover：白色圆角底块（图标不缩放） */
+.dd-app:hover, .dd-app.running { background: rgba(255,255,255,0.22); }
+.dark .dd-app:hover, .dark .dd-app.running { background: rgba(255,255,255,0.12); }
+.dd-app:active { background: rgba(255,255,255,0.34); }
+.dd-app .ico { width: 30px; height: 30px; }
+/* 运行指示：图标底部横向小药丸（多窗更宽） */
+.dd-app .dot {
+  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 2px; border-radius: 1px;
+  background: var(--theme-1);
+}
+.dd-app .dot.multi { width: 14px; }
+.dd-app .tip {
+  position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%);
+  padding: 4px 12px; border-radius: 6px; font-size: 12.5px; white-space: nowrap;
+  background: rgba(252,252,253,0.95); border: 1px solid rgba(0,0,0,0.1);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18); opacity: 0; pointer-events: none;
+  transition: opacity 0.12s; z-index: 10;
+}
+.dark .dd-app .tip { background: rgba(52,54,60,0.95); border-color: rgba(255,255,255,0.14); }
+.dd-app:hover .tip { opacity: 1; }
+.dd-sep { width: 1px; height: 22px; background: rgba(128,128,128,0.35); margin: 0 5px; flex: none; }
+
+/* 右区：托盘 */
+.tb-right { display: flex; align-items: stretch; flex: none; }
+.dp-item {
+  display: flex; align-items: center; gap: 6px; padding: 0 9px;
+  cursor: default; color: var(--text); font-size: 12px;
+}
+.dp-item:hover { background: rgba(120,120,128,0.16); }
+.dp-item .dp-ico { width: 16px; height: 16px; }
+.dp-badge { position: relative; }
+.dp-badge .badge {
+  position: absolute; top: 4px; right: 0;
+  min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px;
+  background: #f04438; color: #fff; font-size: 9.5px; font-weight: 600;
+  line-height: 14px; text-align: center; pointer-events: none;
+}
+.dp-clock { font-variant-numeric: tabular-nums; font-weight: 500; }
+/* 显示桌面：最右 10px 窄条 + 1px 分隔线 */
+.dde-showdesk {
+  width: 10px; flex: none; cursor: default;
+  border-left: 1px solid rgba(128,128,128,0.35);
+}
+.dde-showdesk:hover { background: rgba(120,120,128,0.25); }
+
+/* ============ 全屏启动器（DDE 25 launcher 默认全屏模式） ============ */
+.dde-launcher { position: fixed; inset: 0; z-index: 9500; }
+.dl-bg {
+  position: absolute; inset: -40px;
+  filter: blur(36px) brightness(0.62) saturate(1.25);
+  transform: scale(1.04);
+}
+.dl-veil { position: absolute; inset: 0; background: rgba(8,14,30,0.28); }
+.dl-body {
+  position: relative; height: 100%;
+  display: flex; flex-direction: column;
+  padding: 5vh 7vw 3.5vh;
+  animation: dde-lp-in 0.2s var(--anim-pop);
+}
+@keyframes dde-lp-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+.dl-search { width: 380px; margin: 0 auto 5vh; flex: none; }
+.dl-search .input {
+  width: 100%; height: 42px; border-radius: 21px; font-size: 14px;
+  background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.35);
+  color: #fff; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+.dl-search .input::placeholder { color: rgba(255,255,255,0.65); }
+.dl-mid { flex: 1; display: flex; gap: 34px; min-height: 0; }
+.dl-rail { width: 150px; flex: none; display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.dl-rail-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 6px; font-size: 14px; color: rgba(255,255,255,0.88);
+  cursor: default; text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+.dl-rail-item:hover { background: rgba(255,255,255,0.14); }
+.dl-rail-item.active { background: rgba(255,255,255,0.22); color: #fff; }
+.dl-rail-item .ci-ico { width: 16px; height: 16px; }
+.dl-grid {
+  flex: 1; min-width: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px 6px;
+  align-content: start;
+}
+.dl-app {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 4px; border-radius: 10px; cursor: default;
+}
+.dl-app:hover { background: rgba(255,255,255,0.14); }
+.dl-app .ico { width: 52px; height: 52px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35)); }
+.dl-app .lbl {
+  font-size: 13px; color: #fff; text-align: center; line-height: 1.25;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.dl-foot { flex: none; display: flex; align-items: center; justify-content: space-between; margin-top: 2vh; }
+.dl-ver { font-size: 12.5px; color: rgba(255,255,255,0.6); text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+.dl-user { display: flex; align-items: center; gap: 14px; }
+.dl-user .uinfo { display: flex; align-items: center; gap: 10px; }
+.dl-user .avatar { width: 34px; height: 34px; font-size: 15px; border-radius: 50%; }
+.dl-user .uname { font-size: 14px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+.dl-power { display: flex; gap: 10px; }
+.dl-pbtn {
+  width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.14); color: #fff; cursor: default;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: background 0.12s;
+}
+.dl-pbtn:hover { background: rgba(255,255,255,0.3); }
+
+/* ============ 窗口（DDE 25 / treeland：圆角 12、标题栏 40 标题居中、close hover 纯红） ============ */
+.theme-deepin .window {
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.18);
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 8px 36px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.10);
+}
+.theme-deepin .window.foc {
+  border-color: rgba(31,110,231,0.55);
+  box-shadow: 0 16px 56px rgba(0,0,0,0.30), 0 3px 10px rgba(0,0,0,0.12);
+}
+.theme-deepin.dark .window, .theme-deepin .dark .window { background: #282828; border-color: rgba(255,255,255,0.14); }
+.theme-deepin.dark .window.foc, .theme-deepin .dark .window.foc { border-color: rgba(61,139,255,0.55); }
+
+/* 入场（DDE 轻快） */
+.theme-deepin .window.entering { animation: dde-in 0.18s var(--anim-pop); }
+/* 最小化飞向底部任务栏，恢复反向 */
+.theme-deepin .window.minimizing { animation-name: dde-min-out; }
+.theme-deepin .window.restoring { animation-name: dde-min-in; }
+@keyframes dde-min-out { to { opacity: 0; transform: scale(0.12) translateY(46vh); } }
+@keyframes dde-min-in { from { opacity: 0; transform: scale(0.12) translateY(46vh); } }
+@keyframes dde-in {
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.theme-deepin .win-anim-leave-active { transition: opacity 0.12s ease-in, transform 0.12s ease-in; }
+.theme-deepin .win-anim-leave-to { opacity: 0; transform: scale(0.985) translateY(4px); }
+
+.dde-titlebar {
+  position: relative;
+  height: 40px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+.dark .dde-titlebar { background: #282828; border-bottom-color: rgba(255,255,255,0.06); }
+.dde-title {
+  font-size: 13px; font-weight: 500; color: var(--text); opacity: 0.85;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: calc(100% - 160px); text-align: center;
+}
+.dde-ctrls { position: absolute; right: 0; top: 0; height: 40px; display: flex; }
+.dde-ctrl {
+  width: 46px; height: 100%; display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text-2); cursor: default;
+  transition: background 0.1s, color 0.1s;
+}
+.dde-ctrl:hover { background: rgba(120,120,128,0.16); color: var(--text); }
+/* treeland：关闭 hover = 纯红 */
+.dde-ctrl.close:hover { background: #FF0000; color: #fff; }
+
+/* ============ 桌面（图标左上网格，同真实 DDE） ============ */
+.theme-deepin .desk-icon.selected {
+  background: rgba(31,110,231,0.22);
+  border-color: rgba(31,110,231,0.45);
+}
+
+/* ============ 通知中心（屏幕右侧贴边，宽 380） ============ */
+.theme-deepin .notify-panel {
+  top: 0; right: 0; bottom: 48px;
+  width: 380px;
+  border-radius: 12px 0 0 12px;
+  border: none; border-left: 1px solid rgba(0,0,0,0.08);
+  background: rgba(238,238,238,0.88);
+  backdrop-filter: blur(44px) saturate(1.6);
+  -webkit-backdrop-filter: blur(44px) saturate(1.6);
+  box-shadow: -10px 0 40px rgba(0,0,0,0.10);
+  animation: np-in-dde 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.theme-deepin.dark .notify-panel { background: rgba(20,20,20,0.85); border-left-color: rgba(0,0,0,0.8); }
+@keyframes np-in-dde { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+
+/* ============ 登录/锁屏（DDE 25 锁屏：左 40% 大时钟 / 右 60% 用户区） ============ */
+.dde-login-clock {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 40%;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-end;
+  padding-right: 7%;
+  z-index: 1;
+}
+.dde-login-clock .t {
+  font-size: 80px; font-weight: 300; color: #fff; letter-spacing: 2px; line-height: 1.1;
+  text-shadow: 0 2px 28px rgba(0,0,0,0.45); font-variant-numeric: tabular-nums;
+}
+.dde-login-clock .d { font-size: 20px; color: rgba(255,255,255,0.92); margin-top: 10px; text-shadow: 0 1px 10px rgba(0,0,0,0.4); }
+
+.dde-login-user {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 60%;
+  /* DDE 25 用户区是居中列：头像/名称/输入框同轴居中（flex-start 会让 120px 头像与 220px 输入框左缘对齐、中心错开 50px） */
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 12px; z-index: 2;
+  animation: rise 0.45s var(--anim-pop) 0.1s backwards;
+}
+.dde-login-user .avatar {
+  width: 120px; height: 120px; font-size: 48px; border-radius: 20px;
+  border: 2px solid rgba(255,255,255,0.35);
+}
+.dde-login-user .uname {
+  color: #fff; font-size: 18px; font-weight: 500;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+}
+.dde-login-user .input {
+  width: 220px; background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.4);
+  color: #fff; text-align: center; border-radius: 8px;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.dde-login-user .input::placeholder { color: rgba(255,255,255,0.7); }
+.dde-login-user .btn.primary {
+  width: 220px; background: rgba(255,255,255,0.2); color: #fff; border: none; border-radius: 8px;
+}
+.dde-login-user .btn.primary:hover { background: rgba(255,255,255,0.32); }
+.dde-login-err { color: #ffb3ab; font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.dde-login-reg { font-size: 12px; color: rgba(255,255,255,0.85); }
+.dde-login-reg a { color: #fff; }
+
+/* 右下角圆形毛玻璃控制钮（真实 DDE 30px 圆钮） */
+.dde-ctrls-br {
+  position: absolute; right: 20px; bottom: 20px; z-index: 3;
+  display: flex; gap: 10px;
+}
+.dde-round-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.14); color: #fff; cursor: default;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: background 0.12s;
+}
+.dde-round-btn:hover { background: rgba(255,255,255,0.3); }
+/* 左下角 logo + 版本 */
+.dde-logo-bl {
+  position: absolute; left: 20px; bottom: 20px; z-index: 3;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: rgba(255,255,255,0.6);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}
+.dde-logo-bl .lg { width: 24px; height: 24px; }
+
+/* ============ 开机（黑底 + 居中 logo + 细进度条，plymouth 风格） ============ */
+.theme-deepin .boot-screen { background: #101418; gap: 30px; }
+.dde-boot-logo {
+  width: 78px; height: 78px;
+  filter: drop-shadow(0 0 28px rgba(31,110,231,0.5));
+  animation: boot-in 0.7s var(--anim-pop);
+}
+.dde-boot-bar {
+  width: 130px; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.18); overflow: hidden;
+}
+.dde-boot-fill {
+  height: 100%; width: 0; border-radius: 2px;
+  background: #fff;
+  transition: width 0.25s ease;
+}
+.theme-deepin .boot-text { color: rgba(255,255,255,0.5); }
+
+/* ============ 应用内（DDE 白底 + 细滚动条 + 强调色联动） ============ */
+.theme-deepin ::-webkit-scrollbar { width: 5px; height: 5px; }
+.theme-deepin ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.42); border-radius: 3px; }
+.theme-deepin ::-webkit-scrollbar-track { background: transparent; }
+.theme-deepin .side-item:hover { background: rgba(120,120,128,0.12); }
+.theme-deepin .side-item.active { background: rgba(31,110,231,0.13); color: var(--theme-2); }
+
+/* ============ 壁纸（DDE 风格，CSS 渐变） ============ */
+.wp-dde-blue {
+  background:
+    radial-gradient(ellipse 900px 560px at 26% 74%, rgba(30,140,255,0.5), transparent 62%),
+    radial-gradient(ellipse 820px 540px at 78% 26%, rgba(60,90,230,0.42), transparent 60%),
+    radial-gradient(ellipse 1100px 700px at 55% 92%, rgba(20,60,160,0.45), transparent 64%),
+    linear-gradient(160deg, #050d1e 0%, #0a1c3e 48%, #0e2a58 100%);
+}
+.wp-dde-dawn {
+  background:
+    radial-gradient(ellipse 900px 560px at 30% 80%, rgba(255,170,90,0.42), transparent 62%),
+    radial-gradient(ellipse 820px 520px at 74% 28%, rgba(140,160,255,0.34), transparent 60%),
+    radial-gradient(ellipse 1000px 640px at 55% 50%, rgba(90,110,220,0.28), transparent 64%),
+    linear-gradient(158deg, #1c2440 0%, #3a4a78 48%, #8a7a9a 82%, #c9988a 100%);
+}
+.wp-dde-night {
+  background:
+    radial-gradient(ellipse 700px 460px at 76% 74%, rgba(60,70,180,0.4), transparent 64%),
+    radial-gradient(ellipse 900px 500px at 18% 22%, rgba(120,80,220,0.3), transparent 60%),
+    radial-gradient(ellipse 1200px 700px at 50% 100%, rgba(30,40,100,0.4), transparent 70%),
+    linear-gradient(168deg, #04060f 0%, #0a0e24 55%, #10142e 100%);
+}
+.wp-dde-mint {
+  background:
+    radial-gradient(ellipse 900px 560px at 28% 72%, rgba(40,200,170,0.44), transparent 62%),
+    radial-gradient(ellipse 820px 520px at 76% 30%, rgba(50,150,200,0.36), transparent 60%),
+    radial-gradient(ellipse 1000px 640px at 55% 90%, rgba(20,110,120,0.4), transparent 64%),
+    linear-gradient(160deg, #04161a 0%, #0a2e34 52%, #145054 100%);
+}
+.wp-dde-rose {
+  background:
+    radial-gradient(ellipse 900px 560px at 30% 78%, rgba(255,120,150,0.42), transparent 62%),
+    radial-gradient(ellipse 820px 520px at 74% 26%, rgba(200,90,200,0.36), transparent 60%),
+    radial-gradient(ellipse 1000px 640px at 55% 52%, rgba(140,70,180,0.3), transparent 64%),
+    linear-gradient(158deg, #1e0a20 0%, #3a1438 50%, #6e2a52 100%);
+}
