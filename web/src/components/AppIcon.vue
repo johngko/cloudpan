@@ -1,5 +1,5 @@
 <template>
-  <!-- Win12 主题：优先使用 win12-online 原版图标（/icons/win12/，EPL-2.0 署名见 THIRD_PARTY/） -->
+  <!-- Win12 主题：优先使用 Windows 风格原版图标（/icons/win12/） -->
   <img v-if="imgSrc" :src="imgSrc" :width="size" :height="size" style="display: block" draggable="false" alt="" />
   <svg v-else :width="size" :height="size" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
     :style="{ display: 'block' }" v-html="path"></svg>
@@ -11,7 +11,7 @@ import { useSession } from '../stores/session'
 
 const props = withDefaults(defineProps<{ name: string; size?: number }>(), { size: 24 })
 
-// Win12 主题图标映射（1:1：应用/文件类型用 win12-online 原版 SVG/PNG；
+// Win12 主题图标映射（应用/文件类型用 Windows 风格 SVG/PNG；
 // 未列出的名字回落自绘 tile/线条图标，其他主题不受影响）
 const WIN12_ICONS: Record<string, string> = {
   explorer: 'explorer.svg',

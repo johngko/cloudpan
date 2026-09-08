@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online dock 1:1：浮动胶囊 dock-box（开始/搜索/小组件 + 任务 + 主题 + 控制 + 日期），
+  <!-- dock：浮动胶囊 dock-box（开始/搜索/小组件 + 任务 + 主题 + 控制 + 日期），
        最大化窗口时自动收起（open-dock 弹跳提示），鼠标贴近底部 60px 时回弹 -->
   <div class="w12-dockbox" :class="{ hide: dockHidden, peek: peek }">
     <!-- dock-start：开始 + 搜索 + 小组件 -->

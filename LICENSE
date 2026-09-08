@@ -19,19 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Third-party components
-----------------------
-
-The Windows 12 theme (`web/src/themes/windows/`) is a 1:1 visual clone of the
-unofficial concept project "win12" by win12-online
-(https://github.com/win12-online/win12), licensed under the Eclipse Public
-License 2.0 (EPL-2.0). That license is reproduced verbatim in
-`THIRD_PARTY/win12-online/LICENSE.epl2`, and the trademark notice of the
-original project is kept at `THIRD_PARTY/win12-online/icon-NOTICE.md` and
-`web/public/icons/win12/NOTICE.md`.
-
-All other code in this repository is original work licensed under the MIT
-license above.

@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online #search-win 1:1：600×594 居中，输入 + 页签 + 左列表/右详情（真实全局搜索） -->
+  <!-- #search-win：600×594 居中，输入 + 页签 + 左列表/右详情（真实全局搜索） -->
   <div class="w12-panel w12-search show-begin" :class="{ show: shown }" @click.stop>
     <div class="w12-inwrap">
       <span class="w12-inico">

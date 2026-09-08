@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online #widgets 1:1：1000×600 双栏（左=小组件计算器，右=新闻/关于） -->
+  <!-- #widgets：1000×600 双栏（左=小组件计算器，右=新闻/关于） -->
   <div class="w12-panel w12-widgets show-begin" :class="{ show: shown }" @click.stop>
     <div class="w12-wg-half">
       <div class="w12-wg-bar"><p class="tit">小组件</p><button class="btn" title="占位">＋</button></div>
@@ -43,7 +43,7 @@
           <div class="bg"><img src="/icons/win12/logo.svg" style="object-fit: contain; background: radial-gradient(circle at 50% 40%, #24304d, #0a0e1a 75%)" /></div>
           <p class="tit">CloudPan · 私有云存储</p>
           <p class="sub">Go + Vue 全栈，三主题 Web 桌面</p>
-          <a class="a" href="https://github.com/win12-online/win12" target="_blank" rel="noopener">此主题 1:1 仿制自 win12-online/win12（EPL-2.0）</a>
+          <a class="a" href="https://github.com/johngko/cloudpan" target="_blank" rel="noopener">GitHub · CloudPan 开源项目</a>
         </div>
         <div class="w12-news-card">
           <div class="bg"><img src="/icons/win12/windows12.svg" style="object-fit: contain; background: radial-gradient(circle at 50% 40%, #3a2450, #0d0a18 75%)" /></div>

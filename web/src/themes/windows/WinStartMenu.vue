@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online #start-menu 1:1：左栏（头像+用户名+搜索+应用列表），
+  <!-- #start-menu：左栏（头像+用户名+搜索+应用列表），
        右栏（文件夹快捷 + 时钟/电源 + 已固定网格 + 推荐）；右栏子块错峰入场 -->
   <div class="w12-panel w12-start show-begin" :class="{ show: shown }" @click.stop>
     <div class="w12-sml">

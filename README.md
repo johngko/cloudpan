@@ -14,7 +14,7 @@ CloudPan 是一个用 **Go（Gin + GORM + SQLite）** 与 **Vue 3 + TypeScript +
 
 它的最大特色是**完整的 Web 桌面外壳**：打开浏览器就像开了一台电脑——BIOS 风格开机动画、系统登录页、可拖拽/缩放/贴边的窗口、开始菜单 / Launchpad / 启动器、任务栏 / Dock、全局搜索、控制中心……并且内置 **三套可切换的操作系统主题**：
 
-| Windows 12（1:1 仿制 win12-online/win12 概念版） | macOS（对标 Sonoma） | Deepin（对标 DDE 25） |
+| Windows 12 概念版风格 | macOS（对标 Sonoma） | Deepin（对标 DDE 25） |
 |---|---|---|
 | ![win12](docs/screenshots/win12-02-desktop.png) | ![macos](docs/screenshots/macos-02-desktop.png) | ![deepin](docs/screenshots/deepin-02-desktop.png) |
 
@@ -28,7 +28,7 @@ CloudPan is a private cloud storage system built from scratch with **Go (Gin + G
 
 Its standout feature is a **complete web desktop shell**: opening the browser feels like booting a computer — BIOS-style boot animation, system login, draggable/resizable/snappable windows, Start menu / Launchpad / full-screen launcher, taskbar / Dock, global search, control center — with **three switchable OS themes**:
 
-| Windows 12 (1:1 clone of the win12-online/win12 concept) | macOS (Sonoma-style) | Deepin (DDE 25-style) |
+| Windows 12 (concept style) | macOS (Sonoma-style) | Deepin (DDE 25-style) |
 |---|---|---|
 | ![win12](docs/screenshots/win12-02-desktop.png) | ![macos](docs/screenshots/macos-02-desktop.png) | ![deepin](docs/screenshots/deepin-02-desktop.png) |
 
@@ -179,7 +179,6 @@ cd server && go run .                  # backend
 cloudpan/
 ├── build.bat / build.sh / start.bat   # 构建 & 启动脚本
 ├── docs/screenshots/                  # README 截图
-├── THIRD_PARTY/                       # 第三方许可与署名（win12 EPL-2.0）
 ├── server/                            # Go 后端（单二进制，embed 前端）
 │   ├── main.go
 │   └── internal/
@@ -203,7 +202,6 @@ cloudpan/
 cloudpan/
 ├── build.bat / build.sh / start.bat   # build & launch scripts
 ├── docs/screenshots/                  # README screenshots
-├── THIRD_PARTY/                       # third-party licenses & attribution (win12 EPL-2.0)
 ├── server/                            # Go backend (single binary, embedded frontend)
 │   ├── main.go
 │   └── internal/
@@ -300,14 +298,12 @@ Admin Console → Storage Policies → Mount → pick a type and fill in credent
 ## 许可
 
 - 本项目代码：**MIT**（见 [LICENSE](LICENSE)）
-- Windows 12 主题为对非官方概念项目 [win12-online/win12](https://github.com/win12-online/win12)（**EPL-2.0**）的 1:1 仿制，其许可证原文保留在 [`THIRD_PARTY/win12-online/LICENSE.epl2`](THIRD_PARTY/win12-online/LICENSE.epl2)，原项目的商标/权利声明见 [`THIRD_PARTY/win12-online/icon-NOTICE.md`](THIRD_PARTY/win12-online/icon-NOTICE.md) 与 `web/public/icons/win12/NOTICE.md`
 - 壁纸照片来自 Unsplash 免费授权；网络测速仅仿 LibreSpeed 界面布局（未复制代码/资产）
 - Windows、Windows 11/12、macOS、Apple、Deepin 为各自权利人的商标，本项目为独立实现，与 Microsoft / Apple / 深度科技无任何关联
 
 ## License
 
 - This project's code: **MIT** (see [LICENSE](LICENSE))
-- The Windows 12 theme is a 1:1 visual clone of the unofficial concept project [win12-online/win12](https://github.com/win12-online/win12) (**EPL-2.0**); its license is preserved verbatim in [`THIRD_PARTY/win12-online/LICENSE.epl2`](THIRD_PARTY/win12-online/LICENSE.epl2), and the original project's trademark/rights notices are kept in [`THIRD_PARTY/win12-online/icon-NOTICE.md`](THIRD_PARTY/win12-online/icon-NOTICE.md) and `web/public/icons/win12/NOTICE.md`
 - Wallpaper photos are from Unsplash's free license; the network speed test imitates LibreSpeed's UI layout only (no code/assets copied)
 - Windows, Windows 11/12, macOS, Apple and Deepin are trademarks of their respective owners. This project is an independent implementation and is not affiliated with Microsoft, Apple or Deepin Technology
 

@@ -896,7 +896,7 @@ function buildOpenWith(f: FileItem) {
 }
 
 function iconOf(f: FileItem) {
-  // Win12 主题：按扩展名用 win12-online 原版文件图标（1:1 Windows 标准形态）
+  // Win12 主题：按扩展名用 Windows 标准文件图标
   if (session.osTheme === 'win12') {
     if (f.isDir) return 'fileFolder'
     const e = (f.ext || '').toLowerCase()

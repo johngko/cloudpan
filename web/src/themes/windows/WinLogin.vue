@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online #loginback 1:1：壁纸上居中 150px 头像 + 用户名 + 幽灵输入 + 登录钮；
+  <!-- #loginback：壁纸上居中 150px 头像 + 用户名 + 幽灵输入 + 登录钮；
        成功后 #login-welc（转环+欢迎）→ .close（整体压暗）→ 淡出进桌面 -->
   <div class="w12-login" :class="wallpaperClass(session.wallpaper)" :style="{ backgroundColor: 'transparent' }">
     <div class="w12-login-user"></div>

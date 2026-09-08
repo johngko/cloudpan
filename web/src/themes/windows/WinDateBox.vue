@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online #datebox 1:1：350×450，35px 时钟 + 日期 + 周一始日历（今日渐变高亮） -->
+  <!-- #datebox：350×450，35px 时钟 + 日期 + 周一始日历（今日渐变高亮） -->
   <div class="w12-panel w12-datebox show-begin" :class="{ show: shown }" :style="{ left: left + 'px' }" @click.stop>
     <div class="w12-db-tit">
       <p class="w12-db-time">{{ time }}</p>

@@ -1,7 +1,5 @@
 /* ============================================================
-   Windows 12 主题外壳 —— 1:1 移植自 win12-online/win12（EPL-2.0）
-   演示站：https://win12-online.github.io/win12/desktop.html
-   资源署名：见仓库 THIRD_PARTY/win12-online/（LICENSE + NOTICE）
+   Windows 12 主题外壳（概念版风格）
    规则：本文件所有类名带 w12- 前缀或 .theme-win12 作用域，
    避免泄漏到 macos/deepin 主题（三主题 CSS 全局共存）。
    ============================================================ */
@@ -18,7 +16,7 @@
   --shell-right: 0px;
   --font-ui: system-ui, "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
 
-  /* —— win12-online :root tokens（浅色，1:1 值）—— */
+  /* —— :root tokens（浅色）—— */
   --w12-text: #000000;
   --w12-text2: #666666;
   --w12-bg: #ffffff;

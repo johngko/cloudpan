@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online 1:1：38px 标题栏（22px 图标 + 15px 标题），右侧 min/max/close（close hover #d80d1c） -->
+  <!-- 38px 标题栏（22px 图标 + 15px 标题），右侧 min/max/close（close hover #d80d1c） -->
   <div class="window" :class="{ minimized: w.minimized, foc: store.activeId === w.id, entering: entering && !w.minimizing && !w.restoring, minimizing: w.minimizing, restoring: w.restoring }" :style="style" @mousedown="focusWin">
     <div class="win-titlebar" @mousedown="onTitlebarDown" @dblclick="toggleMax">
       <span class="t-ico"><AppIcon :name="w.icon" :size="22" /></span>

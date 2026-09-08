@@ -9,7 +9,7 @@ import WinWindowFrame from './WinWindowFrame.vue'
 import { WALLPAPERS } from './wallpapers'
 
   // 注意：geometry 与 win.css 中 .theme-win12 的 --shell-* 变量保持一致
-  // （win12-online 1:1：底部 10px 浮动 dock 高 40px → 保留区 50px）
+  // （底部 10px 浮动 dock 高 40px → 保留区 50px）
   const theme: ThemeDef = {
     id: 'win12',
     name: 'Windows 12',

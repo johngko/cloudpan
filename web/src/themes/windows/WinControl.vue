@@ -1,5 +1,5 @@
 <template>
-  <!-- win12-online #control 1:1 布局（350×250，3×2 磁贴 + 亮度滑杆）；
+  <!-- #control 布局（350×250，3×2 磁贴 + 亮度滑杆）；
        磁贴内容改为 CloudPan 真实功能——网盘没有蓝牙/飞行模式/热点，不放假开关 -->
   <div class="w12-panel w12-ctrl show-begin" :class="{ show: shown }" :style="{ left: left + 'px' }" @click.stop>
     <div style="width: 100%">
