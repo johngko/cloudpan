@@ -225,7 +225,7 @@ func (p *TaskPool) runOffline(t *model.Task) error {
 	if err := model.DB.First(&policy, props.PolicyID).Error; err != nil {
 		return fmt.Errorf("存储策略不存在")
 	}
-	d, err := p.Svc.DriverOf(&policy)
+	d, err := p.Svc.DriverFor(&policy, userOfID(t.UserID)) // 任务结果落回属主隔离目录
 	if err != nil {
 		return err
 	}
@@ -340,7 +340,7 @@ func (p *TaskPool) runCompress(t *model.Task) error {
 	if err := model.DB.First(&policy, props.PolicyID).Error; err != nil {
 		return fmt.Errorf("存储策略不存在")
 	}
-	d, err := p.Svc.DriverOf(&policy)
+	d, err := p.Svc.DriverFor(&policy, userOfID(t.UserID)) // 任务结果落回属主隔离目录
 	if err != nil {
 		return err
 	}
@@ -447,7 +447,7 @@ func (p *TaskPool) runDecompress(t *model.Task) error {
 	if err := model.DB.First(&policy, props.PolicyID).Error; err != nil {
 		return fmt.Errorf("存储策略不存在")
 	}
-	d, err := p.Svc.DriverOf(&policy)
+	d, err := p.Svc.DriverFor(&policy, userOfID(t.UserID)) // 任务结果落回属主隔离目录
 	if err != nil {
 		return err
 	}

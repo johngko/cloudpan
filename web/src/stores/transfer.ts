@@ -26,6 +26,13 @@ export interface TransferTask {
   claimed?: boolean
 }
 
+// 虚拟路径拼接（slash 风格，parent 恒以 / 开头）
+function joinVP(parent: string, sub: string): string {
+  if (!sub) return parent
+  if (parent === '/' || parent === '') return '/' + sub
+  return parent + '/' + sub
+}
+
 export const useTransfer = defineStore('transfer', {
   state: () => ({
     tasks: [] as TransferTask[],
@@ -43,8 +50,18 @@ export const useTransfer = defineStore('transfer', {
     async addFiles(policyId: number, parent: string, files: FileList | File[]) {
       const arr = Array.from(files)
       for (const f of arr) {
+        // 文件夹上传/拖拽：按 webkitRelativePath 还原目录结构，落到对应子目录
+        // （后端上传完成时自动创建父目录）
+        let p = parent
+        let name = f.name
+        const rel = (f as any).webkitRelativePath as string | undefined
+        if (rel) {
+          const parts = rel.split('/')
+          name = parts[parts.length - 1]
+          if (parts.length > 1) p = joinVP(parent, parts.slice(0, -1).join('/'))
+        }
         const t: TransferTask = {
-          id: Math.random().toString(36).slice(2), name: f.name, policyId, parent,
+          id: Math.random().toString(36).slice(2), name, policyId, parent: p,
           size: f.size, uploaded: 0, progress: 0, status: 'hashing', received: [], file: f
         }
         this.tasks.push(t)

@@ -30,21 +30,26 @@ type Service struct {
 	ThumbDir   string // 图片缩略图缓存区
 	ZipTmp     string // zip 解压临时区（流式解压用，避免整包读入内存）
 	mu         sync.Mutex
-	drivers    map[uint]*cachedDriver
+	drivers    map[string]*cachedDriver
 }
 
 func NewService(tmpDir, recycleDir, thumbDir, zipTmp string) *Service {
-	return &Service{TmpDir: tmpDir, RecycleDir: recycleDir, ThumbDir: thumbDir, ZipTmp: zipTmp, drivers: map[uint]*cachedDriver{}}
+	return &Service{TmpDir: tmpDir, RecycleDir: recycleDir, ThumbDir: thumbDir, ZipTmp: zipTmp, drivers: map[string]*cachedDriver{}}
 }
 
+// Invalidate 失效某策略的全部驱动缓存（含各用户的本地隔离实例）
 func (s *Service) Invalidate(policyID uint) {
 	s.mu.Lock()
-	delete(s.drivers, policyID)
+	for k := range s.drivers {
+		if k == fmt.Sprintf("p%d", policyID) || strings.HasPrefix(k, fmt.Sprintf("u%d:", policyID)) {
+			delete(s.drivers, k)
+		}
+	}
 	s.mu.Unlock()
 }
 
-// Resolve 校验用户可用性并返回策略与驱动
-func (s *Service) Resolve(userID uint, role string, group *model.UserGroup, policyID uint) (*model.Policy, Driver, error) {
+// Resolve 校验用户可用性并返回策略与该用户视角的驱动（本地策略 = 用户隔离目录）
+func (s *Service) Resolve(user *model.User, group *model.UserGroup, policyID uint) (*model.Policy, Driver, error) {
 	var p model.Policy
 	if err := model.DB.First(&p, policyID).Error; err != nil {
 		return nil, nil, errors.New("存储策略不存在")
@@ -52,10 +57,10 @@ func (s *Service) Resolve(userID uint, role string, group *model.UserGroup, poli
 	if p.Status == "disabled" {
 		return nil, nil, errors.New("该存储已停用")
 	}
-	if role != "admin" && !group.CanUsePolicy(p.ID) {
+	if user.Role != "admin" && !group.CanUsePolicy(p.ID) {
 		return nil, nil, errors.New("无权访问该存储")
 	}
-	d, err := s.DriverOf(&p)
+	d, err := s.DriverFor(&p, user)
 	if err != nil {
 		return nil, nil, err
 	}

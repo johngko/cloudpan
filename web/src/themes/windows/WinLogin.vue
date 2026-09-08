@@ -6,7 +6,7 @@
     <div class="w12-login-name">{{ displayName }}</div>
 
     <template v-if="stage === 'form'">
-      <input v-if="showUser" class="w12-login-pwd" type="text" :placeholder="'用户名（默认 admin）'" v-model="username" @keyup.enter="doLogin" />
+      <input class="w12-login-pwd" type="text" placeholder="用户名（默认 admin）" v-model="username" @keyup.enter="doLogin" />
       <input class="w12-login-pwd" type="password" placeholder="密码" v-model="password" :disabled="loading"
         @keyup.enter="doLogin" ref="pwdEl" :style="{ opacity: stage === 'form' ? 1 : 0, transition: 'opacity 300ms' }" />
       <div class="w12-login-err">{{ errMsg }}</div>
@@ -54,8 +54,7 @@ const stage = ref<'form' | 'welcome'>('form')
 const errMsg = ref('')
 const pwdEl = ref<HTMLInputElement>()
 
-// 默认用户 admin：预填时隐藏用户名输入（与演示站单用户形态一致）；改用户名才需要它
-const showUser = computed(() => username.value !== 'admin' && stage.value === 'form')
+// 用户名框常显（预填 admin 便于管理员登录；注册用户可清空后输入自己的账号）
 const displayName = computed(() => username.value || 'Administrator')
 
 onMounted(() => {

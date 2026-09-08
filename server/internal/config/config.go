@@ -14,7 +14,7 @@ type Config struct {
 }
 
 func Load() *Config {
-	c := &Config{Port: "8322"}
+	c := &Config{Port: "18322"}
 	if p := os.Getenv("CP_PORT"); p != "" {
 		c.Port = p
 	}

@@ -107,6 +107,12 @@ The storage core matches mainstream cloud drives: chunked upload with resume + S
 - WebDAV：`/dav/{用户名}/{盘符}/`，独立应用密码，可挂载进 Windows 资源管理器/手机
 - ONLYOFFICE 在线编辑（未配置时自动回退内置编辑器：xlsx 可编辑表格 / docx 预览 / PDF 预览）
 
+**终端（真实 shell）**
+- 本地终端：服务端 PTY（Linux pty / Windows ConPTY，`creack/pty`）启动真实 shell，xterm.js + WebSocket 二进制透传，完整 TUI（vim/htop 均可用）；shell 白名单（Linux: bash/sh/zsh/fish，Windows: cmd/PowerShell），工具栏可切换
+- 远程 SSH 终端：保存多个连接（密码 / 私钥，凭证 AES-256-GCM 加密落库，API 永不回显），`x/crypto/ssh` 拨号 + PTY 协商；主机密钥 **TOFU**（首次信任、变更即拒绝）；目标地址安全校验（拒绝 169.254/16 云元数据、0.0.0.0/8、组播/保留段，域名解析后逐 IP 复检）；测通接口返回延迟与远端系统信息
+- **SFTP 文件管理面板**（SSH 模式）：面包屑浏览、上传（选择/拖拽，逐文件进度条）、下载（中文文件名 RFC5987）、新建/重命名/删除（目录递归）、连接池复用 + 空闲清扫
+- 并发限制：每用户 4 本地 / 8 SSH 会话，全局 32；连接/文件操作全量审计日志；受「终端」系统功能门控（应用中心可停）
+
 **内置浏览器（特色功能）**
 - 桌面内置浏览器应用：多标签（每页独立沙箱 iframe）、地址栏（裸域名自动补 https、非 URL 当百度搜索词）、前进/后退/刷新/主页、快捷入口、"在系统浏览器中打开"兜底
 - **服务端代理**绕过站点 X-Frame-Options/CSP frame-ancestors 的嵌入限制：HTML 自动重写 src/href/action/poster/srcset/meta-refresh 为代理路径、剥离站点 `<base>` 与 CSP、注入代理 base 兜底、gbk/big5/utf-16/latin1 转 UTF-8；非 HTML 资源透传（128MB 上限、300s 缓存）
@@ -114,10 +120,12 @@ The storage core matches mainstream cloud drives: chunked upload with resume + S
 
 **多用户体系**
 - 角色（admin/user）+ 用户组（配额、功能白名单：分享/WebDAV/压缩/离线/浏览器/应用中心、分享可下载、限速、可用存储策略白名单）
+- **用户数据隔离**：本地存储策略按用户划分独立目录（`<策略根目录>/<用户目录名>/`，如 `C:/admin`、`C:/johngko`），每个用户在网页/WebDAV/分享/离线下载/版本恢复看到的都是自己目录下的虚拟根，互相不可见；目录名取安全 ASCII 用户名（其余取 `user_<id>`）并首次固化到 `UserSetting(local_dir)`，改用户名不影响已有数据。云盘策略不隔离（后端账号本身即边界）
 - 站点设置：站点名、注册开关、邀请码、公告；审计日志（登录/文件操作/分享/管理动作/通知）
+- 登录：Win12 登录页用户名框常显（预填 admin，注册用户可清空输入自己的账号）；开放注册后新用户即可登录并使用自己的隔离空间
 
 **内置应用（16）**
-文件资源管理器 / 此电脑 / 回收站 / 记事本（读写网盘文本）/ 终端（dir/cd/md/rd/del/type/copy/move 模拟 CMD 对接网盘）/ 计算器 / **网络测速**（界面仿 LibreSpeed，随机数据端点不可压缩防虚高）/ **内置浏览器** / 图片查看器（缩放旋转 + EXIF/GPS）/ 媒体播放器（视频 + 音频 + 歌词字幕，封面取自 ID3）/ Office 编辑器 / 媒体中心（可安装应用）/ 来自他人的共享 / 应用中心 / 设置（壁纸主题/账号/WebDAV 密码/我的分享/离线下载）/ 管理控制台（仪表盘/用户/用户组/存储策略与云盘授权/站点设置/审计日志）
+文件资源管理器 / 此电脑 / 回收站 / 记事本（读写网盘文本）/ **终端**（本地真实 shell + 远程 SSH 终端，xterm.js 完整 TUI；SSH 模式带 SFTP 文件管理面板：浏览/上传/下载/新建/重命名/删除，支持拖拽上传）/ 计算器 / **网络测速**（界面仿 LibreSpeed，随机数据端点不可压缩防虚高）/ **内置浏览器** / 图片查看器（缩放旋转 + EXIF/GPS）/ 媒体播放器（视频 + 音频 + 歌词字幕，封面取自 ID3）/ Office 编辑器 / 媒体中心（可安装应用）/ 来自他人的共享 / 应用中心 / 设置（壁纸主题/账号/WebDAV 密码/我的分享/离线下载）/ 管理控制台（仪表盘/用户/用户组/存储策略与云盘授权/站点设置/审计日志）
 
 ---
 
@@ -126,7 +134,7 @@ The storage core matches mainstream cloud drives: chunked upload with resume + S
 ```bat
 :: Windows（需已安装 Go 1.22+ 与 Node.js 18+）
 build.bat      :: 构建前端并嵌入，产出 server\cloudpan.exe
-start.bat      :: 启动，浏览器访问 http://localhost:8322
+start.bat      :: 启动，浏览器访问 http://localhost:18322
 ```
 
 ```bash
@@ -136,13 +144,13 @@ start.bat      :: 启动，浏览器访问 http://localhost:8322
 
 - 默认管理员：`admin / admin123`（**登录后请立即在 设置 → 账号 修改密码**）
 - 数据目录：`server/data/`（SQLite 数据库、回收站、缩略图、上传临时区、密钥），可用环境变量 `CP_DATA` 重定向
-- 端口：默认 `8322`，`CP_PORT` 修改；对外可达地址用 `CP_PUBLIC_URL` 配置（ONLYOFFICE 集成需要）
+- 端口：默认 `18322`，`CP_PORT` 修改；对外可达地址用 `CP_PUBLIC_URL` 配置（ONLYOFFICE 集成需要）
 - 首次使用：管理员登录 → 管理控制台 → 存储策略 → 挂载一个本地目录为磁盘（如把某目录挂载为 C 盘），桌面"此电脑"即出现该盘
 
 **开发模式**
 
 ```bash
-cd web && npm install && npm run dev   # Vite 5173，/api 代理到 8322
+cd web && npm install && npm run dev   # Vite 5173，/api 代理到 18322
 cd server && go run .                  # 后端
 ```
 
@@ -151,7 +159,7 @@ cd server && go run .                  # 后端
 ```bat
 :: Windows (requires Go 1.22+ and Node.js 18+ installed)
 build.bat      :: builds the frontend, embeds it, produces server\cloudpan.exe
-start.bat      :: starts the server, open http://localhost:8322
+start.bat      :: starts the server, open http://localhost:18322
 ```
 
 ```bash
@@ -161,13 +169,13 @@ start.bat      :: starts the server, open http://localhost:8322
 
 - Default admin: `admin / admin123` (**change it immediately in Settings → Account after first login**)
 - Data directory: `server/data/` (SQLite DB, recycle bin, thumbnails, upload temp, secret key); override with `CP_DATA`
-- Port: default `8322`, override with `CP_PORT`; public URL (needed by ONLYOFFICE) via `CP_PUBLIC_URL`
+- Port: default `18322`, override with `CP_PORT`; public URL (needed by ONLYOFFICE) via `CP_PUBLIC_URL`
 - First run: log in as admin → Admin Console → Storage Policies → mount a local directory as a disk (e.g. C:), which then shows up under This PC on the desktop
 
 **Development mode**
 
 ```bash
-cd web && npm install && npm run dev   # Vite on 5173, /api proxied to 8322
+cd web && npm install && npm run dev   # Vite on 5173, /api proxied to 18322
 cd server && go run .                  # backend
 ```
 
@@ -227,18 +235,20 @@ cloudpan/
 
 ```
 pan.你的域名.com {
-    reverse_proxy 127.0.0.1:8322
+    reverse_proxy 127.0.0.1:18322
 }
 ```
 
-Nginx 参考：`location / { proxy_pass http://127.0.0.1:8322; proxy_set_header Host $host; client_max_body_size 0; }`（`client_max_body_size 0` 解除上传大小限制）。启用 HTTPS 后把 `CP_PUBLIC_URL` 设为 https 地址（ONLYOFFICE 集成要求两侧同协议）。
+Nginx 参考：`location / { proxy_pass http://127.0.0.1:18322; proxy_set_header Host $host; client_max_body_size 0; }`（`client_max_body_size 0` 解除上传大小限制）。启用 HTTPS 后把 `CP_PUBLIC_URL` 设为 https 地址（ONLYOFFICE 集成要求两侧同协议）。
 
 **开机自启**
-- Windows 服务（NSSM）：`nssm install CloudPan E:\cloudpan\server\cloudpan.exe` + `AppEnvironmentExtra CP_PORT=8322 CP_DATA=E:\cloudpan\server\data`
+- Windows 服务（NSSM）：`nssm install CloudPan E:\cloudpan\server\cloudpan.exe` + `AppEnvironmentExtra CP_PORT=18322 CP_DATA=E:\cloudpan\server\data`
 - Linux systemd：`[Service] WorkingDirectory=/opt/cloudpan/server; ExecStart=/opt/cloudpan/server/cloudpan; Restart=always`
 
 **安全说明**
 - 登录防爆破：同 IP+用户名 15 分钟内失败 5 次锁定；登录接口 IP 限速（10 次/分钟）
+- **终端以服务器进程用户身份执行命令**（如以 root 启动即 root 权限），请仅部署在受信任环境，或用独立低权限账号运行
+- SSH 连接凭证 AES-256-GCM 加密存储（密钥 = 服务器 secret.key）；主机密钥 TOFU 防中间人；目标地址拒绝云元数据/保留段
 - 直链/预览支持 `?t=令牌` 查询参数（img/video/a 标签无法携带请求头），令牌即登录 JWT，生产环境建议全程 HTTPS
 - 访问日志自动脱敏（`t`/`token`/`st`/`pt` 参数）
 - 离线下载与内置浏览器代理均过 SSRF 三层防护（URL 校验 + 重定向复检 + 拨号层 DNS 复检），环回/链路本地/ftp 一律拒绝
@@ -251,14 +261,14 @@ Nginx 参考：`location / { proxy_pass http://127.0.0.1:8322; proxy_set_header 
 
 ```
 pan.your-domain.com {
-    reverse_proxy 127.0.0.1:8322
+    reverse_proxy 127.0.0.1:18322
 }
 ```
 
-Nginx: `location / { proxy_pass http://127.0.0.1:8322; proxy_set_header Host $host; client_max_body_size 0; }` (`client_max_body_size 0` lifts the upload size limit). Once on HTTPS, set `CP_PUBLIC_URL` to the https URL (required for ONLYOFFICE; both sides must share the same scheme).
+Nginx: `location / { proxy_pass http://127.0.0.1:18322; proxy_set_header Host $host; client_max_body_size 0; }` (`client_max_body_size 0` lifts the upload size limit). Once on HTTPS, set `CP_PUBLIC_URL` to the https URL (required for ONLYOFFICE; both sides must share the same scheme).
 
 **Auto-start**
-- Windows service (NSSM): `nssm install CloudPan E:\cloudpan\server\cloudpan.exe` + `AppEnvironmentExtra CP_PORT=8322 CP_DATA=E:\cloudpan\server\data`
+- Windows service (NSSM): `nssm install CloudPan E:\cloudpan\server\cloudpan.exe` + `AppEnvironmentExtra CP_PORT=18322 CP_DATA=E:\cloudpan\server\data`
 - Linux systemd: `[Service] WorkingDirectory=/opt/cloudpan/server; ExecStart=/opt/cloudpan/server/cloudpan; Restart=always`
 
 **Security notes**

@@ -22,7 +22,7 @@ export const APPS: AppDef[] = [
   { id: 'thispc', name: '此电脑', icon: 'thispc', w: 1000, h: 640, desktop: true, pinned: true },
   { id: 'recycle', name: '回收站', icon: 'recycle', w: 960, h: 600, desktop: true, pinned: true },
   { id: 'notepad', name: '记事本', icon: 'notepad', w: 760, h: 560, desktop: true, pinned: true },
-  { id: 'terminal', name: '终端', icon: 'terminal', w: 780, h: 480, desktop: true, pinned: true },
+  { id: 'terminal', name: '终端', icon: 'terminal', w: 1040, h: 640, desktop: true, pinned: true, feature: 'terminal' },
   { id: 'calculator', name: '计算器', icon: 'calculator', w: 340, h: 500, desktop: true, pinned: true },
   { id: 'speedtest', name: '网络测速', icon: 'speedtest', w: 480, h: 640, desktop: true, pinned: true },
   { id: 'browser', name: '浏览器', icon: 'browser', w: 1100, h: 700, desktop: true, pinned: true, feature: 'browser' },

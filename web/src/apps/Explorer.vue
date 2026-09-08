@@ -42,7 +42,7 @@
     <!-- 操作栏 -->
     <div class="app-toolbar" style="padding: 4px 10px">
       <button class="tool-btn" :disabled="!currentPolicy" @click.stop="newMenu($event)"><AppIcon name="plus" :size="15" />新建</button>
-      <button class="tool-btn" :disabled="!currentPolicy" @click="pickFiles"><AppIcon name="upload" :size="15" />上传</button>
+      <button class="tool-btn" :disabled="!currentPolicy" @click.stop="uploadMenu($event)"><AppIcon name="upload" :size="15" />上传</button>
       <button class="tool-btn" :disabled="!selPaths.length" @click="downloadSel"><AppIcon name="download" :size="15" />下载</button>
       <button class="tool-btn" :disabled="!selPaths.length || !group.allowShare" @click="shareSel"><AppIcon name="share2" :size="15" />分享</button>
       <div class="tool-sep"></div>
@@ -217,6 +217,7 @@
     </div>
 
     <input ref="fileInput" type="file" multiple style="display: none" @change="onFilePicked" />
+    <input ref="folderInput" type="file" webkitdirectory style="display: none" @change="onFilePicked" />
 
     <!-- 分享对话框 -->
     <div class="dialog-mask" v-if="shareShow" @click.self="shareShow = false">
@@ -569,6 +570,7 @@ const localPolicies = computed(() => policies.value.filter(p => p.type === 'loca
 const cloudPolicies = computed(() => policies.value.filter(p => p.type !== 'local'))
 
 const fileInput = ref<HTMLInputElement>()
+const folderInput = ref<HTMLInputElement>()
 const rootEl = ref<HTMLElement>()
 const searchInput = ref<HTMLInputElement>()
 
@@ -606,7 +608,10 @@ function onRefreshEvent(e: any) {
   if (!currentPolicy.value) return
   const d = e.detail || {}
   if (!d.policyId || d.policyId === currentPolicy.value.id) {
-    if (!d.path || d.path === path.value) refresh()
+    // 当前目录或其子目录有变化都要刷新（文件夹上传落在子目录时，当前目录需显示新文件夹）
+    const cur = path.value
+    const isChild = d.path && d.path !== cur && (d.path.startsWith(cur === '/' ? '/' : cur + '/'))
+    if (!d.path || d.path === cur || isChild) refresh()
   }
 }
 
@@ -956,9 +961,19 @@ async function newItem(kind: 'folder' | 'text') {
     renameShow.value = true
   } catch (e: any) { toast.error(e.message) }
 }
-// ---- 上传（拖入/选择即自动上传，走 transfer 后台并发队列） ----
+// ---- 上传（拖入/选择即自动上传，走 transfer 后台并发队列；文件夹保留目录结构） ----
 function pickFiles() {
   fileInput.value?.click()
+}
+function pickFolder() {
+  folderInput.value?.click()
+}
+// 工具栏「上传」下拉：文件 / 整个文件夹
+function uploadMenu(e: MouseEvent) {
+  ctx.show(e.clientX, e.clientY + 6, [
+    { label: '上传文件…', icon: 'upload', onClick: pickFiles },
+    { label: '上传文件夹…', icon: 'folder', onClick: pickFolder }
+  ])
 }
 // 把文件加入后台上传队列并自动弹出传输面板
 function startUpload(files: File[]) {
@@ -1463,15 +1478,10 @@ function onBlankCtx(e: MouseEvent) {
       ]
     },
     {
-      label: '上传', icon: 'upload', onClick: () => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.multiple = true
-        input.onchange = () => {
-          if (input.files && currentPolicy.value) startUpload(Array.from(input.files))
-        }
-        input.click()
-      }
+      label: '上传', icon: 'upload', children: [
+        { label: '上传文件…', icon: 'upload', onClick: pickFiles },
+        { label: '上传文件夹…', icon: 'folder', onClick: pickFolder }
+      ]
     },
     {
       label: group.value.allowOffline ? '离线下载到此' : '离线下载（用户组已禁用）',

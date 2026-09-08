@@ -49,7 +49,7 @@ func (h *UploadHandler) Init(c *gin.Context) {
 	if in.ChunkSize < 1<<10 || in.ChunkSize > 64<<20 {
 		in.ChunkSize = 8 << 20
 	}
-	p, d, err := h.Site.Fs.Resolve(x.user.ID, x.user.Role, x.group, in.PolicyID)
+	p, d, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
 		return
@@ -151,7 +151,7 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 		dto.Fail(c, 400, "存储策略不存在")
 		return
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	d, err := h.Site.Fs.DriverFor(&p, x.user)
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return

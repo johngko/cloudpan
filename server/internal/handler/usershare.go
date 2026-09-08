@@ -49,7 +49,7 @@ func (h *UserShareHandler) Create(c *gin.Context) {
 		dto.Fail(c, 404, "目标用户不存在")
 		return
 	}
-	_, d, err := h.Site.Fs.Resolve(x.user.ID, x.user.Role, x.group, in.PolicyID)
+	_, d, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
 		return
@@ -143,7 +143,8 @@ func (h *UserShareHandler) loadForTarget(c *gin.Context) (*model.UserShare, fsco
 		dto.Fail(c, 400, "存储已停用")
 		return nil, nil, false
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	// 共享内容属于创建者：必须用创建者的隔离目录解析
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.OwnerID))
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return nil, nil, false

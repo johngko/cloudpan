@@ -172,3 +172,65 @@ export function downloadUrl(policyId: number, paths: string[]) {
   const q = paths.map(p => 'path=' + encodeURIComponent(p)).join('&')
   return `/api/fs/download?policyId=${policyId}&${q}&t=${getToken()}`
 }
+
+// ---- 终端（本地真实 shell / 远程 SSH + SFTP）----
+
+export interface SshConnView {
+  id: number; name: string; host: string; port: number
+  username: string; authType: 'password' | 'key'
+}
+export interface SshConnInput {
+  name: string; host: string; port: number; username: string
+  authType: 'password' | 'key'; password?: string; privateKey?: string
+}
+export interface SftpEntry {
+  name: string; type: 'dir' | 'file'; size: number; modTime: string; perm: string
+}
+
+export const termApi = {
+  platform: () => get<{ os: string; shells: string[]; defaultShell: string }>('/terminal/platform'),
+  conns: () => get<SshConnView[]>('/terminal/conns'),
+  connSave: (d: SshConnInput) => post<SshConnView>('/terminal/conns', d),
+  connUpdate: (id: number, d: SshConnInput) => put<SshConnView>(`/terminal/conns/${id}`, d),
+  connDelete: (id: number) => del(`/terminal/conns/${id}`),
+  connTest: (id: number) => post<{ ok: boolean; latencyMs: number; os: string }>(`/terminal/conns/${id}/test`),
+  fsList: (connId: number, p: string) =>
+    get<{ path: string; parent: string; entries: SftpEntry[] }>(
+      `/terminal/fs/list?connId=${connId}&path=${encodeURIComponent(p)}`),
+  fsOp: (d: { connId: number; op: 'mkdir' | 'delete' | 'rename' | 'move'; path: string; target?: string }) =>
+    post('/terminal/fs/op', d),
+  fsDownloadUrl: (connId: number, p: string) =>
+    `/api/terminal/fs/download?connId=${connId}&path=${encodeURIComponent(p)}&t=${getToken()}`,
+  // 原始字节流上传（XHR 以便上报进度）
+  fsUpload: (connId: number, dir: string, name: string, data: Blob,
+    overwrite: boolean, onProgress?: (pct: number) => void) =>
+    new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      const url = `/api/terminal/fs/upload?connId=${connId}&path=${encodeURIComponent(dir)}` +
+        `&name=${encodeURIComponent(name)}${overwrite ? '&overwrite=1' : ''}&t=${getToken()}`
+      xhr.open('POST', url)
+      xhr.setRequestHeader('Authorization', 'Bearer ' + (getToken() || ''))
+      xhr.responseType = 'text'
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+      xhr.onload = () => {
+        if (xhr.status === 401) { clearToken(); if (location.hash !== '#/login') location.hash = '#/login'; return reject(new Error('未登录')) }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { const r = JSON.parse(xhr.responseText); if (r.code !== 0) return reject(new Error(r.msg)) } catch { /* ok */ }
+          return resolve()
+        }
+        reject(new Error('上传失败（HTTP ' + xhr.status + '）'))
+      }
+      xhr.onerror = () => reject(new Error('网络错误'))
+      xhr.send(data)
+    })
+}
+
+/** 终端 WebSocket 地址（浏览器 WS 无法自定义头，令牌走 ?t=） */
+export function termWsUrl(mode: 'local' | 'ssh', params: Record<string, string | number> = {}): string {
+  const qs = new URLSearchParams({ mode, t: getToken() || '' })
+  for (const [k, v] of Object.entries(params)) qs.set(k, String(v))
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}/api/terminal/ws?${qs.toString()}`
+}

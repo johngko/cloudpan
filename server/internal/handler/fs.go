@@ -74,7 +74,7 @@ func (h *SiteHandler) Policies(c *gin.Context) {
 			continue
 		}
 		if p.Type == "local" && (p.UsageAt == nil || time.Since(*p.UsageAt) > 10*time.Minute) {
-			if d, err := h.Fs.DriverOf(&p); err == nil {
+			if d, err := h.Fs.DriverFor(&p, x.user); err == nil { // 本地策略按用户隔离目录计用量
 				if used, _, err := d.Quota(); err == nil {
 					p.UsageBytes = used
 					now := time.Now()
@@ -97,6 +97,15 @@ func ctxOf(c *gin.Context) ctx3 {
 	return ctx3{user: middleware.CurrentUser(c), group: middleware.GroupOf(c)}
 }
 
+// userOfID 按 ID 加载用户（后台任务/分享等无请求上下文的场景定位数据属主）
+func userOfID(id uint) *model.User {
+	var u model.User
+	if err := model.DB.First(&u, id).Error; err != nil {
+		return nil
+	}
+	return &u
+}
+
 func (h *SiteHandler) resolve(c *gin.Context) (*model.Policy, fscore.Driver, bool) {
 	var in struct {
 		PolicyID uint `form:"policyId"`
@@ -115,7 +124,7 @@ func (h *SiteHandler) resolveByID(policyID uint, c *gin.Context) (*model.Policy,
 		dto.Fail(c, 400, "缺少 policyId")
 		return nil, nil, false
 	}
-	p, d, err := h.Fs.Resolve(x.user.ID, x.user.Role, x.group, policyID)
+	p, d, err := h.Fs.Resolve(x.user, x.group, policyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
 		return nil, nil, false
@@ -794,7 +803,7 @@ func (h *SiteHandler) GlobalSearch(c *gin.Context) {
 		if x.user.Role != "admin" && !x.group.CanUsePolicy(p.ID) {
 			continue
 		}
-		d, err := h.Fs.DriverOf(&p)
+		d, err := h.Fs.DriverFor(&p, x.user)
 		if err != nil {
 			continue
 		}
@@ -1346,7 +1355,7 @@ func (h *SiteHandler) RecycleRestore(c *gin.Context) {
 		if err := model.DB.First(&p, item.PolicyID).Error; err != nil {
 			continue
 		}
-		d, err := h.Fs.DriverOf(&p)
+		d, err := h.Fs.DriverFor(&p, x.user) // 恢复到该用户自己的隔离目录
 		if err != nil {
 			continue
 		}
@@ -1487,7 +1496,7 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 		dto.Fail(c, 400, "策略不存在")
 		return
 	}
-	d, err := h.Fs.DriverOf(&pol)
+	d, err := h.Fs.DriverFor(&pol, x.user)
 	if err != nil {
 		dto.Fail(c, 500, "驱动错误")
 		return

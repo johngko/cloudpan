@@ -41,12 +41,23 @@ func (d *DavFS) resolve(name string) (*model.Policy, string, error) {
 	return &p, rest, nil
 }
 
-func (d *DavFS) physical(name string) (string, error) {
+// davUserKey 请求上下文中的 WebDAV 登录用户（DavAuth 写入）
+type davUserKey struct{}
+
+func (d *DavFS) physical(ctx context.Context, name string) (string, error) {
 	p, rest, err := d.resolve(name)
 	if err != nil {
 		return "", err
 	}
-	ld, err := fscore.NewLocal(p.RootPath)
+	root := p.RootPath
+	if v := ctx.Value(davUserKey{}); v != nil {
+		if u, ok := v.(*model.User); ok {
+			if dir := fscore.UserDirOf(u); dir != "" { // 多用户数据隔离
+				root = filepath.Join(root, dir)
+			}
+		}
+	}
+	ld, err := fscore.NewLocal(root)
 	if err != nil {
 		return "", err
 	}
@@ -54,7 +65,7 @@ func (d *DavFS) physical(name string) (string, error) {
 }
 
 func (d *DavFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
-	phys, err := d.physical(name)
+	phys, err := d.physical(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -62,7 +73,7 @@ func (d *DavFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error 
 }
 
 func (d *DavFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
-	phys, err := d.physical(name)
+	phys, err := d.physical(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +84,7 @@ func (d *DavFS) OpenFile(ctx context.Context, name string, flag int, perm os.Fil
 }
 
 func (d *DavFS) RemoveAll(ctx context.Context, name string) error {
-	phys, err := d.physical(name)
+	phys, err := d.physical(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -84,11 +95,11 @@ func (d *DavFS) RemoveAll(ctx context.Context, name string) error {
 }
 
 func (d *DavFS) Rename(ctx context.Context, oldName, newName string) error {
-	oldPhys, err := d.physical(oldName)
+	oldPhys, err := d.physical(ctx, oldName)
 	if err != nil {
 		return err
 	}
-	newPhys, err := d.physical(newName)
+	newPhys, err := d.physical(ctx, newName)
 	if err != nil {
 		return err
 	}
@@ -96,7 +107,7 @@ func (d *DavFS) Rename(ctx context.Context, oldName, newName string) error {
 }
 
 func (d *DavFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
-	phys, err := d.physical(name)
+	phys, err := d.physical(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +180,7 @@ func DavAuth() gin.HandlerFunc {
 			c.Request.URL.Path = "/"
 		}
 		c.Set("davUser", &u)
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), davUserKey{}, &u))
 		c.Next()
 	}
 }

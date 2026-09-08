@@ -25,7 +25,7 @@ type DLHandler struct{ Site *SiteHandler }
 
 func (h *DLHandler) sign(t officeTarget, ttl time.Duration) string {
 	exp := time.Now().Add(ttl).Unix()
-	payload := fmt.Sprintf("dlink|%d|%s|%d", t.PolicyID, t.Path, exp)
+	payload := fmt.Sprintf("dlink|%d|%d|%s|%d", t.PolicyID, t.UID, t.Path, exp)
 	mac := hmac.New(sha256.New, h.Site.Cfg.Secret)
 	mac.Write([]byte(payload))
 	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + hex.EncodeToString(mac.Sum(nil))
@@ -46,17 +46,18 @@ func (h *DLHandler) verify(tok string) (*officeTarget, error) {
 	if !hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(tok[dot+1:])) {
 		return nil, errors.New("直链校验失败")
 	}
-	parts := strings.SplitN(payload, "|", 4)
-	if len(parts) != 4 || parts[0] != "dlink" {
+	parts := strings.SplitN(payload, "|", 5)
+	if len(parts) != 5 || parts[0] != "dlink" {
 		return nil, errors.New("直链载荷非法")
 	}
-	var pid, exp int64
+	var pid, uid, exp int64
 	fmt.Sscanf(parts[1], "%d", &pid)
-	fmt.Sscanf(parts[3], "%d", &exp)
+	fmt.Sscanf(parts[2], "%d", &uid)
+	fmt.Sscanf(parts[4], "%d", &exp)
 	if exp > 0 && time.Now().Unix() > exp {
 		return nil, errors.New("直链已过期")
 	}
-	return &officeTarget{PolicyID: uint(pid), Path: parts[2]}, nil
+	return &officeTarget{PolicyID: uint(pid), UID: uint(uid), Path: parts[3]}, nil
 }
 
 // Create 签发直链（需登录）。expireHours: 1/24/168/720，0 = 永久
@@ -69,7 +70,7 @@ func (h *DLHandler) Create(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	_, d, err := h.Site.Fs.Resolve(u.ID, u.Role, x.group, policyID)
+	_, d, err := h.Site.Fs.Resolve(u, x.group, policyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
 		return
@@ -89,7 +90,7 @@ func (h *DLHandler) Create(c *gin.Context) {
 	if hours <= 0 {
 		ttl = time.Duration(100*365*24) * time.Hour // 永久
 	}
-	token := h.sign(officeTarget{PolicyID: policyID, Path: vp}, ttl)
+	token := h.sign(officeTarget{PolicyID: policyID, UID: u.ID, Path: vp}, ttl)
 	dto.OK(c, gin.H{
 		"url":       "/api/dl?token=" + token,
 		"expireAt":  time.Now().Add(ttl).UnixMilli(),
@@ -111,7 +112,7 @@ func (h *DLHandler) Serve(c *gin.Context) {
 		dto.FailHTTP(c, 404, "存储不存在")
 		return
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(t.UID)) // 文件属主的隔离目录
 	if err != nil {
 		dto.FailHTTP(c, 400, err.Error())
 		return

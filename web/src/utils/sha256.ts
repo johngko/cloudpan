@@ -1,6 +1,6 @@
 // 纯 JS SHA-256 兜底实现
 // 背景：crypto.subtle 仅在安全上下文（HTTPS 或 localhost）可用。
-// 内网部署时用户常通过 http://<局域网IP>:8322 访问，此时 crypto.subtle 为 undefined，
+// 内网部署时用户常通过 http://<局域网IP>:18322 访问，此时 crypto.subtle 为 undefined，
 // 文件哈希（秒传/去重）会直接抛错导致所有上传失败，故提供此同步兜底实现。
 
 const K = new Uint32Array([

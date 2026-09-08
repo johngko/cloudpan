@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 
@@ -15,14 +16,18 @@ import (
 )
 
 func fsService(cfg *config.Config) *fscore.Service {
-	// 注册全部存储驱动
-	fscore.RegisterDriver("local", func(p *model.Policy) (fscore.Driver, error) {
-		return fscore.NewLocal(p.RootPath)
+	// 注册全部存储驱动（工厂统一为 策略+用户 签名；云盘忽略用户）
+	fscore.RegisterDriver("local", func(p *model.Policy, u *model.User) (fscore.Driver, error) {
+		root := p.RootPath
+		if dir := fscore.UserDirOf(u); dir != "" { // 多用户数据隔离：每用户独立子目录
+			root = filepath.Join(root, dir)
+		}
+		return fscore.NewLocal(root)
 	})
-	fscore.RegisterDriver("pan123", driver.NewPan123)
-	fscore.RegisterDriver("aliyun", driver.NewAliyun)
-	fscore.RegisterDriver("baidu", driver.NewBaidu)
-	fscore.RegisterDriver("tianyi", driver.NewTianyi)
+	fscore.RegisterDriver("pan123", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewPan123(p) })
+	fscore.RegisterDriver("aliyun", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewAliyun(p) })
+	fscore.RegisterDriver("baidu", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewBaidu(p) })
+	fscore.RegisterDriver("tianyi", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewTianyi(p) })
 	return fscore.NewService(cfg.Sub("upload_tmp"), cfg.Sub("recycle"), cfg.Sub("thumbs"), cfg.Sub("ziptmp"))
 }
 

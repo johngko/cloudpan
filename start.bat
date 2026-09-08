@@ -6,5 +6,5 @@ if not exist cloudpan.exe (
   pause
   exit /b 1
 )
-echo CloudPan 启动中: http://localhost:8322  (Ctrl+C 停止)
+echo CloudPan 启动中: http://localhost:18322  (Ctrl+C 停止)
 cloudpan.exe

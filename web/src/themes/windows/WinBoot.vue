@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -66,20 +66,35 @@ const backW = ref(400)
 const logoOn = ref(false)
 const fading = ref(false)
 
+// 组件卸载后（如登录页 401 拦截器提前跳走）必须停止动画流程，
+// 否则残留的定时器会在用户已登录进桌面后执行 replace('/login') 把会话踢回登录页
+let alive = true
+let timer: number | undefined
+let tLogo: number | undefined, tFade: number | undefined, tLogin: number | undefined
+
 onMounted(() => {
   const progress = [0, 0, 1, 3, 7, 17, 20]
   let i = 0
-  const timer = window.setInterval(() => {
+  timer = window.setInterval(() => {
+    if (!alive) return
     setProgress(progress[i])
     i++
     if (i >= progress.length) {
       window.clearInterval(timer)
       stage.value = 1
-      window.setTimeout(() => (logoOn.value = true), 100)
-      window.setTimeout(() => (fading.value = true), 1500)
-      window.setTimeout(() => router.replace('/login'), 1800)
+      tLogo = window.setTimeout(() => (logoOn.value = true), 100)
+      tFade = window.setTimeout(() => (fading.value = true), 1500)
+      tLogin = window.setTimeout(() => { if (alive) router.replace('/login') }, 1800)
     }
   }, 300)
+})
+
+onUnmounted(() => {
+  alive = false
+  window.clearInterval(timer)
+  window.clearTimeout(tLogo)
+  window.clearTimeout(tFade)
+  window.clearTimeout(tLogin)
 })
 
 function setProgress(n: number) {

@@ -10,11 +10,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"cloudpan/internal/model"
 )
 
 // LocalDriver 本地磁盘驱动
 type LocalDriver struct {
-	Root string // 物理根目录（绝对路径）
+	Root string // 物理根目录（绝对路径）；多用户场景下为 RootPath/<用户目录>/
 }
 
 func NewLocal(root string) (*LocalDriver, error) {
@@ -273,6 +275,42 @@ func (d *LocalDriver) Quota() (used, total int64, err error) {
 
 func (d *LocalDriver) Capabilities() Cap {
 	return Cap{DirectDownload: false, Upload: true, StructureList: true}
+}
+
+// ---- 多用户数据隔离 ----
+
+// UserDirOf 返回用户在本地策略根目录下的物理子目录名（每用户独立目录，互不可见）。
+// 纯 ASCII 安全用户名直接用用户名；其他（如中文用户名）用 user_<id>。
+// 首次生成的目录名固化到 UserSetting(local_dir)，此后即使改用户名目录也不变。
+func UserDirOf(u *model.User) string {
+	if u == nil {
+		return ""
+	}
+	var set model.UserSetting
+	if model.DB.Where("user_id = ? AND key = ?", u.ID, "local_dir").First(&set).Error == nil && set.Value != "" {
+		return set.Value
+	}
+	name := fmt.Sprintf("user_%d", u.ID)
+	if safeDirName(u.Username) {
+		name = u.Username
+	}
+	_ = model.DB.Create(&model.UserSetting{UserID: u.ID, Key: "local_dir", Value: name}).Error
+	return name
+}
+
+func safeDirName(s string) bool {
+	if len(s) < 2 || len(s) > 32 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r == '_' || r == '-':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // WalkAll 遍历物理根下全部条目（供用量统计）

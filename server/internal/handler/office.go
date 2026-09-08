@@ -31,8 +31,10 @@ type OfficeHandler struct {
 	Site *SiteHandler
 }
 
+// officeTarget DS 拉取/回调目标；UID = 文件属主（本地策略按属主隔离目录解析）
 type officeTarget struct {
 	PolicyID uint
+	UID      uint
 	Path     string
 }
 
@@ -46,7 +48,7 @@ func parseUintQuery(c *gin.Context, key string) uint {
 // signFileToken 生成供 DS 使用的短期签名 token：b64url(payload).hex(hmac(payload))
 func (h *OfficeHandler) signFileToken(t officeTarget, ttl time.Duration) string {
 	exp := time.Now().Add(ttl).Unix()
-	payload := fmt.Sprintf("%d|%s|%d", t.PolicyID, t.Path, exp)
+	payload := fmt.Sprintf("%d|%d|%s|%d", t.PolicyID, t.UID, t.Path, exp)
 	mac := hmac.New(sha256.New, h.Site.Cfg.Secret)
 	mac.Write([]byte(payload))
 	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + hex.EncodeToString(mac.Sum(nil))
@@ -67,18 +69,19 @@ func (h *OfficeHandler) verifyToken(tok string) (*officeTarget, error) {
 	if !hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(tok[dot+1:])) {
 		return nil, errors.New("token 校验失败")
 	}
-	parts := strings.SplitN(payload, "|", 3)
-	if len(parts) != 3 {
+	parts := strings.SplitN(payload, "|", 4)
+	if len(parts) != 4 {
 		return nil, errors.New("token 载荷非法")
 	}
-	var pid uint64
+	var pid, uid uint64
 	fmt.Sscanf(parts[0], "%d", &pid)
+	fmt.Sscanf(parts[1], "%d", &uid)
 	var exp int64
-	fmt.Sscanf(parts[2], "%d", &exp)
+	fmt.Sscanf(parts[3], "%d", &exp)
 	if time.Now().Unix() > exp {
 		return nil, errors.New("token 已过期")
 	}
-	return &officeTarget{PolicyID: uint(pid), Path: parts[1]}, nil
+	return &officeTarget{PolicyID: uint(pid), UID: uint(uid), Path: parts[2]}, nil
 }
 
 // Config 签发编辑器配置（GET /api/office/config?policyId=&path=&mode=edit|view）
@@ -91,7 +94,7 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, err := h.Site.Fs.Resolve(u.ID, u.Role, x.group, policyID)
+	p, d, err := h.Site.Fs.Resolve(u, x.group, policyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
 		return
@@ -113,7 +116,7 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 		mode = "edit"
 	}
 	ext := strings.TrimPrefix(strings.ToLower(path.Ext(vp)), ".")
-	fileToken := h.signFileToken(officeTarget{PolicyID: policyID, Path: vp}, 24*time.Hour)
+	fileToken := h.signFileToken(officeTarget{PolicyID: policyID, UID: u.ID, Path: vp}, 24*time.Hour)
 	publicBase := strings.TrimRight(h.Site.Cfg.PublicURL, "/")
 
 	docURL := fmt.Sprintf("%s/api/office/file?token=%s", publicBase, fileToken)
@@ -179,7 +182,7 @@ func (h *OfficeHandler) File(c *gin.Context) {
 		dto.FailHTTP(c, 404, "存储不存在")
 		return
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(t.UID)) // 文件属主的隔离目录
 	if err != nil {
 		dto.FailHTTP(c, 400, err.Error())
 		return
@@ -218,7 +221,7 @@ func (h *OfficeHandler) Callback(c *gin.Context) {
 	if (cb.Status == 2 || cb.Status == 6) && cb.URL != "" {
 		var p model.Policy
 		if err := model.DB.First(&p, t.PolicyID).Error; err == nil {
-			if d, err := h.Site.Fs.DriverOf(&p); err == nil {
+			if d, err := h.Site.Fs.DriverFor(&p, userOfID(t.UID)); err == nil {
 				resp, err := http.Get(cb.URL)
 				if err == nil {
 					body, err := io.ReadAll(resp.Body)
@@ -226,7 +229,7 @@ func (h *OfficeHandler) Callback(c *gin.Context) {
 					if err == nil {
 						// 覆盖前归档旧版本（与上传覆盖行为一致）
 						if phys, err := fscore.PhysicalOf(d, t.Path); err == nil {
-							fscore.SaveVersion(t.PolicyID, 0, t.Path, phys)
+							fscore.SaveVersion(t.PolicyID, t.UID, t.Path, phys)
 						}
 						_ = d.CreateFile(t.Path, strings.NewReader(string(body)))
 						model.DB.Create(&model.AuditLog{UserID: 0, Username: "onlyoffice", Action: "office-save",
@@ -322,7 +325,7 @@ func (h *CloudAuth) Status(c *gin.Context) {
 		dto.OK(c, gin.H{"ok": true, "msg": "本地存储"})
 		return
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	d, err := h.Site.Fs.DriverFor(&p, nil) // 云盘连通性探测（本地策略已提前返回）
 	if err != nil {
 		dto.OK(c, gin.H{"ok": false, "msg": err.Error()})
 		return

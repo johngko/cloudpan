@@ -46,7 +46,7 @@ func (h *ShareHandler) Create(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, err := h.Site.Fs.Resolve(x.user.ID, x.user.Role, x.group, in.PolicyID)
+	p, d, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
 		return
@@ -153,7 +153,7 @@ func (h *ShareHandler) Info(c *gin.Context) {
 	if !sh.IsDir {
 		var p model.Policy
 		if err := model.DB.First(&p, sh.PolicyID).Error; err == nil {
-			if d, err := h.Site.Fs.DriverOf(&p); err == nil {
+			if d, err := h.Site.Fs.DriverFor(&p, owner); err == nil { // 分享内容在分享者的隔离目录内
 				if e, err := d.Stat(sh.Path); err == nil {
 					size = e.Size
 				}
@@ -186,21 +186,21 @@ func (h *ShareHandler) Verify(c *gin.Context) {
 	dto.OK(c, gin.H{"stoken": h.makeStoken(sh.Token)})
 }
 
-func (h *ShareHandler) guard(c *gin.Context) (*model.Share, bool) {
-	sh, _, err := h.loadShare(c.Param("token"))
+func (h *ShareHandler) guard(c *gin.Context) (*model.Share, *model.User, bool) {
+	sh, owner, err := h.loadShare(c.Param("token"))
 	if err != nil {
 		dto.Fail(c, 404, err.Error())
-		return nil, false
+		return nil, nil, false
 	}
 	if sh.PasswordHash != "" && !h.checkStoken(sh.Token, c.Query("st")) {
 		dto.Fail(c, 401, "请先输入提取码")
-		return nil, false
+		return nil, nil, false
 	}
-	return sh, true
+	return sh, owner, true
 }
 
 func (h *ShareHandler) List(c *gin.Context) {
-	sh, ok := h.guard(c)
+	sh, owner, ok := h.guard(c)
 	if !ok {
 		return
 	}
@@ -213,7 +213,7 @@ func (h *ShareHandler) List(c *gin.Context) {
 		dto.Fail(c, 404, "存储已失效")
 		return
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	d, err := h.Site.Fs.DriverFor(&p, owner)
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return
@@ -243,7 +243,7 @@ func (h *ShareHandler) List(c *gin.Context) {
 }
 
 func (h *ShareHandler) Download(c *gin.Context) {
-	sh, ok := h.guard(c)
+	sh, _, ok := h.guard(c)
 	if !ok {
 		return
 	}
@@ -264,7 +264,7 @@ func (h *ShareHandler) Download(c *gin.Context) {
 }
 
 func (h *ShareHandler) Raw(c *gin.Context) {
-	sh, ok := h.guard(c)
+	sh, _, ok := h.guard(c)
 	if !ok {
 		return
 	}
@@ -286,7 +286,7 @@ func (h *ShareHandler) serveShareFile(c *gin.Context, sh *model.Share, target st
 		dto.FailHTTP(c, 404, "存储已失效")
 		return
 	}
-	d, err := h.Site.Fs.DriverOf(&p)
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID)) // 分享内容在分享者的隔离目录内
 	if err != nil {
 		dto.FailHTTP(c, 400, err.Error())
 		return
