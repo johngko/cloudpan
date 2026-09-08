@@ -41,6 +41,20 @@ func (h *UploadHandler) Init(c *gin.Context) {
 		dto.Fail(c, 400, "文件名非法")
 		return
 	}
+	// Windows：创建前规范化各路径段（去尾部空格/点，拒绝保留设备名与非法字符），
+	// 否则 Windows 静默截断名称后前后路径不一致，报"找不到请求的文件或目录"(267)
+	if sp, err := fscore.SanitizeNewPath(parent); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		parent = sp
+	}
+	if sn, err := fscore.SanitizeName(in.Name); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		in.Name = sn
+	}
 	// 单文件上限 20GB；分片尺寸收敛到 [1KB, 64MB]，防不限额组用超大分片声明刷盘
 	if in.Size <= 0 || in.Size > 20<<30 {
 		dto.Fail(c, 400, "文件大小非法（上限 20GB）")

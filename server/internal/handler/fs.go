@@ -199,6 +199,12 @@ func (h *SiteHandler) Mkdir(c *gin.Context) {
 		dto.Fail(c, 400, "目录名非法")
 		return
 	}
+	if san, err := fscore.SanitizeNewPath(vp); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		vp = san
+	}
 	if err := d.Mkdir(vp); err != nil {
 		dto.Fail(c, 400, "创建失败："+err.Error())
 		return
@@ -216,6 +222,12 @@ func (h *SiteHandler) Rename(c *gin.Context) {
 	p, d, ok := h.resolveByID(in.PolicyID, c)
 	if !ok {
 		return
+	}
+	if sn, err := fscore.SanitizeName(in.NewName); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		in.NewName = sn
 	}
 	if err := d.Rename(in.Path, in.NewName); err != nil {
 		dto.Fail(c, 400, "重命名失败："+err.Error())

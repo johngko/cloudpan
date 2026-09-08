@@ -23,6 +23,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"cloudpan/internal/dto"
+	"cloudpan/internal/fscore"
 	"cloudpan/internal/middleware"
 	"cloudpan/internal/model"
 )
@@ -784,6 +785,19 @@ func (h *TerminalHandler) FSUpload(c *gin.Context) {
 	if name == "" || name == "." || name == "/" || strings.Contains(c.Query("name"), "/") {
 		dto.Fail(c, 400, "文件名非法")
 		return
+	}
+	// 目标机 OS 未知（可能是 Windows）：无条件规范化，避免 267"找不到目录"类错误
+	if sd, err := fscore.SanitizeSegments(dir); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		dir = sd
+	}
+	if sn, err := fscore.SanitizeNameStrict(name); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		name = sn
 	}
 	overwrite := c.Query("overwrite") == "1"
 	var wrote int64
