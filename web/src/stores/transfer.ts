@@ -138,6 +138,11 @@ export const useTransfer = defineStore('transfer', {
         t.status = 'error'
         t.errMsg = e.message || '上传失败'
         this.stopPolling(t)
+        // 控制台留全量诊断（黄色 warn）：目标路径 + 原始错误，便于定位 Windows 文件系统类问题
+        console.warn('[CloudPan 上传失败]', {
+          parent: t.parent, name: t.name, policyId: t.policyId,
+          size: t.size, hash: t.hash, error: e?.message ?? String(e)
+        })
         const toast = useToast()
         toast.error('上传失败: ' + (e.message || '未知错误'))
       }
