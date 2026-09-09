@@ -999,11 +999,32 @@ function onFilePicked(e: Event) {
   }
   input.value = ''
 }
-// 把拖放条目展开为带 __cpRel 的文件列表（文件夹经 webkitGetAsEntry 递归遍历）
+// 把拖放条目展开为带 __cpRel 的文件列表（文件夹经 webkitGetAsEntry 递归遍历；
+// 空目录显式补建；读取失败逐项上报，避免整批静默丢失）
 async function droppedFiles(e: DragEvent): Promise<File[]> {
-  const list = await collectDropFiles(e.dataTransfer!)
-  for (const d of list) (d.file as any).__cpRel = d.rel
-  return list.map(d => d.file)
+  const r = await collectDropFiles(e.dataTransfer!)
+  if (r.problems.length) {
+    console.warn('[CloudPan 拖拽读取失败]', r.problems)
+    toast.error(`部分拖入内容读取失败：${r.problems[0]}${r.problems.length > 1 ? `（共 ${r.problems.length} 项）` : ''}`)
+  }
+  // 空目录（内部没有文件）：没有文件上传就不会被自动建出来，这里逐级显式创建
+  if (r.emptyDirs.length && currentPolicy.value) {
+    const pid = currentPolicy.value.id
+    const done = new Set<string>()
+    for (const dir of r.emptyDirs) {
+      let p = '/'
+      for (const seg of dir.split('/')) {
+        const key = p + '/' + seg
+        if (!done.has(key)) {
+          done.add(key)
+          fsApi.mkdir(pid, p, seg).catch(() => { /* 已存在/无权限：忽略 */ })
+        }
+        p = key
+      }
+    }
+  }
+  for (const d of r.files) (d.file as any).__cpRel = d.rel
+  return r.files.map(d => d.file)
 }
 async function onDrop(e: DragEvent) {
   if (!currentPolicy.value || !e.dataTransfer) return

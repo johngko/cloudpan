@@ -132,10 +132,21 @@ async function onDrop(ev: DragEvent) {
   dragOver.value = false
   const dt = ev.dataTransfer
   if (!dt) return
-  const list = await collectDropFiles(dt)
-  if (!list.length) return
-  for (const d of list) (d.file as any).__cpRel = d.rel
-  uploadFiles(list.map(d => d.file))
+  const r = await collectDropFiles(dt)
+  if (r.problems.length) {
+    console.warn('[CloudPan 拖拽读取失败]', r.problems)
+    emit('toast', `部分拖入内容读取失败：${r.problems[0]}`, 'err')
+  }
+  // 空目录：没有文件上传就不会被自动建出来，这里显式创建（已存在不报错）
+  if (r.emptyDirs.length) {
+    for (const dir of r.emptyDirs) {
+      const full = path.value === '/' ? '/' + dir : path.value + '/' + dir
+      termApi.fsOp({ connId: props.connId, op: 'mkdir', path: full }).catch(() => {})
+    }
+  }
+  if (!r.files.length) return
+  for (const d of r.files) (d.file as any).__cpRel = d.rel
+  uploadFiles(r.files.map(d => d.file))
 }
 function onExistingDrop(ev: DragEvent) {
   ev.preventDefault()

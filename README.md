@@ -312,6 +312,14 @@ Admin Console → Storage Policies → Mount → pick a type and fill in credent
 
 ### 2026-09-09
 
+- **修复一次拖入多个文件夹只上传一个**：部分浏览器内核只把拖入内容的一部分放进 `dataTransfer.items`（其余只在 `files` 里出现），此前落下的文件夹会静默丢失。现在拖放收集合并两个来源——`items` 里能遍历的目录树照常遍历，`files` 中未被覆盖的项一并补收（去重），不再无声丢失
+  - **Fixed "only one folder uploaded when dragging multiple folders"**: some browser kernels put only part of the dropped content in `dataTransfer.items` (the rest appears only in `files`), and the leftover folders were silently lost. Drop collection now merges both sources — directory trees traversable from `items` are walked as usual, and uncovered `files` entries are picked up (deduplicated), so nothing disappears silently
+- **空目录显式创建**：空目录（内部没有任何文件）上传时不会被自动建出来（没有文件触发建目录），拖放后现在通过 mkdir 显式创建（网盘资源管理器与 SFTP 面板均支持；SFTP 的 mkdir 改为幂等逐级创建，嵌套路径可用、已存在不报错）
+  - **Empty directories are now created explicitly**: empty directories (containing no files) were never auto-created because no file upload triggers their creation; they are now created via mkdir after a drop (cloud drive and SFTP panel; SFTP mkdir is now idempotent and recursive, tolerating existing directories)
+- **拖拽读取失败逐项上报**：某个目录/文件读取失败时给出明确提示与控制台日志，不再整批静默丢失
+  - **Drop read errors are reported per item**: a failed directory/file read now produces a clear notice and console log instead of silently dropping the whole batch
+- **支持 0 字节（空）文件上传**：此前空文件会被拒（参数错误）；文件夹里常见空文件（如 .gitkeep、锁文件），现在可正常上传
+  - **Zero-byte (empty) file uploads now supported**: empty files were previously rejected with a parameter error; folders commonly contain empty files (e.g. .gitkeep, lock files) and they now upload normally
 - **修复拖拽文件夹上传失败**：部分浏览器 / 内嵌 WebView 拖入文件夹时不会展开内容，只递交一个 0 字节的"文件夹"条目，导致上传报错（Windows 上表现为系统错误 267）。现在拖放时改用 `webkitGetAsEntry()` 递归遍历目录树（`readEntries` 按 100 条分批读到空），目录结构与文件内容完整保留；不支持 entries API 的旧浏览器自动退回扁平文件列表。网盘资源管理器与 SSH 的 SFTP 面板拖拽均生效
   - **Fixed drag-and-drop folder upload failures**: some browsers / embedded WebViews deliver a dragged folder as a single 0-byte entry instead of its contents, causing upload errors (system error 267 on Windows). Drops now use `webkitGetAsEntry()` to walk the directory tree recursively (`readEntries` in batches of 100), preserving structure and contents; browsers without the entries API fall back to the flat file list. Applies to both the cloud drive explorer and the SSH SFTP panel
 - **上传/新建重名冲突给出明确提示**：上传的文件名与已存在目录同名时，返回明确错误「已存在同名目录，无法用文件覆盖（请先删除该目录或改名上传）」，不再出现含义不明的系统错误；SFTP 上传同样处理

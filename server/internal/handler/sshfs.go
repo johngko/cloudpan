@@ -678,7 +678,8 @@ func (h *TerminalHandler) FSOps(c *gin.Context) {
 		p := sftpClean(in.Path)
 		switch in.Op {
 		case "mkdir":
-			return cl.Mkdir(p)
+			// 幂等逐级创建：拖拽空目录补建、嵌套路径都能处理，已存在不报错
+			return sftpMkdirAll(cl, p)
 		case "delete":
 			return sftpRemoveAll(cl, p)
 		case "rename", "move":

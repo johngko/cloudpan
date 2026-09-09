@@ -20,7 +20,7 @@ type uploadInitIn struct {
 	PolicyID  uint   `json:"policyId" binding:"required"`
 	Parent    string `json:"parent"`
 	Name      string `json:"name" binding:"required"`
-	Size      int64  `json:"size" binding:"required"`
+	Size      int64  `json:"size"` // 允许 0：空文件是合法上传（文件夹里常见），required 会把 0 拒掉
 	ChunkSize int64  `json:"chunkSize"`
 	Hash      string `json:"hash"`
 }
@@ -55,8 +55,8 @@ func (h *UploadHandler) Init(c *gin.Context) {
 	} else {
 		in.Name = sn
 	}
-	// 单文件上限 20GB；分片尺寸收敛到 [1KB, 64MB]，防不限额组用超大分片声明刷盘
-	if in.Size <= 0 || in.Size > 20<<30 {
+	// 单文件上限 20GB（0 字节合法：空文件）；分片尺寸收敛到 [1KB, 64MB]，防不限额组用超大分片声明刷盘
+	if in.Size < 0 || in.Size > 20<<30 {
 		dto.Fail(c, 400, "文件大小非法（上限 20GB）")
 		return
 	}
