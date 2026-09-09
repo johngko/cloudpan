@@ -56,10 +56,18 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 	s := GetSiteSettings()
 	regOpen := s["register_open"] == "true"
 	invite := s["register_invite_code"] != ""
+	// 游客登录可用性：站点开关（默认开）且游客账号存在且未被禁用
+	guestLogin := s["guest_login"] != "false"
+	if guestLogin {
+		var gn int64
+		model.DB.Model(&model.User{}).Where("username = ? AND disabled = false", "guest").Count(&gn)
+		guestLogin = gn > 0
+	}
 	dto.OK(c, gin.H{
 		"siteName": s["site_name"], "registerOpen": regOpen, "needInviteCode": invite,
 		"officeConfigured": s["onlyoffice_url"] != "",
 		"announcement":     s["announcement"],
+		"guestLogin":       guestLogin,
 	})
 }
 
@@ -104,6 +112,20 @@ func userOfID(id uint) *model.User {
 		return nil
 	}
 	return &u
+}
+
+// requireWritable 只读用户组（访客组）拦截对自己盘的写操作；管理员豁免。
+// 只读只约束自己的盘——他人显式授予的可写共享走 usershare 端点，不受此限
+func requireWritable(c *gin.Context) bool {
+	x := ctxOf(c)
+	if x.user.Role == "admin" {
+		return true
+	}
+	if x.group.ReadOnly {
+		dto.Fail(c, 403, "该用户组为只读，仅可查看和下载")
+		return false
+	}
+	return true
 }
 
 func (h *SiteHandler) resolve(c *gin.Context) (*model.Policy, fscore.Driver, bool) {
@@ -180,6 +202,9 @@ type fsOpIn struct {
 }
 
 func (h *SiteHandler) Mkdir(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in fsOpIn
 	if err := c.ShouldBindJSON(&in); err != nil || in.Name == "" {
 		dto.Fail(c, 400, "参数错误")
@@ -214,6 +239,9 @@ func (h *SiteHandler) Mkdir(c *gin.Context) {
 }
 
 func (h *SiteHandler) Rename(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in fsOpIn
 	if err := c.ShouldBindJSON(&in); err != nil || in.Path == "" || in.NewName == "" {
 		dto.Fail(c, 400, "参数错误")
@@ -248,6 +276,9 @@ func (h *SiteHandler) Rename(c *gin.Context) {
 }
 
 func (h *SiteHandler) Move(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in fsOpIn
 	if err := c.ShouldBindJSON(&in); err != nil || len(in.Paths) == 0 {
 		dto.Fail(c, 400, "参数错误")
@@ -366,6 +397,9 @@ func addQuota(userID uint, delta int64) {
 }
 
 func (h *SiteHandler) Copy(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in fsOpIn
 	if err := c.ShouldBindJSON(&in); err != nil || len(in.Paths) == 0 {
 		dto.Fail(c, 400, "参数错误")
@@ -519,6 +553,9 @@ func (h *SiteHandler) resolveDriverByID(policyID uint, c *gin.Context) (fscore.D
 }
 
 func (h *SiteHandler) CrossCopy(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in crossCopyIn
 	if err := c.ShouldBindJSON(&in); err != nil || len(in.Items) == 0 {
 		dto.Fail(c, 400, "参数错误")
@@ -582,6 +619,9 @@ func (h *SiteHandler) CrossCopy(c *gin.Context) {
 }
 
 func (h *SiteHandler) CrossMove(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in crossCopyIn
 	if err := c.ShouldBindJSON(&in); err != nil || len(in.Items) == 0 {
 		dto.Fail(c, 400, "参数错误")
@@ -662,6 +702,9 @@ func (h *SiteHandler) CrossMove(c *gin.Context) {
 
 // Delete 删除到回收站
 func (h *SiteHandler) Delete(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in fsOpIn
 	if err := c.ShouldBindJSON(&in); err != nil || len(in.Paths) == 0 {
 		dto.Fail(c, 400, "参数错误")
@@ -1356,6 +1399,9 @@ func (h *SiteHandler) RecycleList(c *gin.Context) {
 }
 
 func (h *SiteHandler) RecycleRestore(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	x := ctxOf(c)
 	var in struct {
 		IDs []uint `json:"ids" binding:"required"`
@@ -1403,10 +1449,13 @@ func (h *SiteHandler) RecycleRestore(c *gin.Context) {
 }
 
 func (h *SiteHandler) RecyclePurge(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	x := ctxOf(c)
 	var in struct {
-		IDs   []uint `json:"ids"`
-		All   bool   `json:"all"`
+		IDs   []uint   `json:"ids"`
+		All   bool     `json:"all"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
@@ -1498,6 +1547,9 @@ func (h *SiteHandler) FileVersions(c *gin.Context) {
 }
 
 func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	x := ctxOf(c)
 	var in struct {
 		PolicyID uint `json:"policyId"`

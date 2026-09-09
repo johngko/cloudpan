@@ -20,7 +20,7 @@ export const useSession = defineStore('session', {
   state: () => ({
     user: null as User | null,
     group: null as UserGroup | null,
-    site: { siteName: 'CloudPan', registerOpen: false, needInviteCode: false, officeConfigured: false, announcement: '' },
+    site: { siteName: 'CloudPan', registerOpen: false, needInviteCode: false, officeConfigured: false, announcement: '', guestLogin: false },
     wallpaper: localStorage.getItem('cp_wallpaper') || 'win12',
     dark: localStorage.getItem('cp_dark') === '1',
     osTheme: readTheme(),

@@ -49,6 +49,8 @@ type UserGroup struct {
 	AllowArchive        bool   `gorm:"default:true" json:"allowArchive"`
 	AllowOffline        bool   `gorm:"default:false" json:"allowOffline"`
 	ShareAllowDownload  bool   `gorm:"default:true" json:"shareAllowDownload"`
+	// ReadOnly 只读用户组：成员仅可查看/下载自己的盘，不能新建/上传/移动/删除（管理员豁免；不影响他人显式授予的可写共享）
+	ReadOnly            bool   `gorm:"default:false" json:"readOnly"`
 	DownloadSpeedKB     int64  `gorm:"default:0" json:"downloadSpeedKB"` // 0 = 不限速
 	RecycleRetentionDays int   `gorm:"default:0" json:"recycleRetentionDays"` // 回收站保留天数，0 = 永久
 	KeepVersions        int    `gorm:"default:10" json:"keepVersions"`   // 每个文件保留的历史版本数，-1 = 不限
@@ -226,16 +228,18 @@ type UserStar struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// UserShare 站内用户共享：把目录共享给其他注册用户（ro 只读 / rw 可写）
+// UserShare 站内用户共享：把目录共享给指定用户/用户组/所有注册用户（ro 只读 / rw 可写）
 type UserShare struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	OwnerID   uint   `gorm:"index" json:"ownerId"`
-	TargetID  uint   `gorm:"index" json:"targetId"`
-	PolicyID  uint   `json:"policyId"`
-	Path      string `gorm:"size:512" json:"path"`
-	Name      string `gorm:"size:255" json:"name"`
-	Perm      string `gorm:"size:4;default:ro" json:"perm"` // ro | rw
-	CreatedAt time.Time `json:"createdAt"`
+	// TargetType: user=指定用户（TargetID=用户ID）；group=用户组（TargetID=组ID）；all=所有注册账号（TargetID=0）
+	TargetType string `gorm:"size:8;default:user;index" json:"targetType"`
+	TargetID   uint   `gorm:"index" json:"targetId"`
+	PolicyID   uint   `json:"policyId"`
+	Path       string `gorm:"size:512" json:"path"`
+	Name       string `gorm:"size:255" json:"name"`
+	Perm       string `gorm:"size:4;default:ro" json:"perm"` // ro | rw
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // FileVersion 文件版本管理：保存文件的每个历史版本，支持恢复
@@ -345,12 +349,15 @@ func InitDB(dataDir string) {
 	seed()
 }
 
+// guestAppPerms 访客组默认应用权限：保留基础应用 + 内部共享（查看共享），禁止终端/浏览器/Office 等
+const guestAppPerms = `{"terminal":false,"browser":false,"office":false,"webdav":false,"share":false,"offline_http":false,"bt":false,"system_monitor":false}`
+
 func seed() {
 	var gc int64
 	DB.Model(&UserGroup{}).Count(&gc)
 	if gc == 0 {
 		DB.Create(&UserGroup{Name: "默认用户组", QuotaMB: 10240, AllowShare: true, AllowWebdav: true, AllowArchive: true, AllowOffline: true, IsDefault: true, Remark: "系统默认"})
-		DB.Create(&UserGroup{Name: "访客", QuotaMB: 1024, AllowShare: false, AllowWebdav: false, AllowArchive: false, AllowOffline: false, Remark: "只读访客"})
+		DB.Create(&UserGroup{Name: "访客", QuotaMB: 1024, AllowShare: false, AllowWebdav: false, AllowArchive: false, AllowOffline: false, ReadOnly: true, AppPerms: guestAppPerms, Remark: "只读访客：仅查看与下载，基础应用"})
 	}
 	var uc int64
 	DB.Model(&User{}).Count(&uc)
@@ -359,12 +366,23 @@ func seed() {
 		DB.Where("is_default = ?", true).First(&g)
 		DB.Create(&User{Username: "admin", PasswordHash: hashPwd("admin123"), Nickname: "管理员", Role: "admin", GroupID: g.ID})
 	}
+	// 游客账号：登录页「游客登录」的共享身份（密码随机不可知，仅经 /auth/guest 登录）。
+	// 幂等：缺失即补建；管理员关闭游客登录用站点开关 guest_login 或禁用该账号
+	var gg UserGroup
+	if err := DB.Where("name = ?", "访客").First(&gg).Error; err == nil {
+		var gn int64
+		DB.Model(&User{}).Where("username = ?", "guest").Count(&gn)
+		if gn == 0 {
+			DB.Create(&User{Username: "guest", PasswordHash: hashPwd(randomToken(16)), Nickname: "游客", Role: "user", GroupID: gg.ID, QuotaMB: -1})
+		}
+	}
 	var sc int64
 	DB.Model(&SiteSetting{}).Count(&sc)
 	if sc == 0 {
 		defaults := map[string]string{
 			"site_name": "CloudPan 网盘", "register_open": "false", "register_invite_code": "",
 			"onlyoffice_url": "", "onlyoffice_jwt": "", "webdav_enabled": "true", "announcement": "",
+			"guest_login": "true",
 		}
 		for k, v := range defaults {
 			DB.Create(&SiteSetting{Key: k, Value: v})

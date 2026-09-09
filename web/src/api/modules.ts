@@ -7,6 +7,7 @@ export interface User {
 export interface UserGroup {
   id: number; name: string; quotaMB: number; allowShare: boolean; allowWebdav: boolean
   allowArchive: boolean; allowOffline: boolean; shareAllowDownload: boolean
+  readOnly: boolean // 只读用户组：成员仅可查看/下载
   downloadSpeedKB: number; recycleRetentionDays: number
   keepVersions: number; versionRetentionDays: number
   allowedPolicyIds: string; isDefault: boolean; remark: string
@@ -23,6 +24,8 @@ export interface FileItem {
 
 export const authApi = {
   login: (username: string, password: string) => post<{ token: string; user: User }>('/auth/login', { username, password }),
+  // 游客登录：登录页「游客登录」入口，无需凭据（后端为共享游客账号签发 24h 令牌）
+  guest: () => post<{ token: string; user: User }>('/auth/guest', {}),
   register: (username: string, password: string, nickname: string, inviteCode: string) =>
     post<{ token: string; user: User }>('/auth/register', { username, password, nickname, inviteCode }),
   me: () => get<{ user: User; group: UserGroup }>('/auth/me'),
@@ -32,7 +35,7 @@ export const authApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean }>('/site/public')
 }
 
 export const notifyApi = {
@@ -75,7 +78,10 @@ export const fsApi = {
 export const shareApi = {
   create: (d: { policyId: number; path: string; password?: string; expireDays?: number; remainDownloads?: number; allowDownload?: boolean; previewEnabled?: boolean }) => post<any>('/shares', d),
   mine: () => get<any[]>('/shares'),
-  cancel: (id: number) => del(`/shares/${id}`)
+  cancel: (id: number) => del(`/shares/${id}`),
+  // 转存：把公开分享内容一键保存到自己账号（登录态；带提取码需 st）
+  save: (token: string, d: { policyId: number; path: string }, st?: string) =>
+    post<any>(`/s/${token}/save?st=${encodeURIComponent(st || '')}`, d)
 }
 
 // 系统功能（应用中心）
@@ -145,7 +151,9 @@ export const uploadApi = {
 // 站内用户共享
 export const userShareApi = {
   users: () => get<any[]>('/users'),
-  create: (d: { policyId: number; path: string; targetId: number; perm: string }) => post<any>('/usershares', d),
+  groups: () => get<{ id: number; name: string }[]>('/groups'),
+  // targetType: user=指定用户 / group=用户组 / all=所有人（all 时 targetId=0）
+  create: (d: { policyId: number; path: string; targetType: 'user' | 'group' | 'all'; targetId: number; perm: string }) => post<any>('/usershares', d),
   mine: () => get<any[]>('/usershares'),
   cancel: (id: number) => del(`/usershares/${id}`),
   withMe: () => get<any[]>('/usershares/with-me'),

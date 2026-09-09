@@ -11,9 +11,17 @@
               · {{ info.views || 0 }} 次浏览 · {{ info.downloads || 0 }} 次下载
             </div>
           </div>
+          <button class="btn" v-if="authed" :disabled="saveBusy" @click="openSaveDlg" title="一键保存到自己的网盘">
+            <AppIcon name="cloud" :size="15" /> 保存到网盘
+          </button>
           <button class="btn primary" v-if="info.allowDownload" @click="downloadCurrent">
             <AppIcon name="download" :size="15" /> 下载
           </button>
+        </div>
+
+        <!-- 转存结果提示 -->
+        <div v-if="saved" style="padding: 10px 26px 0; font-size: 12.5px; color: #7ee2a8">
+          <AppIcon name="check" :size="14" style="vertical-align: -2px" /> {{ saved }}
         </div>
 
         <div v-if="!verified && info.hasPassword" style="padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 14px">
@@ -45,6 +53,40 @@
         </div>
       </div>
     </div>
+
+    <!-- 转存对话框：选目标盘 + 目标文件夹 -->
+    <div class="dialog-mask" v-if="saveShow" @click.self="saveShow = false">
+      <div class="dialog" style="width: 440px">
+        <h3>保存到网盘</h3>
+        <div class="row">
+          <label>目标存储</label>
+          <select class="input" v-model.number="savePolicyId" style="width: 100%" @change="onSavePolicyChange">
+            <option v-for="p in savePolicies" :key="p.id" :value="p.id">{{ p.name }} ({{ p.letter }})</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>目标文件夹</label>
+          <div style="font-size: 12.5px; color: var(--text-2); margin-bottom: 6px">
+            <span style="cursor: pointer" @click="pickCrumb(0)">根目录</span>
+            <template v-for="(c, i) in saveCrumb" :key="i">
+              <span style="opacity: 0.5"> › </span><span style="cursor: pointer" @click="pickCrumb(i + 1)">{{ c.name }}</span>
+            </template>
+          </div>
+          <div style="max-height: 180px; overflow: auto; border: 1px solid var(--stroke); border-radius: 8px">
+            <div v-for="d in saveDirs" :key="d.path" style="padding: 7px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px"
+              :style="{ background: d.path === saveDir ? 'var(--hover, rgba(127,127,127,0.12))' : '' }" @click="pickDir(d)">
+              <AppIcon name="folder" :size="15" />{{ d.name }}
+            </div>
+            <div v-if="!saveDirs.length" style="padding: 12px; font-size: 12px; color: var(--text-3)">（无子文件夹，保存到当前目录）</div>
+          </div>
+        </div>
+        <div v-if="saveMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ saveMsg }}</div>
+        <div class="actions">
+          <button class="btn" @click="saveShow = false">取消</button>
+          <button class="btn primary" :disabled="saveBusy" @click="doSave">{{ saveBusy ? '保存中…' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -55,6 +97,7 @@ import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
 import { resolveTheme } from '../themes/registry'
 import { wallpaperClass } from '../assets/wallpapers'
+import { getToken } from '../api/http'
 
 // 分享页为公开页：按访客本机主题/壁纸渲染（localStorage），缺失时回落默认
 const wpClass = computed(() => {
@@ -73,6 +116,77 @@ const verified = ref(false)
 const errMsg = ref('')
 
 const api = axios.create({ baseURL: '/api' })
+
+// ---- 转存（保存到网盘）：仅登录用户可见 ----
+const authed = computed(() => !!getToken())
+const save = axios.create({ baseURL: '/api' })
+save.interceptors.request.use(cfg => {
+  const t = getToken()
+  if (t) cfg.headers.Authorization = 'Bearer ' + t
+  return cfg
+})
+const saveShow = ref(false)
+const savePolicies = ref<any[]>([])
+const savePolicyId = ref(0)
+const saveDir = ref('/')
+const saveDirs = ref<any[]>([])
+const saveCrumb = ref<{ name: string; path: string }[]>([])
+const saveBusy = ref(false)
+const saveMsg = ref('')
+const saved = ref('')
+
+async function openSaveDlg() {
+  saveMsg.value = ''
+  saveShow.value = true
+  if (!savePolicies.value.length) {
+    try {
+      const r: any = (await save.get('/policies')).data
+      if (r.code !== 0 || !r.data?.length) { saveMsg.value = '没有可用的存储盘'; return }
+      savePolicies.value = r.data
+      savePolicyId.value = r.data[0].id
+    } catch (e: any) { saveMsg.value = e.message || '加载存储失败'; return }
+  }
+  await resetSaveDir()
+}
+async function resetSaveDir() {
+  saveCrumb.value = []
+  try {
+    const r: any = (await save.get(`/fs/list?policyId=${savePolicyId.value}&path=%2F`)).data
+    if (r.code !== 0) throw new Error(r.msg)
+    saveDir.value = '/'
+    saveDirs.value = (r.data.items || []).filter((i: any) => i.isDir)
+  } catch (e: any) { saveMsg.value = e.message }
+}
+function onSavePolicyChange() { resetSaveDir() }
+function pickDir(d: any) {
+  saveCrumb.value = [...saveCrumb.value, { name: d.name, path: d.path }]
+  loadSaveDir(d.path)
+}
+function pickCrumb(i: number) {
+  saveCrumb.value = saveCrumb.value.slice(0, i)
+  loadSaveDir(i === 0 ? '/' : saveCrumb.value[i - 1].path)
+}
+async function loadSaveDir(dir: string) {
+  try {
+    const r: any = (await save.get(`/fs/list?policyId=${savePolicyId.value}&path=${encodeURIComponent(dir)}`)).data
+    if (r.code !== 0) throw new Error(r.msg)
+    saveDir.value = dir
+    saveDirs.value = (r.data.items || []).filter((i: any) => i.isDir)
+  } catch (e: any) { saveMsg.value = e.message }
+}
+async function doSave() {
+  saveBusy.value = true
+  saveMsg.value = ''
+  try {
+    const r: any = (await save.post(`/s/${token}/save?st=${encodeURIComponent(stoken.value)}`, { policyId: savePolicyId.value, path: saveDir.value })).data
+    if (r.code !== 0) throw new Error(r.msg)
+    const p = savePolicies.value.find(x => x.id === savePolicyId.value)
+    saveShow.value = false
+    saved.value = `已保存到 ${p ? p.name : '网盘'}${saveDir.value === '/' ? ' 根目录' : saveDir.value}`
+    setTimeout(() => { saved.value = '' }, 6000)
+  } catch (e: any) { saveMsg.value = e.message }
+  finally { saveBusy.value = false }
+}
 
 onMounted(async () => {
   try {

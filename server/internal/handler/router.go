@@ -17,8 +17,11 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 	// 登录/注册按来源 IP 限速，防密码暴破与批量注册
 	loginLimiter := middleware.NewIPRateLimiter(10, 5) // 10 次/分钟，突发 5
 	regLimiter := middleware.NewIPRateLimiter(5, 2)    // 5 次/小时，突发 2
+	// 游客登录是匿名默认入口，限流比账号登录宽松但仍防爆刷
+	guestLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
 	api.POST("/auth/login", middleware.RateLimit(loginLimiter), auth.Login)
 	api.POST("/auth/register", middleware.RateLimit(regLimiter), auth.Register)
+	api.POST("/auth/guest", middleware.RateLimit(guestLimiter), auth.GuestLogin)
 
 	// 公开分享（受「公开分享」功能门控）
 	sh := &ShareHandler{Site: site, Secret: cfg.Secret}
@@ -91,6 +94,8 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/shares", middleware.AppGate("share"), sh.Mine)
 		ug.POST("/shares", middleware.AppGate("share"), sh.Create)
 		ug.DELETE("/shares/:id", middleware.AppGate("share"), sh.Cancel)
+		// 转存：公开分享内容一键保存到自己账号（登录态）
+		ug.POST("/s/:token/save", sh.SaveToDrive)
 
 		// ONLYOFFICE（受「在线 Office」功能门控）
 		office := &OfficeHandler{Site: site}
@@ -119,6 +124,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		// 站内用户共享（受「内部共享」功能门控）
 		ush := &UserShareHandler{Site: site}
 		ug.GET("/users", ush.Users)
+		ug.GET("/groups", ush.Groups)
 		ug.POST("/usershares", middleware.AppGate("usershare"), ush.Create)
 		ug.GET("/usershares", middleware.AppGate("usershare"), ush.Mine)
 		ug.DELETE("/usershares/:id", middleware.AppGate("usershare"), ush.Cancel)

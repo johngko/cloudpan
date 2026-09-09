@@ -22,16 +22,25 @@ func (h *UserShareHandler) Users(c *gin.Context) {
 	dto.OK(c, items)
 }
 
+// Groups 列出用户组（共享对话框选组用；登录即可见，仅 id+名称）
+func (h *UserShareHandler) Groups(c *gin.Context) {
+	var items []model.UserGroup
+	model.DB.Select("id, name").Order("id").Find(&items)
+	dto.OK(c, items)
+}
+
 type userShareCreateIn struct {
-	PolicyID uint   `json:"policyId" binding:"required"`
-	Path     string `json:"path" binding:"required"`
-	TargetID uint   `json:"targetId" binding:"required"`
-	Perm     string `json:"perm"`
+	PolicyID   uint   `json:"policyId" binding:"required"`
+	Path       string `json:"path" binding:"required"`
+	TargetType string `json:"targetType"` // user | group | all，缺省 user（兼容旧客户端）
+	TargetID   uint   `json:"targetId"`
+	Perm       string `json:"perm"`
 }
 
 func (h *UserShareHandler) Create(c *gin.Context) {
 	x := ctxOf(c)
-	if !x.group.AllowShare {
+	// 管理员豁免用户组共享限制（用户与管理员均可发起共享，目标可选所有人/组/用户）
+	if x.user.Role != "admin" && !x.group.AllowShare {
 		dto.Fail(c, 403, "当前用户组不允许共享")
 		return
 	}
@@ -40,14 +49,46 @@ func (h *UserShareHandler) Create(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	if in.TargetID == x.user.ID {
-		dto.Fail(c, 400, "不能共享给自己")
+	tt := in.TargetType
+	if tt == "" {
+		tt = "user"
+	}
+	if tt != "user" && tt != "group" && tt != "all" {
+		dto.Fail(c, 400, "共享范围非法")
 		return
 	}
-	var target model.User
-	if err := model.DB.Where("id = ? AND disabled = false", in.TargetID).First(&target).Error; err != nil {
-		dto.Fail(c, 404, "目标用户不存在")
-		return
+	targetID := in.TargetID
+	targetName := ""
+	switch tt {
+	case "all":
+		targetID = 0
+		targetName = "所有人"
+	case "group":
+		if targetID == 0 {
+			dto.Fail(c, 400, "请选择用户组")
+			return
+		}
+		var g model.UserGroup
+		if err := model.DB.First(&g, targetID).Error; err != nil {
+			dto.Fail(c, 404, "用户组不存在")
+			return
+		}
+		targetName = g.Name
+	default: // user
+		if targetID == 0 {
+			dto.Fail(c, 400, "请选择用户")
+			return
+		}
+		if targetID == x.user.ID {
+			dto.Fail(c, 400, "不能共享给自己")
+			return
+		}
+		var target model.User
+		if err := model.DB.Where("id = ? AND disabled = false", targetID).First(&target).Error; err != nil {
+			dto.Fail(c, 404, "目标用户不存在")
+			return
+		}
+		targetName = target.Username
 	}
 	_, d, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
 	if err != nil {
@@ -72,20 +113,20 @@ func (h *UserShareHandler) Create(c *gin.Context) {
 	if perm != "rw" {
 		perm = "ro"
 	}
-	// 去重：同目标同目录只保留一条
+	// 去重：同范围同目标同目录只保留一条
 	var n int64
 	model.DB.Model(&model.UserShare{}).
-		Where("owner_id = ? AND target_id = ? AND policy_id = ? AND path = ?", x.user.ID, in.TargetID, in.PolicyID, vp).Count(&n)
+		Where("owner_id = ? AND target_type = ? AND target_id = ? AND policy_id = ? AND path = ?", x.user.ID, tt, targetID, in.PolicyID, vp).Count(&n)
 	if n > 0 {
-		dto.Fail(c, 400, "已共享给该用户")
+		dto.Fail(c, 400, "已共享给该范围")
 		return
 	}
-	us := model.UserShare{OwnerID: x.user.ID, TargetID: in.TargetID, PolicyID: in.PolicyID, Path: vp, Name: e.Name, Perm: perm}
+	us := model.UserShare{OwnerID: x.user.ID, TargetType: tt, TargetID: targetID, PolicyID: in.PolicyID, Path: vp, Name: e.Name, Perm: perm}
 	if err := model.DB.Create(&us).Error; err != nil {
 		dto.Fail(c, 500, "创建共享失败")
 		return
 	}
-	middleware.Audit(c, "usershare", fmt.Sprintf("共享 %s 给 %s (%s)", vp, target.Username, perm))
+	middleware.Audit(c, "usershare", fmt.Sprintf("共享 %s 给 %s (%s)", vp, targetName, perm))
 	dto.OK(c, us)
 }
 
@@ -97,11 +138,19 @@ func (h *UserShareHandler) Mine(c *gin.Context) {
 	dto.OK(c, h.decorate(items))
 }
 
-// WithMe 共享给我的
+// shareVisibleWhere 三路可见性条件：共享给我本人 / 共享给我所在用户组 / 共享给所有人
+// （target_type 空串 = 历史数据，按 user 处理；AND 优先级高于 OR，括号已显式标注）
+func shareVisibleWhere(uid, gid uint) (string, []interface{}) {
+	return "(target_type = 'user' OR target_type = '') AND target_id = ? OR (target_type = 'group' AND target_id = ?) OR target_type = 'all'",
+		[]interface{}{uid, gid}
+}
+
+// WithMe 共享给我的（含共享给我所在用户组、共享给所有人的）
 func (h *UserShareHandler) WithMe(c *gin.Context) {
 	x := ctxOf(c)
 	var items []model.UserShare
-	model.DB.Where("target_id = ?", x.user.ID).Order("id DESC").Find(&items)
+	q, args := shareVisibleWhere(x.user.ID, x.user.GroupID)
+	model.DB.Where(q, args...).Order("id DESC").Find(&items)
 	dto.OK(c, h.decorate(items))
 }
 
@@ -110,8 +159,23 @@ func (h *UserShareHandler) decorate(items []model.UserShare) []gin.H {
 	for _, s := range items {
 		var owner model.User
 		model.DB.Select("username, nickname").First(&owner, s.OwnerID)
+		tt := s.TargetType
+		if tt == "" {
+			tt = "user"
+		}
+		targetName := "所有人"
+		if tt == "user" {
+			var tu model.User
+			model.DB.Select("username").First(&tu, s.TargetID)
+			targetName = tu.Username
+		} else if tt == "group" {
+			var g model.UserGroup
+			model.DB.Select("name").First(&g, s.TargetID)
+			targetName = g.Name
+		}
 		out = append(out, gin.H{
 			"id": s.ID, "name": s.Name, "perm": s.Perm, "path": s.Path,
+			"targetType": tt, "targetName": targetName,
 			"ownerId": s.OwnerID, "owner": owner.Nickname, "ownerName": owner.Username,
 			"createdAt": s.CreatedAt,
 		})
@@ -130,7 +194,8 @@ func (h *UserShareHandler) Cancel(c *gin.Context) {
 func (h *UserShareHandler) loadForTarget(c *gin.Context) (*model.UserShare, fscore.Driver, bool) {
 	x := ctxOf(c)
 	var sh model.UserShare
-	if err := model.DB.Where("id = ? AND target_id = ?", c.Param("id"), x.user.ID).First(&sh).Error; err != nil {
+	q, args := shareVisibleWhere(x.user.ID, x.user.GroupID)
+	if err := model.DB.Where("id = ? AND ("+q+")", append([]interface{}{c.Param("id")}, args...)...).First(&sh).Error; err != nil {
 		dto.Fail(c, 404, "共享不存在或已取消")
 		return nil, nil, false
 	}

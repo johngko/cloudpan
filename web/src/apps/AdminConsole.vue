@@ -266,6 +266,12 @@
               <input class="input" v-model="settings.register_invite_code" style="width: 260px" />
             </div>
             <div class="ac-set-sep"></div>
+            <div class="ac-set-title">登录</div>
+            <div class="ac-set-row">
+              <div class="ac-set-lbl"><b>游客登录</b><span>登录页提供「游客登录」，以共享游客账号（访客组，只读）进入；关闭后登录页不显示该入口</span></div>
+              <label class="ac-switch"><input type="checkbox" :checked="settings.guest_login !== 'false'" @change="settings.guest_login = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
+            </div>
+            <div class="ac-set-sep"></div>
             <div class="ac-set-title">ONLYOFFICE 在线编辑</div>
             <div class="ac-set-row">
               <div class="ac-set-lbl"><b>Document Server 地址</b><span>如 https://office.johngko.com，留空则用内置预览</span></div>
@@ -487,6 +493,7 @@
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowArchive" />允许压缩解压</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowOffline" />允许离线下载</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.shareAllowDownload" />分享可下载</label>
+          <label style="display: flex; gap: 6px; align-items: center" title="成员仅可查看/下载自己的盘，不能新建/上传/移动/删除（管理员豁免；不影响他人授予的可写共享）"><input type="checkbox" v-model="editGroup.readOnly" />只读（仅查看/下载）</label>
         </div>
         <div class="row">
           <label>应用权限（组内所有用户生效，可被用户个人设置覆盖）</label>
@@ -717,7 +724,7 @@ async function savePerms() {
 }
 const groupShow = ref(false)
 const editGroup = ref<any>({})
-const emptyGroup = { name: '', quotaMB: 10240, allowShare: true, allowWebdav: true, allowArchive: true, allowOffline: false, shareAllowDownload: true, downloadSpeedKB: 0, recycleRetentionDays: 0, keepVersions: 10, versionRetentionDays: 0, appPerms: {}, remark: '' }
+const emptyGroup = { name: '', quotaMB: 10240, allowShare: true, allowWebdav: true, allowArchive: true, allowOffline: false, shareAllowDownload: true, readOnly: false, downloadSpeedKB: 0, recycleRetentionDays: 0, keepVersions: 10, versionRetentionDays: 0, appPerms: {}, remark: '' }
 const policyShow = ref(false)
 const editPolicy = ref<any>({})
 const emptyPolicy = { type: 'local', name: '', letter: '', rootPath: '' }

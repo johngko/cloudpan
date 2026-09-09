@@ -26,6 +26,9 @@ type uploadInitIn struct {
 }
 
 func (h *UploadHandler) Init(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	x := ctxOf(c)
 	var in uploadInitIn
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -123,6 +126,9 @@ func (h *UploadHandler) Init(c *gin.Context) {
 }
 
 func (h *UploadHandler) Chunk(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	x := ctxOf(c)
 	sid := c.Param("sid")
 	var idx int
@@ -143,6 +149,9 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 }
 
 func (h *UploadHandler) Complete(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	x := ctxOf(c)
 	var in struct {
 		SessionID string `json:"sessionId" binding:"required"`

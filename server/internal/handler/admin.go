@@ -206,6 +206,7 @@ func (h *AdminHandler) GroupSave(c *gin.Context) {
 		AllowArchive         bool             `json:"allowArchive"`
 		AllowOffline         bool             `json:"allowOffline"`
 		ShareAllowDownload   bool             `json:"shareAllowDownload"`
+		ReadOnly             bool             `json:"readOnly"`
 		DownloadSpeedKB      int64            `json:"downloadSpeedKB"`
 		RecycleRetentionDays int              `json:"recycleRetentionDays"`
 		KeepVersions         int              `json:"keepVersions"`
@@ -223,7 +224,7 @@ func (h *AdminHandler) GroupSave(c *gin.Context) {
 	if in.ID == 0 {
 		g := model.UserGroup{Name: in.Name, QuotaMB: in.QuotaMB, AllowShare: in.AllowShare,
 			AllowWebdav: in.AllowWebdav, AllowArchive: in.AllowArchive, AllowOffline: in.AllowOffline,
-			ShareAllowDownload: in.ShareAllowDownload, DownloadSpeedKB: in.DownloadSpeedKB,
+			ShareAllowDownload: in.ShareAllowDownload, ReadOnly: in.ReadOnly, DownloadSpeedKB: in.DownloadSpeedKB,
 			RecycleRetentionDays: in.RecycleRetentionDays, KeepVersions: in.KeepVersions,
 			VersionRetentionDays: in.VersionRetentionDays, AllowedPolicyIDs: in.AllowedPolicyIDs,
 			AppPerms: perms, IsDefault: in.IsDefault, Remark: in.Remark}
@@ -238,7 +239,7 @@ func (h *AdminHandler) GroupSave(c *gin.Context) {
 	if err := model.DB.Model(&model.UserGroup{}).Where("id = ?", in.ID).Updates(map[string]interface{}{
 		"name": in.Name, "quota_mb": in.QuotaMB, "allow_share": in.AllowShare,
 		"allow_webdav": in.AllowWebdav, "allow_archive": in.AllowArchive, "allow_offline": in.AllowOffline,
-		"share_allow_download": in.ShareAllowDownload, "download_speed_kb": in.DownloadSpeedKB,
+		"share_allow_download": in.ShareAllowDownload, "read_only": in.ReadOnly, "download_speed_kb": in.DownloadSpeedKB,
 		"recycle_retention_days": in.RecycleRetentionDays,
 		"keep_versions": in.KeepVersions, "version_retention_days": in.VersionRetentionDays,
 		"allowed_policy_ids": in.AllowedPolicyIDs, "app_perms": perms,

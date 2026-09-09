@@ -19,6 +19,7 @@ D/
 *.log
 *.zip
 *.tmp
+nohup.out
 
 # ---- IDE / 本地状态 ----
 .mimosa/

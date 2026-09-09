@@ -92,6 +92,31 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	dto.OK(c, gin.H{"token": token, "user": u})
 }
 
+// GuestLogin 游客登录：登录页「游客登录」入口。
+// 无需凭据，直接为共享游客账号（guest，访客组）签发短时效令牌（24h）。
+// 前置：站点开关 guest_login 非 "false"（默认开）且游客账号存在且未被禁用。
+func (h *AuthHandler) GuestLogin(c *gin.Context) {
+	s := GetSiteSettings()
+	if s["guest_login"] == "false" {
+		dto.Fail(c, 403, "游客登录未开启")
+		return
+	}
+	var u model.User
+	if err := model.DB.Where("username = ?", "guest").First(&u).Error; err != nil || u.Disabled {
+		dto.Fail(c, 403, "游客登录未开启")
+		return
+	}
+	now := time.Now()
+	model.DB.Model(&u).UpdateColumn("last_login_at", &now)
+	token, err := middleware.MakeToken(u.ID, u.Role, h.Secret, 24*time.Hour)
+	if err != nil {
+		dto.Fail(c, 500, "签发令牌失败")
+		return
+	}
+	model.DB.Create(&model.AuditLog{UserID: u.ID, Username: u.Username, Action: "guest-login", Detail: "游客登录", IP: c.ClientIP()})
+	dto.OK(c, gin.H{"token": token, "user": u})
+}
+
 func (h *AuthHandler) Register(c *gin.Context) {
 	var in struct {
 		Username   string `json:"username" binding:"required,min=2,max=32"`

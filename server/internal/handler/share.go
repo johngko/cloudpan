@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -37,7 +39,8 @@ type shareCreateIn struct {
 
 func (h *ShareHandler) Create(c *gin.Context) {
 	x := ctxOf(c)
-	if !x.group.AllowShare {
+	// 管理员豁免用户组分享限制（用户与管理员均可发起分享/共享）
+	if x.user.Role != "admin" && !x.group.AllowShare {
 		dto.Fail(c, 403, "当前用户组不允许分享")
 		return
 	}
@@ -101,6 +104,114 @@ func (h *ShareHandler) Cancel(c *gin.Context) {
 	x := ctxOf(c)
 	model.DB.Where("id = ? AND user_id = ?", c.Param("id"), x.user.ID).Delete(&model.Share{})
 	dto.OK(c, nil)
+}
+
+// saveShareCopy 转存复制：分享者 driver → 本人 driver（目录递归）。
+// 同名条目不覆盖，自动加后缀（与站内跨盘复制一致）；
+// 复制时计算 SHA-256 并登记秒传索引（本地盘），转存内容自此参与全站去重
+func (h *ShareHandler) saveShareCopy(sd, dd fscore.Driver, src, dstDir string) error {
+	e, err := sd.Stat(src)
+	if err != nil {
+		return fmt.Errorf("读取源失败 %s: %w", src, err)
+	}
+	dst, err := uniqueName(dd, dstDir, path.Base(src))
+	if err != nil {
+		return err
+	}
+	if e.IsDir {
+		if err := dd.Mkdir(dst); err != nil {
+			return fmt.Errorf("创建目录失败 %s: %w", dst, err)
+		}
+		children, err := sd.List(src)
+		if err != nil {
+			return fmt.Errorf("列目录失败 %s: %w", src, err)
+		}
+		for _, ch := range children {
+			childPath, _ := fscore.Join(src, ch.Name)
+			if err := h.saveShareCopy(sd, dd, childPath, dst); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	rc, err := sd.Open(src)
+	if err != nil {
+		return fmt.Errorf("打开文件失败 %s: %w", src, err)
+	}
+	defer rc.Close()
+	hasher := sha256.New()
+	if err := dd.CreateFile(dst, io.TeeReader(rc, hasher)); err != nil {
+		return fmt.Errorf("写入目标失败 %s: %w", dst, err)
+	}
+	if phys, perr := fscore.PhysicalOf(dd, dst); perr == nil {
+		h.Site.Fs.RegisterHash(hex.EncodeToString(hasher.Sum(nil)), e.Size, phys)
+	}
+	return nil
+}
+
+// SaveToDrive 转存（一键保存到自己账号）：把公开分享的内容复制到当前登录用户的网盘。
+// 走本人配额与策略约束；只读用户组（访客）不可转存；带提取码的分享需已 verify（?st=）
+func (h *ShareHandler) SaveToDrive(c *gin.Context) {
+	sh, owner, ok := h.guard(c)
+	if !ok {
+		return
+	}
+	x := ctxOf(c)
+	if x.user.Role != "admin" && x.group.ReadOnly {
+		dto.Fail(c, 403, "该用户组为只读，仅可查看和下载")
+		return
+	}
+	var in struct {
+		PolicyID uint   `json:"policyId" binding:"required"`
+		Path     string `json:"path"` // 目标目录，缺省根目录
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	dp, dd, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
+	if err != nil {
+		dto.Fail(c, 403, err.Error())
+		return
+	}
+	dstDir, err := fscore.Clean(in.Path)
+	if err != nil || dstDir == "" {
+		dto.Fail(c, 400, "目标路径非法")
+		return
+	}
+	if de, serr := dd.Stat(dstDir); serr != nil || !de.IsDir {
+		dto.Fail(c, 404, "目标目录不存在")
+		return
+	}
+	var p model.Policy
+	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+		dto.Fail(c, 404, "存储已失效")
+		return
+	}
+	if p.Status == "disabled" {
+		dto.Fail(c, 400, "分享所在存储已停用")
+		return
+	}
+	sdrv, err := h.Site.Fs.DriverFor(&p, owner)
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	total, err := entryBytes(sdrv, sh.Path)
+	if err != nil {
+		dto.Fail(c, 404, "分享内容不存在")
+		return
+	}
+	if !checkQuota(c, x, total) {
+		return
+	}
+	if err := h.saveShareCopy(sdrv, dd, sh.Path, dstDir); err != nil {
+		dto.Fail(c, 500, "保存失败："+err.Error())
+		return
+	}
+	addQuota(x.user.ID, total)
+	middleware.Audit(c, "share-save", fmt.Sprintf("转存 %s 到 %s:%s", sh.Path, dp.Name, dstDir))
+	dto.OK(c, gin.H{"saved": true, "bytes": total})
 }
 
 // ---- 公开访问 ----
