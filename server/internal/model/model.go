@@ -33,6 +33,8 @@ type User struct {
 	Disabled           bool   `gorm:"default:false" json:"disabled"`
 	// 个人配额覆盖（MB）：<0 = 跟随所在用户组；0 = 不限量；>0 = 该用户专属上限
 	QuotaMB            int64  `gorm:"default:-1" json:"quotaMB"`
+	// 个人应用权限覆盖：JSON {"<appKey>":true|false}，仅存显式设置项，优先于用户组（见 appperm.go）
+	AppPerms           string `gorm:"size:512;default:''" json:"appPerms"`
 	UsedBytes          int64  `gorm:"default:0" json:"usedBytes"`
 	CreatedAt          time.Time `json:"createdAt"`
 	LastLoginAt        *time.Time  `json:"lastLoginAt"`
@@ -52,6 +54,8 @@ type UserGroup struct {
 	KeepVersions        int    `gorm:"default:10" json:"keepVersions"`   // 每个文件保留的历史版本数，-1 = 不限
 	VersionRetentionDays int   `gorm:"default:0" json:"versionRetentionDays"` // 版本保留天数，0 = 永久
 	AllowedPolicyIDs    string `gorm:"size:512;default:''" json:"allowedPolicyIds"` // JSON 数组，空 = 全部
+	// 应用级权限：JSON {"<appKey>":true|false}，仅存显式设置项；缺省 = 允许（见 appperm.go）
+	AppPerms            string `gorm:"size:512;default:''" json:"appPerms"`
 	IsDefault           bool   `gorm:"default:false" json:"isDefault"`
 	Remark              string `gorm:"size:255" json:"remark"`
 	CreatedAt           time.Time `json:"createdAt"`
@@ -107,7 +111,7 @@ type FileHash struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	Hash      string `gorm:"size:64;uniqueIndex" json:"hash"` // sha256 hex
 	Size      int64  `json:"size"`
-	SourcePath string `gorm:"size:512" json:"-"` // 服务器上首份内容的物理路径（用于秒传硬链/复制）
+	SourcePath string `gorm:"size:512;index" json:"-"` // 服务器上首份内容的物理路径（用于秒传硬链/复制；文件删除/移动时按此清理索引）
 	RefCount  int64  `gorm:"default:1" json:"refCount"`
 	CreatedAt time.Time `json:"createdAt"`
 }

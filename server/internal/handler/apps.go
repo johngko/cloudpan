@@ -17,7 +17,8 @@ type appOut struct {
 	Icon    string `json:"icon"`
 	Desc    string `json:"desc"`
 	Version string `json:"version"`
-	Enabled bool   `json:"enabled"`
+	Enabled bool   `json:"enabled"` // 全局是否启用（管理员视角）
+	Allowed bool   `json:"allowed"` // 当前登录用户是否有权使用（组/个人权限解析后）
 }
 
 // AppList 系统功能清单 + 当前启用状态（登录用户可读，管理员可写）
@@ -28,13 +29,15 @@ func (h *SiteHandler) AppList(c *gin.Context) {
 	for _, r := range rows {
 		st[r.Key] = r.Enabled
 	}
+	u := middleware.UserOrNil(c)
 	out := make([]appOut, 0, len(apps.Manifest))
 	for _, def := range apps.Manifest {
 		on := def.DefaultEnabled
 		if v, ok := st[def.Key]; ok {
 			on = v
 		}
-		out = append(out, appOut{Key: def.Key, Name: def.Name, Icon: def.Icon, Desc: def.Desc, Version: def.Version, Enabled: on})
+		out = append(out, appOut{Key: def.Key, Name: def.Name, Icon: def.Icon, Desc: def.Desc, Version: def.Version,
+			Enabled: on, Allowed: model.AppAllowed(def.Key, u)})
 	}
 	dto.OK(c, out)
 }

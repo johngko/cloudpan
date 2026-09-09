@@ -499,8 +499,15 @@ func (h *SiteHandler) removeSource(d fscore.Driver, p *model.Policy, src string,
 		}
 		ts := time.Now().Format("20060102150405")
 		trashRel := ts + "_" + e.Name
-		if err := os.Rename(phys, filepath.Join(recycleUserDir, trashRel)); err != nil {
+		trashFull := filepath.Join(recycleUserDir, trashRel)
+		if err := os.Rename(phys, trashFull); err != nil {
 			return err
+		}
+		// 原物理路径失效：清理内容哈希索引（秒传去重索引须始终指向有效文件）
+		if e.IsDir {
+			fscore.UnlinkHashTree(phys, trashFull)
+		} else {
+			fscore.UnlinkHashSource(phys)
 		}
 		model.DB.Create(&model.RecycleItem{UserID: x.user.ID, PolicyID: p.ID, OrigPath: parentOf(src),
 			TrashPath: trashRel, Name: e.Name, IsDir: e.IsDir, Size: size, DeletedAt: time.Now()})
@@ -695,9 +702,16 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 			dto.Fail(c, 400, "仅本地存储支持删除")
 			return
 		}
-		if err := os.Rename(physSrc, filepath.Join(recycleUserDir, trashRel)); err != nil {
+		trashFull := filepath.Join(recycleUserDir, trashRel)
+		if err := os.Rename(physSrc, trashFull); err != nil {
 			dto.Fail(c, 400, fmt.Sprintf("删除 %s 失败: %s", src, err.Error()))
 			return
+		}
+		// 原物理路径失效：清理内容哈希索引（秒传去重索引须始终指向有效文件）
+		if e.IsDir {
+			fscore.UnlinkHashTree(physSrc, trashFull)
+		} else {
+			fscore.UnlinkHashSource(physSrc)
 		}
 		// 版本历史随文件一并清理（回收站不保留历史版本）
 		if srcClean, err := fscore.Clean(src); err == nil {

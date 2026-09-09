@@ -13,16 +13,18 @@
     <div style="flex: 1; overflow: auto; padding: 18px 22px">
       <div class="ac-sub">系统功能</div>
       <div class="ac-grid">
-        <div v-for="a in filtered" :key="a.key" class="ac-card" :class="{ off: !a.enabled }">
+        <div v-for="a in filtered" :key="a.key" class="ac-card" :class="{ off: !a.enabled, locked: a.enabled && !a.allowed }">
           <div class="ac-ico"><AppIcon :name="a.icon" :size="38" /></div>
           <div style="flex: 1; min-width: 0">
             <div class="ac-name">
               {{ a.name }}
               <span class="ac-ver">v{{ a.version }}</span>
+              <span v-if="a.enabled && !a.allowed" class="ac-tag-deny">无权限</span>
             </div>
             <div class="ac-desc">{{ a.desc }}</div>
           </div>
-          <div class="ac-switch" :class="{ on: a.enabled, disabled: !isAdmin }" @click="toggle(a)" :title="isAdmin ? (a.enabled ? '点击停用' : '点击启用') : '仅管理员可操作'">
+          <div class="ac-switch" :class="{ on: a.enabled && a.allowed, disabled: !isAdmin || (a.enabled && !a.allowed && !isAdmin) }"
+               @click="toggle(a)" :title="switchTitle(a)">
             <span class="knob"></span>
           </div>
         </div>
@@ -104,8 +106,19 @@ onMounted(async () => {
   await load()
 })
 
+function switchTitle(a: SysApp) {
+  if (!a.enabled) return '点击启用'
+  if (!a.allowed) return '你的账号无权使用此功能（可在管理控制台为用户组/用户授权）'
+  return '点击停用'
+}
+
 async function toggle(a: SysApp) {
   if (!isAdmin.value || busy.value) return
+  // 无权限的功能不允许通过全局开关"启用"（权限仍由组/用户控制）
+  if (a.enabled && !a.allowed) {
+    toast.show('你的账号无权使用此功能', 'error')
+    return
+  }
   busy.value = a.key
   try {
     await adminApi.appToggle(a.key, !a.enabled)
@@ -134,6 +147,11 @@ async function toggle(a: SysApp) {
 }
 .ac-card:hover { border-color: var(--stroke); }
 .ac-card.off { opacity: 0.62; }
+.ac-card.locked { opacity: 0.7; }
+.ac-tag-deny {
+  font-size: 10px; font-weight: 500; color: var(--text-2);
+  background: var(--hover-b); border-radius: 4px; padding: 1px 6px;
+}
 .ac-ico { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--hover-b); }
 .ac-name { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .ac-ver { font-size: 10.5px; font-weight: 400; color: var(--text-3); }

@@ -125,6 +125,40 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 	return err
 }
 
+// UnlinkHashSource 物理文件被删除/移动后调用：该路径若被某条哈希索引用作源，
+// 源即失效——直接清掉条目。后续同内容上传会走正常流程重新登记自愈；
+// 硬链接去重不受影响（lookupHash 本来就校验源存在，失效条目本就不会命中秒传）
+func UnlinkHashSource(phys string) {
+	if phys == "" {
+		return
+	}
+	model.DB.Delete(&model.FileHash{}, "source_path = ?", phys)
+}
+
+// UnlinkHashTree 目录整体移动/删除后清理其下所有文件的索引条目（物理路径连带失效）
+// newDir != ""：目录已移到新位置（如回收站），遍历新位置反推旧路径（须在移动后调用）；
+// newDir == ""：目录仍在原位（即将被删除），直接遍历旧位置（须在删除前调用）
+func UnlinkHashTree(oldDir, newDir string) {
+	if oldDir == "" {
+		return
+	}
+	walk := oldDir
+	if newDir != "" {
+		walk = newDir
+	}
+	_ = filepath.WalkDir(walk, func(p string, info os.DirEntry, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		old := p
+		if newDir != "" {
+			old = oldDir + strings.TrimPrefix(p, newDir)
+		}
+		model.DB.Delete(&model.FileHash{}, "source_path = ?", old)
+		return nil
+	})
+}
+
 func (s *Service) RegisterHash(hash string, size int64, sourcePhys string) {
 	if hash == "" || size <= 0 {
 		return

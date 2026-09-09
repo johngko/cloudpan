@@ -45,7 +45,8 @@ export function visibleApps() {
   const apps = useAppState()
   return APPS.filter(a =>
     (!a.adminOnly || s.user?.role === 'admin') &&
-    (!a.feature || apps.isOn(a.feature)) &&
+    // 全局停用 或 当前用户（组/个人）无权限 的应用从所有入口隐藏
+    (!a.feature || apps.isAvailable(a.feature)) &&
     // 可安装应用：仅当用户已安装时出现在桌面/Dock/Launchpad/开始菜单
     (!a.installable || apps.isInstalled(a.id))
   )
@@ -76,7 +77,8 @@ export function useDesktopIcons(base: DesktopAppIcon[]): Ref<DesktopAppIcon[]> {
     icons.value = [...base, ...dyn]
   }
   sync()
-  // session.user 异步加载——adminOnly 应用（如管理控制台）必须等角色到位后再补同步
-  watch([() => apps.installed, () => apps.enabled, () => session.user?.role], sync)
+  // session.user 异步加载——adminOnly 应用（如管理控制台）必须等角色到位后再补同步；
+  // allowed 随 /apps 加载到位后补同步（权限变更导致的应用显隐）
+  watch([() => apps.installed, () => apps.enabled, () => apps.allowed, () => session.user?.role], sync)
   return icons
 }

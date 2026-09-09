@@ -120,7 +120,7 @@
           </div>
           <div class="ac-card" style="padding: 4px 0">
             <table class="ac-table">
-              <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>用户组</th><th>配额</th><th>用量</th><th>状态</th><th style="width: 300px">操作</th></tr></thead>
+              <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>用户组</th><th>配额</th><th>用量</th><th>状态</th><th style="width: 380px">操作</th></tr></thead>
               <tbody>
                 <tr v-for="u in users" :key="u.id">
                   <td class="ac-strong">{{ u.username }}</td>
@@ -132,6 +132,7 @@
                   <td><span class="ac-dot" :class="{ off: u.disabled }"></span>{{ u.disabled ? '已禁用' : '正常' }}</td>
                   <td>
                     <button class="btn" style="padding: 4px 10px" @click="openQuota(u)">配额</button>
+                    <button class="btn" style="padding: 4px 10px" @click="openPerms(u)">权限</button>
                     <button class="btn" style="padding: 4px 10px" @click="toggleUser(u)">{{ u.disabled ? '启用' : '禁用' }}</button>
                     <button class="btn" style="padding: 4px 10px" @click="resetPwd(u)">重置密码</button>
                     <button class="btn danger" style="padding: 4px 10px" @click="delUser(u)">删除</button>
@@ -439,6 +440,33 @@
       </div>
     </div>
 
+    <!-- 用户权限对话框 -->
+    <div class="dialog-mask" v-if="permShow" @click.self="permShow = false">
+      <div class="dialog" style="width: 480px">
+        <h3>应用权限 — {{ permUser?.username }}</h3>
+        <div class="row" style="color: var(--text-3); font-size: 12px">
+          个人设置优先于用户组；「继承」表示跟随该用户所属用户组的设置。
+        </div>
+        <div class="row">
+          <div class="perm-grid">
+            <div v-for="a in appDefs" :key="a.key" class="perm-item"
+                 :class="{ allow: permForm[a.key] === true, deny: permForm[a.key] === false }">
+              <span class="perm-name">{{ a.name }}</span>
+              <div class="perm-seg">
+                <button class="perm-btn" :class="{ on: permForm[a.key] === undefined }" @click="setPerm(a.key, 'inherit')">继承</button>
+                <button class="perm-btn" :class="{ on: permForm[a.key] === true }" @click="setPerm(a.key, 'allow')">允许</button>
+                <button class="perm-btn" :class="{ on: permForm[a.key] === false }" @click="setPerm(a.key, 'deny')">禁止</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" @click="permShow = false">取消</button>
+          <button class="btn primary" @click="savePerms">保存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 用户组对话框 -->
     <div class="dialog-mask" v-if="groupShow" @click.self="groupShow = false">
       <div class="dialog">
@@ -459,6 +487,20 @@
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowArchive" />允许压缩解压</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowOffline" />允许离线下载</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.shareAllowDownload" />分享可下载</label>
+        </div>
+        <div class="row">
+          <label>应用权限（组内所有用户生效，可被用户个人设置覆盖）</label>
+          <div class="perm-grid">
+            <div v-for="a in appDefs" :key="a.key" class="perm-item"
+                 :class="{ allow: (editGroup.appPerms || {})[a.key] === true, deny: (editGroup.appPerms || {})[a.key] === false }">
+              <span class="perm-name">{{ a.name }}</span>
+              <div class="perm-seg">
+                <button class="perm-btn" :class="{ on: (editGroup.appPerms || {})[a.key] === undefined }" @click="setGroupPerm(a.key, 'inherit')">默认</button>
+                <button class="perm-btn" :class="{ on: (editGroup.appPerms || {})[a.key] === true }" @click="setGroupPerm(a.key, 'allow')">允许</button>
+                <button class="perm-btn" :class="{ on: (editGroup.appPerms || {})[a.key] === false }" @click="setGroupPerm(a.key, 'deny')">禁止</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="row"><label>备注</label><input class="input" v-model="editGroup.remark" style="width: 100%" /></div>
         <div class="actions">
@@ -550,7 +592,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useSession } from '../stores/session'
 import { useAppState } from '../stores/appstate'
 import { useUiDialog, useToast } from '../stores/dialog'
-import { adminApi } from '../api/modules'
+import { adminApi, appsApi } from '../api/modules'
 import AppIcon from '../components/AppIcon.vue'
 
 const session = useSession()
@@ -620,6 +662,8 @@ const notifTotal = ref(0)
 const notifKw = ref('')
 const notifClearedOnly = ref(false)
 const settings = ref<Record<string, string>>({})
+// 系统功能清单（应用权限 UI 数据源）
+const appDefs = ref<any[]>([])
 
 const userShow = ref(false)
 const userForm = ref<any>({})
@@ -649,9 +693,31 @@ async function saveQuota() {
     : (Number(quotaCustom.value) > 0 ? Math.floor(Number(quotaCustom.value)) : 0)
   try { await adminApi.userUpdate(u.id, { quotaMB: mb }); quotaShow.value = false; toast.success('配额已更新'); await loadAll() } catch (e: any) { toast.error(e.message) }
 }
+// 用户个人应用权限（三态：键缺失=继承用户组 / true=允许 / false=禁止）
+const permShow = ref(false)
+const permUser = ref<any>(null)
+const permForm = ref<Record<string, boolean>>({})
+function openPerms(u: any) {
+  permUser.value = u
+  permForm.value = { ...(u.appPerms || {}) }
+  permShow.value = true
+}
+function setPerm(key: string, mode: 'inherit' | 'allow' | 'deny') {
+  if (mode === 'inherit') delete permForm.value[key]
+  else permForm.value[key] = mode === 'allow'
+}
+function setGroupPerm(key: string, mode: 'inherit' | 'allow' | 'deny') {
+  if (!editGroup.value.appPerms) editGroup.value.appPerms = {}
+  if (mode === 'inherit') delete editGroup.value.appPerms[key]
+  else editGroup.value.appPerms[key] = mode === 'allow'
+}
+async function savePerms() {
+  const u = permUser.value
+  try { await adminApi.userUpdate(u.id, { appPerms: permForm.value }); permShow.value = false; toast.success('权限已更新'); await loadAll() } catch (e: any) { toast.error(e.message) }
+}
 const groupShow = ref(false)
 const editGroup = ref<any>({})
-const emptyGroup = { name: '', quotaMB: 10240, allowShare: true, allowWebdav: true, allowArchive: true, allowOffline: false, shareAllowDownload: true, downloadSpeedKB: 0, recycleRetentionDays: 0, keepVersions: 10, versionRetentionDays: 0, remark: '' }
+const emptyGroup = { name: '', quotaMB: 10240, allowShare: true, allowWebdav: true, allowArchive: true, allowOffline: false, shareAllowDownload: true, downloadSpeedKB: 0, recycleRetentionDays: 0, keepVersions: 10, versionRetentionDays: 0, appPerms: {}, remark: '' }
 const policyShow = ref(false)
 const editPolicy = ref<any>({})
 const emptyPolicy = { type: 'local', name: '', letter: '', rootPath: '' }
@@ -672,6 +738,7 @@ async function loadAll() {
     dash.value = await adminApi.dashboard()
     users.value = (await adminApi.users(1, 100)).items
     groups.value = await adminApi.groups()
+    appDefs.value = await appsApi.list()
     policies.value = await adminApi.policies()
     settings.value = await adminApi.settings()
     allShares.value = (await adminApi.shares(1, 100)).items
@@ -920,4 +987,21 @@ async function adminDelShare(s: any) {
 .sys-net-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sys-rx, .sys-tx { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text-2); min-width: 86px; text-align: right; }
 .sys-rx { color: var(--theme-2); }
+/* 应用权限三态控件 */
+.perm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.perm-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 10px; border: 1px solid var(--stroke-b); border-radius: 8px; font-size: 13px;
+  transition: border-color .15s, background .15s;
+}
+.perm-item.allow { border-color: var(--theme-2); background: color-mix(in srgb, var(--theme-2) 8%, transparent); }
+.perm-item.deny { border-color: var(--danger, #e05252); background: color-mix(in srgb, var(--danger, #e05252) 8%, transparent); }
+.perm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perm-seg { display: flex; gap: 2px; background: rgba(125,125,135,.12); border-radius: 6px; padding: 2px; flex: none; }
+.perm-btn {
+  border: 0; background: transparent; font-size: 12px; padding: 3px 9px;
+  border-radius: 5px; cursor: pointer; color: var(--text-2);
+}
+.perm-btn.on { background: linear-gradient(135deg, var(--theme-1), var(--theme-2)); color: #fff; }
+.perm-item.deny .perm-btn.on { background: linear-gradient(135deg, #e86a3d, var(--danger, #e05252)); }
 </style>

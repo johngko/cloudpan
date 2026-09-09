@@ -2,12 +2,15 @@ import { api, get, post, put, del, getToken } from './http'
 export interface User {
   id: number; username: string; nickname: string; avatar: number
   role: string; groupId: number; usedBytes: number
+  appPerms?: Record<string, boolean> // 个人应用权限覆盖（键缺失=跟随用户组）
 }
 export interface UserGroup {
   id: number; name: string; quotaMB: number; allowShare: boolean; allowWebdav: boolean
   allowArchive: boolean; allowOffline: boolean; shareAllowDownload: boolean
   downloadSpeedKB: number; recycleRetentionDays: number
+  keepVersions: number; versionRetentionDays: number
   allowedPolicyIds: string; isDefault: boolean; remark: string
+  appPerms: Record<string, boolean> // 组级应用权限（键缺失=允许）
 }
 export interface Policy {
   id: number; name: string; letter: string; type: string; rootPath: string
@@ -76,7 +79,7 @@ export const shareApi = {
 }
 
 // 系统功能（应用中心）
-export interface SysApp { key: string; name: string; icon: string; desc: string; version: string; enabled: boolean }
+export interface SysApp { key: string; name: string; icon: string; desc: string; version: string; enabled: boolean; allowed: boolean }
 export const appsApi = {
   list: () => get<SysApp[]>('/apps')
 }

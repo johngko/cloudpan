@@ -31,6 +31,8 @@ func SaveVersion(policyID, userID uint, vp, physTarget string) bool {
 	if err := os.Rename(physTarget, verPath); err != nil {
 		return false
 	}
+	// 原路径移入版本目录：若它是某条哈希索引的源，清理之（版本文件可能被保留策略清理）
+	UnlinkHashSource(physTarget)
 	model.DB.Create(&model.FileVersion{
 		UserID: userID, PolicyID: policyID, Path: vp,
 		Version: maxVer + 1, Size: fi.Size(), PhysicalPath: verPath,

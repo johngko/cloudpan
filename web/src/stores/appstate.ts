@@ -6,6 +6,8 @@ import { appsApi, settingsApi } from '../api/modules'
 export const useAppState = defineStore('appstate', {
   state: () => ({
     enabled: {} as Record<string, boolean>,
+    // 当前用户的功能权限（组/个人权限解析后；未加载前视为允许，避免入口闪烁）
+    allowed: {} as Record<string, boolean>,
     loaded: false,
     // 用户自装的应用 id 列表（可安装应用；存用户设置 KV）
     installed: [] as string[]
@@ -15,8 +17,10 @@ export const useAppState = defineStore('appstate', {
       try {
         const list = await appsApi.list()
         const m: Record<string, boolean> = {}
-        for (const a of list) m[a.key] = a.enabled
+        const am: Record<string, boolean> = {}
+        for (const a of list) { m[a.key] = a.enabled; am[a.key] = a.allowed }
         this.enabled = m
+        this.allowed = am
         this.loaded = true
       } catch { /* 离线或功能被停用时忽略 */ }
     },
@@ -46,6 +50,10 @@ export const useAppState = defineStore('appstate', {
     }
   },
   getters: {
-    isOn: (s) => (key: string) => (s.loaded ? s.enabled[key] !== false : true)
+    isOn: (s) => (key: string) => (s.loaded ? s.enabled[key] !== false : true),
+    // 当前用户是否有权使用该功能（组/个人权限；未加载前视为允许）
+    isAllowed: (s) => (key: string) => (s.loaded ? s.allowed[key] !== false : true),
+    // 入口可见性 = 全局启用 且 当前用户有权
+    isAvailable: (s) => (key: string) => (s.isOn(key) && s.isAllowed(key))
   }
 })

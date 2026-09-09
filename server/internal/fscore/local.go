@@ -128,7 +128,10 @@ func (d *LocalDriver) Rename(p, newName string) error {
 	if _, err := os.Stat(target); err == nil {
 		return fmt.Errorf("目标名称已存在")
 	}
-	return os.Rename(phys, target)
+	if err := os.Rename(phys, target); err == nil {
+		unlinkHashMoved(phys, target)
+	}
+	return err
 }
 
 func (d *LocalDriver) Move(src, dstDir string) error {
@@ -143,7 +146,19 @@ func (d *LocalDriver) Move(src, dstDir string) error {
 	if _, err := os.Stat(tphys); err == nil {
 		return fmt.Errorf("目标已存在同名文件")
 	}
-	return os.Rename(sphys, tphys)
+	if err := os.Rename(sphys, tphys); err == nil {
+		unlinkHashMoved(sphys, tphys)
+	}
+	return err
+}
+
+// unlinkHashMoved 物理移动后清理哈希索引：按新位置判断文件/目录（旧路径已不存在，无法 stat）
+func unlinkHashMoved(oldPhys, newPhys string) {
+	if info, err := os.Stat(newPhys); err == nil && info.IsDir() {
+		UnlinkHashTree(oldPhys, newPhys)
+	} else {
+		UnlinkHashSource(oldPhys)
+	}
 }
 
 func (d *LocalDriver) Copy(src, dstDir string) error {
@@ -227,6 +242,12 @@ func (d *LocalDriver) Delete(p string) error {
 	}
 	if p == "/" {
 		return fmt.Errorf("不能删除根目录")
+	}
+	// 物理删除前清理哈希索引（路径即将消失，须先判断文件/目录）
+	if info, err := os.Stat(phys); err == nil && info.IsDir() {
+		UnlinkHashTree(phys, "")
+	} else {
+		UnlinkHashSource(phys)
 	}
 	return os.RemoveAll(phys)
 }
