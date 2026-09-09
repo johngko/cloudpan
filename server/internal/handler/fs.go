@@ -503,12 +503,8 @@ func (h *SiteHandler) removeSource(d fscore.Driver, p *model.Policy, src string,
 		if err := os.Rename(phys, trashFull); err != nil {
 			return err
 		}
-		// 原物理路径失效：清理内容哈希索引（秒传去重索引须始终指向有效文件）
-		if e.IsDir {
-			fscore.UnlinkHashTree(phys, trashFull)
-		} else {
-			fscore.UnlinkHashSource(phys)
-		}
+		// 移入回收站是物理改名：文件仍在（回收站内），副本记录随新路径走并继续计为存活副本
+		fscore.HashPathRenamed(phys, trashFull)
 		model.DB.Create(&model.RecycleItem{UserID: x.user.ID, PolicyID: p.ID, OrigPath: parentOf(src),
 			TrashPath: trashRel, Name: e.Name, IsDir: e.IsDir, Size: size, DeletedAt: time.Now()})
 		return nil
@@ -707,12 +703,8 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 			dto.Fail(c, 400, fmt.Sprintf("删除 %s 失败: %s", src, err.Error()))
 			return
 		}
-		// 原物理路径失效：清理内容哈希索引（秒传去重索引须始终指向有效文件）
-		if e.IsDir {
-			fscore.UnlinkHashTree(physSrc, trashFull)
-		} else {
-			fscore.UnlinkHashSource(physSrc)
-		}
+		// 移入回收站是物理改名：文件仍在（回收站内），副本记录随新路径走并继续计为存活副本
+		fscore.HashPathRenamed(physSrc, trashFull)
 		// 版本历史随文件一并清理（回收站不保留历史版本）
 		if srcClean, err := fscore.Clean(src); err == nil {
 			if e.IsDir {
@@ -1403,6 +1395,8 @@ func (h *SiteHandler) RecycleRestore(c *gin.Context) {
 		if err := os.Rename(trashPhys, target); err != nil {
 			continue
 		}
+		// 从回收站恢复是物理改名：副本记录随新路径走
+		fscore.HashPathRenamed(trashPhys, target)
 		model.DB.Delete(&item)
 	}
 	dto.OK(c, nil)
@@ -1429,7 +1423,10 @@ func (h *SiteHandler) RecyclePurge(c *gin.Context) {
 	var items []model.RecycleItem
 	q.Find(&items)
 	for _, item := range items {
-		_ = os.RemoveAll(filepath.Join(h.Fs.RecycleDir, fmt.Sprint(x.user.ID), item.TrashPath))
+		trashPhys := filepath.Join(h.Fs.RecycleDir, fmt.Sprint(x.user.ID), item.TrashPath)
+		// 清空回收站 = 永久物理删除：移除副本记录并对账（最后一个副本消失时索引与数据随之释放）
+		fscore.HashPathGone(trashPhys)
+		_ = os.RemoveAll(trashPhys)
 		// 目录项的 Size 为删除前统计的递归总大小，与文件同样需要退款
 		if item.Size > 0 {
 			model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
@@ -1564,6 +1561,8 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 		dto.Fail(c, 500, "恢复失败："+err.Error())
 		return
 	}
+	// 版本恢复产生新物理副本：登记之（版本原件仍是另一份存活副本）
+	fscore.HashPathCopied(ver.PhysicalPath, physTarget)
 	dto.OK(c, gin.H{"version": ver.Version, "path": in.Path})
 }
 

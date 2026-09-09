@@ -111,9 +111,42 @@ type FileHash struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	Hash      string `gorm:"size:64;uniqueIndex" json:"hash"` // sha256 hex
 	Size      int64  `json:"size"`
-	SourcePath string `gorm:"size:512;index" json:"-"` // 服务器上首份内容的物理路径（用于秒传硬链/复制；文件删除/移动时按此清理索引）
-	RefCount  int64  `gorm:"default:1" json:"refCount"`
+	SourcePath string `gorm:"size:512" json:"-"` // 当前可用的首份内容物理路径（秒传硬链/复制源），失效时自动改指其他存活副本
+	RefCount  int64  `gorm:"default:1" json:"refCount"` // 存活物理副本数（含回收站/版本文件），0 时整条删除
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// FileHashCopy 每个物理副本一行：同一内容的硬链接/拷贝各自登记，
+// 某用户的副本（含其在回收站里的形态）被删除时只移除自己那一行——
+// 只要还有任何一个副本存活，索引就保留、秒传继续可用；
+// 最后一个副本物理消失时索引才删除，文件数据也随之真正释放。
+type FileHashCopy struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Hash      string    `gorm:"size:64;index" json:"-"`
+	PhysPath  string    `gorm:"size:512;uniqueIndex" json:"-"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// BackfillHashCopies 升级回填：旧版索引只有 SourcePath 单源记录，按当前源补一条副本行；
+// 源已失效的索引（无任何存活副本可登记）直接清理，下次同内容上传会自愈重建
+func BackfillHashCopies() {
+	var rows []FileHash
+	DB.Find(&rows)
+	for _, r := range rows {
+		if r.SourcePath == "" {
+			DB.Delete(&FileHash{}, r.ID)
+			continue
+		}
+		if fi, err := os.Stat(r.SourcePath); err != nil || !fi.Mode().IsRegular() || fi.Size() != r.Size {
+			DB.Delete(&FileHash{}, r.ID)
+			continue
+		}
+		var n int64
+		DB.Model(&FileHashCopy{}).Where("phys_path = ?", r.SourcePath).Count(&n)
+		if n == 0 {
+			DB.Create(&FileHashCopy{Hash: r.Hash, PhysPath: r.SourcePath})
+		}
+	}
 }
 
 // ---- 分块上传会话（断点续传） ----
@@ -301,9 +334,11 @@ func InitDB(dataDir string) {
 	DB = db
 	// quota_mb 列首次新增时，SQLite 会把存量行填 0（=不限量），必须回填 -1（=随组）
 	quotaColNew := !DB.Migrator().HasColumn(&User{}, "quota_mb")
-	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{}); err != nil {
+	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{}); err != nil {
 		log.Fatalf("建表失败: %v", err)
 	}
+	// 存量秒传索引回填副本行（旧版本只有 SourcePath 单源记录）
+	BackfillHashCopies()
 	if quotaColNew {
 		DB.Model(&User{}).Where("quota_mb IS NULL OR quota_mb = 0").UpdateColumn("quota_mb", -1)
 	}

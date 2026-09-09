@@ -109,6 +109,7 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 		return err
 	}
 	if os.Link(fh.SourcePath, physTarget) == nil {
+		RegisterCopy(fh.Hash, physTarget)
 		return nil
 	}
 	in, err := os.Open(fh.SourcePath)
@@ -122,58 +123,179 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 	}
 	defer out.Close()
 	_, err = io.Copy(out, in)
+	if err == nil {
+		RegisterCopy(fh.Hash, physTarget)
+	}
 	return err
 }
 
-// UnlinkHashSource 物理文件被删除/移动后调用：该路径若被某条哈希索引用作源，
-// 源即失效——直接清掉条目。后续同内容上传会走正常流程重新登记自愈；
-// 硬链接去重不受影响（lookupHash 本来就校验源存在，失效条目本就不会命中秒传）
-func UnlinkHashSource(phys string) {
-	if phys == "" {
-		return
-	}
-	model.DB.Delete(&model.FileHash{}, "source_path = ?", phys)
-}
+// ---- 秒传索引副本账本 ----
+//
+// FileHash：同一内容一条（哈希/大小/当前可用源/存活副本数）。
+// FileHashCopy：每个物理副本一条（硬链接/拷贝，含回收站与版本文件中的副本）。
+// 语义对齐百度网盘：某用户删除自己的副本（含清空回收站）只移除自己的记录，
+// 只要还有任意副本存活，索引就保留、秒传继续可用；
+// 最后一个副本物理消失时索引才删除，文件数据也在此时真正释放（硬链接数归零）。
 
-// UnlinkHashTree 目录整体移动/删除后清理其下所有文件的索引条目（物理路径连带失效）
-// newDir != ""：目录已移到新位置（如回收站），遍历新位置反推旧路径（须在移动后调用）；
-// newDir == ""：目录仍在原位（即将被删除），直接遍历旧位置（须在删除前调用）
-func UnlinkHashTree(oldDir, newDir string) {
-	if oldDir == "" {
-		return
-	}
-	walk := oldDir
-	if newDir != "" {
-		walk = newDir
-	}
-	_ = filepath.WalkDir(walk, func(p string, info os.DirEntry, err error) error {
-		if err != nil || info == nil || info.IsDir() {
-			return nil
-		}
-		old := p
-		if newDir != "" {
-			old = oldDir + strings.TrimPrefix(p, newDir)
-		}
-		model.DB.Delete(&model.FileHash{}, "source_path = ?", old)
-		return nil
-	})
-}
-
-func (s *Service) RegisterHash(hash string, size int64, sourcePhys string) {
-	if hash == "" || size <= 0 {
+// RegisterHash 登记内容索引与本次落盘的物理副本（新内容定稿时：分块上传完成 / 文本写入）
+func (s *Service) RegisterHash(hash string, size int64, phys string) {
+	if hash == "" || size <= 0 || phys == "" {
 		return
 	}
 	var fh model.FileHash
-	err := model.DB.Where("hash = ?", hash).First(&fh).Error
-	if err != nil {
-		model.DB.Create(&model.FileHash{Hash: hash, Size: size, SourcePath: sourcePhys, RefCount: 1})
+	if err := model.DB.Where("hash = ?", hash).First(&fh).Error; err != nil {
+		model.DB.Create(&model.FileHash{Hash: hash, Size: size, SourcePath: phys, RefCount: 1})
+	} else if fi, e := os.Stat(fh.SourcePath); e != nil || fi.Size() != size {
+		// 已有源损坏/消失时用本次落盘的新源替换
+		model.DB.Model(&fh).Updates(map[string]interface{}{"source_path": phys, "size": size})
+	}
+	upsertHashCopy(hash, phys)
+	reconcileHash(hash)
+}
+
+// RegisterCopy 登记一个新物理副本（秒传落盘 / 版本恢复等，内容已有索引）
+func RegisterCopy(hash, phys string) {
+	if hash == "" || phys == "" {
 		return
 	}
-	// 已有源损坏时用本次落盘的新源替换
-	if fi, e := os.Stat(fh.SourcePath); e != nil || fi.Size() != size {
-		model.DB.Model(&fh).Updates(map[string]interface{}{"source_path": sourcePhys, "size": size})
+	upsertHashCopy(hash, phys)
+	reconcileHash(hash)
+}
+
+func upsertHashCopy(hash, phys string) {
+	var n int64
+	model.DB.Model(&model.FileHashCopy{}).Where("hash = ? AND phys_path = ?", hash, phys).Count(&n)
+	if n == 0 {
+		model.DB.Create(&model.FileHashCopy{Hash: hash, PhysPath: phys})
 	}
-	model.DB.Model(&fh).UpdateColumn("ref_count", fh.RefCount+1)
+}
+
+// reconcileHash 按存活副本对账：0 副本 → 删整条索引；
+// 否则更新 RefCount，源失效时改指任一存活副本；顺带清理物理已不存在的悬空副本行
+func reconcileHash(hash string) {
+	var fh model.FileHash
+	if err := model.DB.Where("hash = ?", hash).First(&fh).Error; err != nil {
+		model.DB.Where("hash = ?", hash).Delete(&model.FileHashCopy{}) // 防御：无索引的孤儿副本行
+		return
+	}
+	var copies []model.FileHashCopy
+	model.DB.Where("hash = ?", hash).Find(&copies)
+	alive := copies[:0]
+	for _, c := range copies {
+		if fi, err := os.Stat(c.PhysPath); err == nil && fi.Mode().IsRegular() && fi.Size() == fh.Size {
+			alive = append(alive, c)
+			continue
+		}
+		model.DB.Delete(&model.FileHashCopy{}, c.ID)
+	}
+	if len(alive) == 0 {
+		model.DB.Delete(&model.FileHash{}, fh.ID)
+		return
+	}
+	model.DB.Model(&fh).UpdateColumn("ref_count", int64(len(alive)))
+	if fi, err := os.Stat(fh.SourcePath); err != nil || !fi.Mode().IsRegular() || fi.Size() != fh.Size {
+		model.DB.Model(&fh).UpdateColumn("source_path", alive[0].PhysPath)
+	}
+}
+
+// HashPathGone 物理文件（或目录）被永久删除后调用：移除副本记录并对账（目录遍历其下文件；须在删除前或删除后调用均可）
+func HashPathGone(phys string) {
+	if phys == "" {
+		return
+	}
+	if info, err := os.Stat(phys); err == nil && info.IsDir() {
+		_ = filepath.WalkDir(phys, func(p string, d os.DirEntry, err error) error {
+			if err != nil || d == nil || d.IsDir() {
+				return nil
+			}
+			removeHashCopy(p)
+			return nil
+		})
+		return
+	}
+	removeHashCopy(phys)
+}
+
+func removeHashCopy(phys string) {
+	var c model.FileHashCopy
+	if err := model.DB.Where("phys_path = ?", phys).First(&c).Error; err != nil {
+		return
+	}
+	model.DB.Delete(&c)
+	// 被移除的恰是当前源时立即改指：物理删除可能尚未发生（先记账后 RemoveAll），
+	// 此刻 stat 仍会成功，不能依赖 reconcile 的"源失效"探测
+	var n int64
+	model.DB.Model(&model.FileHashCopy{}).Where("hash = ?", c.Hash).Count(&n)
+	if n > 0 {
+		var next model.FileHashCopy
+		model.DB.Where("hash = ?", c.Hash).Order("id").First(&next)
+		model.DB.Model(&model.FileHash{}).Where("hash = ? AND source_path = ?", c.Hash, phys).
+			UpdateColumn("source_path", next.PhysPath)
+	}
+	reconcileHash(c.Hash)
+}
+
+// HashPathRenamed 物理文件（或目录）改名/移动后调用（含移入回收站、版本保存）：
+// 副本记录随新路径走（目录遍历新位置反推旧路径；须在移动成功后调用）
+func HashPathRenamed(oldPhys, newPhys string) {
+	if oldPhys == "" || newPhys == "" {
+		return
+	}
+	if info, err := os.Stat(newPhys); err == nil && info.IsDir() {
+		_ = filepath.WalkDir(newPhys, func(p string, d os.DirEntry, err error) error {
+			if err != nil || d == nil || d.IsDir() {
+				return nil
+			}
+			renameHashCopy(oldPhys+strings.TrimPrefix(p, newPhys), p)
+			return nil
+		})
+		return
+	}
+	renameHashCopy(oldPhys, newPhys)
+}
+
+func renameHashCopy(oldPhys, newPhys string) {
+	var c model.FileHashCopy
+	if err := model.DB.Where("phys_path = ?", oldPhys).First(&c).Error; err != nil {
+		return
+	}
+	var n int64
+	model.DB.Model(&model.FileHashCopy{}).Where("phys_path = ?", newPhys).Count(&n)
+	if n > 0 {
+		model.DB.Delete(&c) // 目的地已有同内容记录（防御）
+	} else {
+		model.DB.Model(&c).Update("phys_path", newPhys)
+	}
+	model.DB.Model(&model.FileHash{}).Where("hash = ? AND source_path = ?", c.Hash, oldPhys).
+		UpdateColumn("source_path", newPhys)
+	reconcileHash(c.Hash)
+}
+
+// HashPathCopied 复制产生新物理副本后调用（目录复制遍历新树，按旧路径查哈希）
+func HashPathCopied(srcPhys, dstPhys string) {
+	if srcPhys == "" || dstPhys == "" {
+		return
+	}
+	if info, err := os.Stat(dstPhys); err == nil && info.IsDir() {
+		_ = filepath.WalkDir(dstPhys, func(p string, d os.DirEntry, err error) error {
+			if err != nil || d == nil || d.IsDir() {
+				return nil
+			}
+			addHashCopyFrom(srcPhys+strings.TrimPrefix(p, dstPhys), p)
+			return nil
+		})
+		return
+	}
+	addHashCopyFrom(srcPhys, dstPhys)
+}
+
+func addHashCopyFrom(oldPhys, newPhys string) {
+	var c model.FileHashCopy
+	if err := model.DB.Where("phys_path = ?", oldPhys).First(&c).Error; err != nil {
+		return // 源内容未登记过索引，不补登记
+	}
+	upsertHashCopy(c.Hash, newPhys)
+	reconcileHash(c.Hash)
 }
 
 // ---- 分块上传（断点续传） ----
@@ -324,7 +446,8 @@ func (s *Service) CompleteUpload(sess *model.UploadSession, physResolver func(st
 		_ = os.Remove(tmpOut)
 		return nil, err
 	}
-	_ = os.Remove(physTarget) // 覆盖同名
+	HashPathGone(physTarget) // 覆盖同名：旧文件物理消失，移除其副本记录（不存在时为无操作）
+	_ = os.Remove(physTarget)
 	if err := os.Rename(tmpOut, physTarget); err != nil {
 		_ = os.Remove(tmpOut)
 		return nil, err

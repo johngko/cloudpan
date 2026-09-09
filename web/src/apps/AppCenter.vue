@@ -71,7 +71,12 @@ const busy = ref('')
 const busyInst = ref('')
 
 const filtered = computed(() =>
-  list.value.filter(a => !kw.value || a.name.includes(kw.value) || a.desc.includes(kw.value))
+  list.value.filter(a =>
+    // 非管理员只看「全局启用 且 自己有权限」的功能——无权限的功能不显示（连图标都不见）；
+    // 管理员看全部（启停管理面）
+    (isAdmin.value || (a.enabled && a.allowed)) &&
+    (!kw.value || a.name.includes(kw.value) || a.desc.includes(kw.value))
+  )
 )
 
 // 可安装应用（用户自装自卸；安装态存用户设置 KV，启动器按安装态过滤）

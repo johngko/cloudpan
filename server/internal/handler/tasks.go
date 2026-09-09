@@ -78,7 +78,10 @@ func (p *TaskPool) sweepRecycle() {
 		var items []model.RecycleItem
 		model.DB.Where("user_id = ? AND deleted_at < ?", u.ID, cutoff).Find(&items)
 		for _, item := range items {
-			_ = os.RemoveAll(filepath.Join(p.Svc.RecycleDir, fmt.Sprint(u.ID), item.TrashPath))
+			trashPhys := filepath.Join(p.Svc.RecycleDir, fmt.Sprint(u.ID), item.TrashPath)
+			// 超期自动清空 = 永久物理删除：移除副本记录并对账
+			fscore.HashPathGone(trashPhys)
+			_ = os.RemoveAll(trashPhys)
 			// 目录项的 Size 为删除前统计的递归总大小，与文件同样需要退款
 			if item.Size > 0 {
 				model.DB.Model(&model.User{}).Where("id = ?", u.ID).

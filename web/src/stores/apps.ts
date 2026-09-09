@@ -43,10 +43,12 @@ export function appDef(id: string): AppDef | undefined {
 export function visibleApps() {
   const s = useSession()
   const apps = useAppState()
+  const isAdmin = s.user?.role === 'admin'
   return APPS.filter(a =>
-    (!a.adminOnly || s.user?.role === 'admin') &&
-    // 全局停用 或 当前用户（组/个人）无权限 的应用从所有入口隐藏
-    (!a.feature || apps.isAvailable(a.feature)) &&
+    (!a.adminOnly || isAdmin) &&
+    // 全局停用 或 当前用户（组/个人）无权限 的应用从所有入口隐藏（桌面/开始菜单/Dock/Launchpad）；
+    // 应用中心是功能管理入口：管理员在 app_center 被全局停用时仍须可见（否则无法再启用）
+    ((!a.feature || apps.isAvailable(a.feature)) || (a.id === 'appcenter' && isAdmin)) &&
     // 可安装应用：仅当用户已安装时出现在桌面/Dock/Launchpad/开始菜单
     (!a.installable || apps.isInstalled(a.id))
   )

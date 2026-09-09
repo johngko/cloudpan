@@ -31,8 +31,9 @@ func SaveVersion(policyID, userID uint, vp, physTarget string) bool {
 	if err := os.Rename(physTarget, verPath); err != nil {
 		return false
 	}
-	// 原路径移入版本目录：若它是某条哈希索引的源，清理之（版本文件可能被保留策略清理）
-	UnlinkHashSource(physTarget)
+	// 原路径移入版本目录：内容副本随新路径走（版本文件也是存活副本，
+	// 被保留策略清理时 removeVersionFile 会移除其副本记录）
+	HashPathRenamed(physTarget, verPath)
 	model.DB.Create(&model.FileVersion{
 		UserID: userID, PolicyID: policyID, Path: vp,
 		Version: maxVer + 1, Size: fi.Size(), PhysicalPath: verPath,
@@ -81,6 +82,7 @@ func MigrateVersions(d *LocalDriver, policyID uint, oldVP, newVP string, isDir b
 				if err := os.Rename(v.PhysicalPath, newPhysPath); err != nil {
 					continue // 迁移失败，保留原记录
 				}
+				HashPathRenamed(v.PhysicalPath, newPhysPath) // 版本文件的副本记录随动
 			} else if !isDir {
 				continue // 物理文件已丢失且无法搬移，保留原记录
 			} else if _, err := os.Stat(newPhysPath); err != nil {
@@ -191,6 +193,7 @@ func removeVersionFile(phys string) {
 	if phys == "" {
 		return
 	}
+	HashPathGone(phys) // 版本文件也是内容副本：物理消失前移除其副本记录
 	if err := os.Remove(phys); err != nil {
 		return
 	}

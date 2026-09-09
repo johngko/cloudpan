@@ -152,13 +152,9 @@ func (d *LocalDriver) Move(src, dstDir string) error {
 	return err
 }
 
-// unlinkHashMoved 物理移动后清理哈希索引：按新位置判断文件/目录（旧路径已不存在，无法 stat）
+// unlinkHashMoved 物理移动后同步哈希索引副本记录（按新位置判断文件/目录；目录整体随动）
 func unlinkHashMoved(oldPhys, newPhys string) {
-	if info, err := os.Stat(newPhys); err == nil && info.IsDir() {
-		UnlinkHashTree(oldPhys, newPhys)
-	} else {
-		UnlinkHashSource(oldPhys)
-	}
+	HashPathRenamed(oldPhys, newPhys)
 }
 
 func (d *LocalDriver) Copy(src, dstDir string) error {
@@ -174,7 +170,11 @@ func (d *LocalDriver) Copy(src, dstDir string) error {
 	if err != nil {
 		return err
 	}
-	return copyTree(sphys, tphys)
+	if err := copyTree(sphys, tphys); err != nil {
+		return err
+	}
+	HashPathCopied(sphys, tphys)
+	return nil
 }
 
 // uniqueVirtual 在虚拟目录 dir 下生成不冲突的名称，冲突时按 "name (n).ext" 递增
@@ -243,12 +243,8 @@ func (d *LocalDriver) Delete(p string) error {
 	if p == "/" {
 		return fmt.Errorf("不能删除根目录")
 	}
-	// 物理删除前清理哈希索引（路径即将消失，须先判断文件/目录）
-	if info, err := os.Stat(phys); err == nil && info.IsDir() {
-		UnlinkHashTree(phys, "")
-	} else {
-		UnlinkHashSource(phys)
-	}
+	// 物理删除前移除哈希索引副本记录（目录遍历其下文件；最后一个副本消失时索引随之删除）
+	HashPathGone(phys)
 	return os.RemoveAll(phys)
 }
 
