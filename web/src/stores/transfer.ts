@@ -100,7 +100,18 @@ export const useTransfer = defineStore('transfer', {
       this.tasks = this.tasks.filter(x => x.id !== id)
     },
     async hashFile(t: TransferTask) {
-      const buf = await t.file!.arrayBuffer()
+      let buf: ArrayBuffer
+      if (t.size === 0) {
+        // 0 字节不读文件本体：部分浏览器内核里来自文件夹拖拽的 File 占位项
+        // （空文件夹退化成的 0 字节项）不可读，arrayBuffer() 会直接抛错
+        buf = new ArrayBuffer(0)
+      } else {
+        try {
+          buf = await t.file!.arrayBuffer()
+        } catch (e: any) {
+          throw new Error(`无法读取文件内容（${t.name}）：${e?.message || String(e)}`)
+        }
+      }
       t.buffer = buf
       // 注意：crypto.subtle 仅在安全上下文（HTTPS/localhost）存在，
       // 内网通过 http://IP 访问时需回退到纯 JS 实现（sha256 内部已处理）

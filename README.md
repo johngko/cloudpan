@@ -312,6 +312,8 @@ Admin Console → Storage Policies → Mount → pick a type and fill in credent
 
 ### 2026-09-09
 
+- **修复拖入空文件夹报错**：部分浏览器内核无法为"空文件夹"生成目录条目，空文件夹会退化成一个 0 字节且不可读的 File 占位项，前端读取其内容算哈希时直接抛错。现在 0 字节文件不再读取文件本体（空内容哈希是确定的），拖入空文件夹不再报错；读取真实文件内容失败时给出明确提示（含文件名与原始错误）
+  - **Fixed an error when dropping an empty folder**: some browser kernels cannot produce a directory entry for an empty folder, which degenerates into a 0-byte, unreadable File placeholder, and reading its contents for hashing threw. Zero-byte files no longer read the file body (the empty-content hash is deterministic), so dropping empty folders no longer errors; failing to read a real file's contents now yields a clear message with the file name and original error
 - **修复一次拖入多个文件夹只上传一个**：部分浏览器内核只把拖入内容的一部分放进 `dataTransfer.items`（其余只在 `files` 里出现），此前落下的文件夹会静默丢失。现在拖放收集合并两个来源——`items` 里能遍历的目录树照常遍历，`files` 中未被覆盖的项一并补收（去重），不再无声丢失
   - **Fixed "only one folder uploaded when dragging multiple folders"**: some browser kernels put only part of the dropped content in `dataTransfer.items` (the rest appears only in `files`), and the leftover folders were silently lost. Drop collection now merges both sources — directory trees traversable from `items` are walked as usual, and uncovered `files` entries are picked up (deduplicated), so nothing disappears silently
 - **空目录显式创建**：空目录（内部没有任何文件）上传时不会被自动建出来（没有文件触发建目录），拖放后现在通过 mkdir 显式创建（网盘资源管理器与 SFTP 面板均支持；SFTP 的 mkdir 改为幂等逐级创建，嵌套路径可用、已存在不报错）
