@@ -51,6 +51,9 @@ func sanitizeWinSegment(seg string) (string, error) {
 // SanitizeSegments 无条件规范化路径各段（用于 SFTP 等"目标机 OS 未知"的场景：
 // 服务器在 Linux、SFTP 目标可能是 Windows，必须按最严格规则处理）
 func SanitizeSegments(vp string) (string, error) {
+	if vp == "" || vp == "/" {
+		return "/", nil
+	}
 	var out []string
 	for _, seg := range strings.Split(vp, "/") {
 		if seg == "" {

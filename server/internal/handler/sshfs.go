@@ -807,10 +807,13 @@ func (h *TerminalHandler) FSUpload(c *gin.Context) {
 		if err := sftpMkdirAll(cl, path.Dir(target)); err != nil {
 			return err
 		}
-		// 不覆盖时先探测存在性：OpenSSH 对 O_EXCL 冲突只回 SSH_FX_FAILURE（无 "exists" 字样），
-		// 预检才能给出明确错误
-		if !overwrite {
-			if _, serr := cl.Lstat(target); serr == nil {
+		// 预检目标：OpenSSH 冲突只回 SSH_FX_FAILURE（无 "exists" 字样），需自己探测
+		// 给出明确错误；目标是目录时不能写文件（Windows 报 267 类错误）
+		if fi, serr := cl.Lstat(target); serr == nil {
+			if fi.Mode().IsDir() {
+				return errors.New("已存在同名目录，无法用文件覆盖（请先删除该目录或改名上传）")
+			}
+			if !overwrite {
 				return errors.New("文件已存在（勾选覆盖后可替换）")
 			}
 		}

@@ -50,11 +50,12 @@ export const useTransfer = defineStore('transfer', {
     async addFiles(policyId: number, parent: string, files: FileList | File[]) {
       const arr = Array.from(files)
       for (const f of arr) {
-        // 文件夹上传/拖拽：按 webkitRelativePath 还原目录结构，落到对应子目录
-        // （后端上传完成时自动创建父目录）
+        // 文件夹上传/拖拽：按相对路径还原目录结构，落到对应子目录
+        // （拖拽目录遍历写入 __cpRel；webkitdirectory/已展开拖拽用 webkitRelativePath）
+        // 后端上传完成时自动创建父目录
         let p = parent
         let name = f.name
-        const rel = (f as any).webkitRelativePath as string | undefined
+        const rel = ((f as any).__cpRel || (f as any).webkitRelativePath) as string | undefined
         if (rel) {
           const parts = rel.split('/')
           name = parts[parts.length - 1]

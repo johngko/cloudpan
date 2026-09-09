@@ -464,6 +464,7 @@ import { get as aget, post as apost, del as adel } from '../api/http'
 import { useContextMenu } from '../stores/ui'
 import { useUiDialog, useToast } from '../stores/dialog'
 import { userShareApi } from '../api/modules'
+import { collectDropFiles } from '../utils/drop'
 import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps<{ winId: number; props: any }>()
@@ -998,24 +999,32 @@ function onFilePicked(e: Event) {
   }
   input.value = ''
 }
-function onDrop(e: DragEvent) {
-  if (!currentPolicy.value || !e.dataTransfer) return
-  if (e.dataTransfer.files.length) {
-    startUpload(Array.from(e.dataTransfer.files))
-  } else {
-    // 内部拖拽：拖到空白处视为移动到当前目录（一般无操作）
-    const src = e.dataTransfer.getData('application/x-cp-path')
-    if (src) startInternalMove([src], path.value)
-  }
+// 把拖放条目展开为带 __cpRel 的文件列表（文件夹经 webkitGetAsEntry 递归遍历）
+async function droppedFiles(e: DragEvent): Promise<File[]> {
+  const list = await collectDropFiles(e.dataTransfer!)
+  for (const d of list) (d.file as any).__cpRel = d.rel
+  return list.map(d => d.file)
 }
-function onDropTo(f: FileItem, e: DragEvent) {
+async function onDrop(e: DragEvent) {
   if (!currentPolicy.value || !e.dataTransfer) return
-  if (e.dataTransfer.files.length) {
-    // 外部文件拖入文件夹 → 上传到该文件夹
-    const pid = currentPolicy.value.id
-    transfer.addFiles(pid, f.path, Array.from(e.dataTransfer.files))
+  if (e.dataTransfer.files.length || e.dataTransfer.items?.length) {
+    const files = await droppedFiles(e)
+    if (files.length) startUpload(files)
+    return
+  }
+  // 内部拖拽：拖到空白处视为移动到当前目录（一般无操作）
+  const src = e.dataTransfer.getData('application/x-cp-path')
+  if (src) startInternalMove([src], path.value)
+}
+async function onDropTo(f: FileItem, e: DragEvent) {
+  if (!currentPolicy.value || !e.dataTransfer) return
+  if (e.dataTransfer.files.length || e.dataTransfer.items?.length) {
+    // 外部文件/文件夹拖入文件夹 → 上传到该文件夹（保留目录结构）
+    const files = await droppedFiles(e)
+    if (!files.length) return
+    transfer.addFiles(currentPolicy.value.id, f.path, files)
     transfer.panel(true)
-    toast.success(`已加入 ${e.dataTransfer.files.length} 个文件到「${f.name}」`)
+    toast.success(`已加入 ${files.length} 个文件到「${f.name}」`)
   } else if (f.isDir) {
     // 内部拖拽移动：把一个文件拖到文件夹内
     const src = e.dataTransfer.getData('application/x-cp-path')

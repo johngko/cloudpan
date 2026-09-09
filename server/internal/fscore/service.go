@@ -104,6 +104,10 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 	}
 	// 版本管理：如果目标文件已存在，保存旧版本
 	SaveVersion(policyID, userID, vp, physTarget)
+	// 目标是已存在的目录时不能硬链接/复制成文件（Windows 报 267 类错误）
+	if err := ensureFileTarget(physTarget); err != nil {
+		return err
+	}
 	if os.Link(fh.SourcePath, physTarget) == nil {
 		return nil
 	}
@@ -281,8 +285,14 @@ func (s *Service) CompleteUpload(sess *model.UploadSession, physResolver func(st
 	}
 	// 版本管理：如果目标文件已存在，保存旧版本
 	SaveVersion(sess.PolicyID, sess.UserID, targetVP, physTarget)
+	// 目标是已存在的目录时不能直接用文件覆盖（Windows 下报 267"找不到目录"）
+	if err := ensureFileTarget(physTarget); err != nil {
+		_ = os.Remove(tmpOut)
+		return nil, err
+	}
 	_ = os.Remove(physTarget) // 覆盖同名
 	if err := os.Rename(tmpOut, physTarget); err != nil {
+		_ = os.Remove(tmpOut)
 		return nil, err
 	}
 	s.RegisterHash(actualHash, written, physTarget)
@@ -862,6 +872,25 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 }
 
 // ---- 工具 ----
+
+// ensureFileTarget 确保 physTarget 位置可写入文件：
+// 目标不存在或为普通文件 → 放行（rename/create 会覆盖）；
+// 目标为已存在的目录 → 空目录删除后放行，非空目录报错（Windows 下用文件覆盖
+// 目录会报 ERROR_DIR_NOT_FOUND 267"找不到请求的文件或目录"，这里给出明确提示）
+func ensureFileTarget(phys string) error {
+	fi, err := os.Stat(phys)
+	if err != nil {
+		return nil
+	}
+	if !fi.IsDir() {
+		return nil
+	}
+	entries, _ := os.ReadDir(phys)
+	if len(entries) == 0 {
+		return os.Remove(phys)
+	}
+	return fmt.Errorf("已存在同名目录，无法用文件覆盖（请先删除该目录或改名上传）")
+}
 
 // PhysicalOf 取本地驱动下虚拟路径的物理路径（仅本地策略）
 func PhysicalOf(d Driver, vp string) (string, error) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { termApi, type SftpEntry } from '../../api/modules'
+import { collectDropFiles } from '../../utils/drop'
 
 /**
  * SFTP 文件管理面板：浏览 / 新建 / 重命名 / 删除 / 上传（拖拽+进度）/ 下载
@@ -103,10 +104,10 @@ async function onPick(ev: Event) {
 }
 async function uploadFiles(files: File[], overwrite = false) {
   for (const f of files) {
-    // 文件夹上传/拖拽：按 webkitRelativePath 落到对应子目录（服务端自动建父目录）
+    // 文件夹上传/拖拽：按相对路径落到对应子目录（服务端自动建父目录）
     let dir = path.value
     let name = f.name
-    const rel = (f as any).webkitRelativePath as string | undefined
+    const rel = ((f as any).__cpRel || (f as any).webkitRelativePath) as string | undefined
     if (rel) {
       const parts = rel.split('/')
       name = parts[parts.length - 1]
@@ -126,11 +127,15 @@ async function uploadFiles(files: File[], overwrite = false) {
   load()
   setTimeout(() => { uploads.value = uploads.value.filter(u => u.state === 'uploading') }, 4000)
 }
-function onDrop(ev: DragEvent) {
+async function onDrop(ev: DragEvent) {
   ev.preventDefault()
   dragOver.value = false
-  const files = Array.from(ev.dataTransfer?.files || [])
-  if (files.length) uploadFiles(files)
+  const dt = ev.dataTransfer
+  if (!dt) return
+  const list = await collectDropFiles(dt)
+  if (!list.length) return
+  for (const d of list) (d.file as any).__cpRel = d.rel
+  uploadFiles(list.map(d => d.file))
 }
 function onExistingDrop(ev: DragEvent) {
   ev.preventDefault()

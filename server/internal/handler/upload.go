@@ -187,8 +187,9 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 	}
 	model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
 		UpdateColumn("used_bytes", max(0, x.user.UsedBytes+entry.Size-oldSize))
-	middleware.Audit(c, "upload", p.Name+":"+sess.ParentPath+"/"+sess.Name)
-	dto.OK(c, gin.H{"instant": false, "entry": entry, "path": sess.ParentPath + "/" + sess.Name})
+	targetVP, _ := fscore.Join(sess.ParentPath, sess.Name)
+	middleware.Audit(c, "upload", p.Name+":"+targetVP)
+	dto.OK(c, gin.H{"instant": false, "entry": entry, "path": targetVP})
 }
 
 func (h *UploadHandler) Abort(c *gin.Context) {

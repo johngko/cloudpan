@@ -310,6 +310,15 @@ Admin Console → Storage Policies → Mount → pick a type and fill in credent
 > 每次更新推送时在此追加条目（中文 + 英文），最新在上。
 > Every release appends entries here (Chinese + English), newest first.
 
+### 2026-09-09
+
+- **修复拖拽文件夹上传失败**：部分浏览器 / 内嵌 WebView 拖入文件夹时不会展开内容，只递交一个 0 字节的"文件夹"条目，导致上传报错（Windows 上表现为系统错误 267）。现在拖放时改用 `webkitGetAsEntry()` 递归遍历目录树（`readEntries` 按 100 条分批读到空），目录结构与文件内容完整保留；不支持 entries API 的旧浏览器自动退回扁平文件列表。网盘资源管理器与 SSH 的 SFTP 面板拖拽均生效
+  - **Fixed drag-and-drop folder upload failures**: some browsers / embedded WebViews deliver a dragged folder as a single 0-byte entry instead of its contents, causing upload errors (system error 267 on Windows). Drops now use `webkitGetAsEntry()` to walk the directory tree recursively (`readEntries` in batches of 100), preserving structure and contents; browsers without the entries API fall back to the flat file list. Applies to both the cloud drive explorer and the SSH SFTP panel
+- **上传/新建重名冲突给出明确提示**：上传的文件名与已存在目录同名时，返回明确错误「已存在同名目录，无法用文件覆盖（请先删除该目录或改名上传）」，不再出现含义不明的系统错误；SFTP 上传同样处理
+  - **Clear error on name collisions**: uploading a file whose name matches an existing directory now returns an explicit message ("a directory with the same name already exists — delete it or rename the upload") instead of an obscure system error; SFTP uploads behave the same
+- **修复根目录上传**：修复了路径规范化在虚拟根 `/` 上误报「路径非法」的问题（此前 Windows 部署下往根目录上传全部失败）；上传完成接口返回的路径统一规整（不再出现 `//` 双斜杠）
+  - **Fixed root-level uploads**: path normalization no longer rejects the virtual root `/` as an invalid path (this broke all root uploads on Windows deployments); the completed-upload response now returns a properly normalized path (no double slashes)
+
 ### 2026-09-08
 
 - **修复 Windows 部署下文件夹上传报错**：Windows 创建文件/目录时会静默截断名称末尾的空格与点，导致前后路径不一致、报系统错误 267「A requested file or directory could not be found / 找不到请求的文件或目录」。现在上传/新建/重命名前统一规范化路径段——尾部空格与点自动去除，Windows 保留设备名（NUL/CON/COM1-9/LPT1-9 等）与非法字符（`<>:"/\|?*`）给出明确中文提示；SFTP 面板按最严格规则处理（目标机可能是 Windows）；Linux 部署行为不变。另：上传失败时浏览器控制台会输出一条黄色警告 `[CloudPan 上传失败]`，含目标路径与原始错误，便于定位
