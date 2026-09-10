@@ -176,6 +176,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useSession } from '../stores/session'
+import { canUseOffline } from '../stores/apps'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
 import { fsApi, shareApi, authApi, userShareApi } from '../api/modules'
@@ -225,11 +226,13 @@ async function cancelOffline(t: any) {
 // 个性化（站点主题/壁纸/深色）为管理员全局设置：仅管理员可见此 tab，
 // 游客与普通用户从所有入口都看不到主题个性化功能
 const isAdmin = computed(() => session.user?.role === 'admin')
+// 离线下载页签：无权限用户（如游客）整体不显示，与后端 403 语义一致
+const canOffline = computed(() => canUseOffline())
 const tabs = computed(() => [
   ...(isAdmin.value ? [{ id: 'person', name: '个性化', icon: 'sun' }] : []),
   { id: 'account', name: '账号', icon: 'user' },
   { id: 'shares', name: '我的分享', icon: 'share' },
-  { id: 'offline', name: '离线下载', icon: 'download' },
+  ...(canOffline.value ? [{ id: 'offline', name: '离线下载', icon: 'download' }] : []),
   { id: 'about', name: '关于', icon: 'info' }
 ])
 const winProps = defineProps<{ winId: number; props: any }>()

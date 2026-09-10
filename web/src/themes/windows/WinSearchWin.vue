@@ -88,7 +88,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { visibleApps } from '../../stores/apps'
+import { visibleApps, canUseOffline } from '../../stores/apps'
 import { useWindows } from '../../stores/windows'
 import { useSession } from '../../stores/session'
 import { fsApi } from '../../api/modules'
@@ -132,9 +132,14 @@ const SETTINGS_AREAS = [
   { id: 'offline', name: '离线下载', icon: 'download', kws: ['离线', '下载', '磁力', '种子'] },
   { id: 'about', name: '关于', icon: 'info', kws: ['关于', '版本'] }
 ]
-// 个性化（站点主题）为管理员全局设置：非管理员（含游客）搜不到该设置区
-const settingsAreas = computed(() =>
-  session.user?.role === 'admin' ? SETTINGS_AREAS : SETTINGS_AREAS.filter(s => s.id !== 'person'))
+// 个性化（站点主题）为管理员全局设置：非管理员（含游客）搜不到该设置区；
+// 离线下载对无权限用户（含游客）整体隐藏
+const canOffline = computed(() => canUseOffline())
+const settingsAreas = computed(() => {
+  let areas = session.user?.role === 'admin' ? SETTINGS_AREAS : SETTINGS_AREAS.filter(s => s.id !== 'person')
+  if (!canOffline.value) areas = areas.filter(s => s.id !== 'offline')
+  return areas
+})
 const settingsHits = computed(() => {
   const v = q.value
   const areas = settingsAreas.value

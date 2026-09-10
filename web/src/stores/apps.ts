@@ -59,6 +59,14 @@ export function installableApps() {
   return APPS.filter(a => a.installable)
 }
 
+// 当前用户能否使用离线下载（与后端一致：offline_http/bt 任一功能可用 且 用户组启用）
+// 无权限时所有入口（设置页签/资源管理器右键/搜索面板）整体隐藏
+export function canUseOffline(): boolean {
+  const s = useSession()
+  const apps = useAppState()
+  return (apps.isAvailable('offline_http') || apps.isAvailable('bt')) && !!s.group?.allowOffline
+}
+
 export interface DesktopAppIcon { id: string; name: string; icon: string; appId: string }
 
 /**

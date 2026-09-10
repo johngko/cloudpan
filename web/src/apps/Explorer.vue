@@ -55,7 +55,7 @@
       <button class="tool-btn" :disabled="!canWriteHere" @click.stop="onSharedDrive ? sharedNewMenu($event) : newMenu($event)"><AppIcon name="plus" :size="15" />新建</button>
       <button class="tool-btn" :disabled="!canWriteHere" @click.stop="onSharedDrive ? sharedPickFiles() : uploadMenu($event)"><AppIcon name="upload" :size="15" />上传</button>
       <button class="tool-btn" :disabled="!selPaths.length" @click="downloadSel"><AppIcon name="download" :size="15" />下载</button>
-      <button class="tool-btn" :disabled="!selPaths.length || !canShare || onSharedDrive" @click="shareSel"><AppIcon name="share2" :size="15" />分享</button>
+      <button v-if="canSharePub" class="tool-btn" :disabled="!selPaths.length || onSharedDrive" @click="shareSel"><AppIcon name="share2" :size="15" />分享</button>
       <div class="tool-sep"></div>
       <button class="tool-btn" :disabled="!selPaths.length || onSharedDrive || readOnly" @click="cutSel"><AppIcon name="cut" :size="15" />剪切</button>
       <button class="tool-btn" :disabled="!selPaths.length || onSharedDrive || readOnly" @click="copySel"><AppIcon name="copy" :size="15" />复制</button>
@@ -228,9 +228,9 @@
         </div>
         <div class="pp-actions" v-if="!onSharedDrive">
           <button class="btn" @click="renameSel" :disabled="readOnly">重命名</button>
-          <button class="btn" @click="shareSel" :disabled="!canShare">分享</button>
+          <button v-if="canSharePub" class="btn" @click="shareSel">分享</button>
         </div>
-        <div class="pp-actions" v-if="!onSharedDrive">
+        <div class="pp-actions" v-if="!onSharedDrive && !session.isGuest">
           <button class="btn" @click="toggleStar(selItem)">{{ selItem.starred ? '取消收藏' : '收藏' }}</button>
         </div>
         <div class="pp-actions" v-if="onSharedDrive && currentShare">
@@ -303,8 +303,8 @@
           </div>
           <div v-if="propData.entry && !propData.entry.isDir && propData.sha256Note" style="font-size: 12px; color: var(--text-3)">{{ propData.sha256Note }}</div>
         </div>
-        <!-- 版本历史（仅文件） -->
-        <div v-if="propData && propData.entry && !propData.entry.isDir" style="margin-top: 16px; border-top: 1px solid var(--stroke); padding-top: 12px">
+        <!-- 版本历史（仅文件；「版本管理」功能被禁用/无权限时整体隐藏） -->
+        <div v-if="propData && propData.entry && !propData.entry.isDir && canVersion" style="margin-top: 16px; border-top: 1px solid var(--stroke); padding-top: 12px">
           <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px">版本历史</div>
           <div v-if="versionLoading" style="font-size: 12px; color: var(--text-3)">加载中...</div>
           <div v-else-if="!versions.length" style="font-size: 12px; color: var(--text-3)">暂无历史版本</div>
@@ -509,6 +509,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useWindows } from '../stores/windows'
 import { useSession } from '../stores/session'
+import { useAppState } from '../stores/appstate'
+import { canUseOffline } from '../stores/apps'
 import { useClipboard } from '../stores/ui'
 import { useTransfer } from '../stores/transfer'
 import { fsApi, shareApi, type Policy, type FileItem } from '../api/modules'
@@ -523,6 +525,10 @@ import AppIcon from '../components/AppIcon.vue'
 const props = defineProps<{ winId: number; props: any }>()
 const store = useWindows()
 const session = useSession()
+const apps = useAppState()
+// 离线下载/终端等无权限功能：入口整体隐藏（不显示禁用态），与「无权限功能完全隐藏」原则一致
+const canOffline = computed(() => canUseOffline())
+const canTerminal = computed(() => apps.isAvailable('terminal'))
 const clip = useClipboard()
 const transfer = useTransfer()
 const ctx = useContextMenu()
@@ -775,7 +781,10 @@ const canWriteHere = computed(() => {
   return !readOnly.value
 })
 // 发起共享的资格：组允许 或 管理员（管理员豁免组限制）
-const canShare = computed(() => session.user?.role === 'admin' || !!group.value.allowShare)
+// 分享入口可见性：无权限时整体隐藏（公开分享=share 功能，站内共享=usershare 功能，另需管理员或组允许）
+const canSharePub = computed(() => (session.user?.role === 'admin' || !!group.value.allowShare) && apps.isAvailable('share'))
+const canShareUser = computed(() => (session.user?.role === 'admin' || !!group.value.allowShare) && apps.isAvailable('usershare'))
+const canVersion = computed(() => apps.isAvailable('version'))
 // 共享盘状态栏位置（人类可读）
 const sharedStatusPath = computed(() => {
   if (!onSharedDrive.value) return ''
@@ -1072,7 +1081,7 @@ function buildOpenWith(f: FileItem) {
     items.push({ label: '媒体播放器', icon: 'media', onClick: () => openWith(f, 'mediaviewer') })
   if (TEXT_EXTS.includes(ext) || !ext)
     items.push({ label: '记事本', icon: 'notepad', onClick: () => openWith(f, 'notepad') })
-  if (['docx', 'xlsx', 'pptx', 'pdf', 'doc', 'xls', 'ppt'].includes(ext) && session.site.officeConfigured)
+  if (['docx', 'xlsx', 'pptx', 'pdf', 'doc', 'xls', 'ppt'].includes(ext) && session.site.officeConfigured && apps.isAvailable('office'))
     items.push({ label: 'Office 编辑器', icon: 'office', onClick: () => openWith(f, 'officeeditor') })
   return items
 }
@@ -1631,8 +1640,8 @@ async function showProps(p: string) {
   try {
     propData.value = await fsApi.properties(currentPolicy.value.id, p)
     propShow.value = true
-    // 如果是文件，加载版本历史
-    if (propData.value && propData.value.entry && !propData.value.entry.isDir) {
+    // 如果是文件且「版本管理」功能可用，加载版本历史（无权限时不发请求、不显示区块）
+    if (canVersion.value && propData.value && propData.value.entry && !propData.value.entry.isDir) {
       await loadVersions(p)
     }
   } catch (e: any) { toast.error(e.message) }
@@ -1805,14 +1814,15 @@ function onBlankCtx(e: MouseEvent) {
           { label: '上传文件夹…', icon: 'folder', onClick: pickFolder }
         ]
       },
-      {
-        label: group.value.allowOffline ? '离线下载到此' : '离线下载（用户组已禁用）',
-        icon: 'cloud', onClick: offlineDlg, disabled: !group.value.allowOffline
-      },
-      {
-        label: '在终端中打开', icon: 'terminal',
-        onClick: () => store.open('terminal', { policyId: currentPolicy.value!.id, path: path.value }, { title: '终端' })
-      },
+      ...(canOffline.value ? [
+        { label: '离线下载到此', icon: 'cloud', onClick: offlineDlg }
+      ] : []),
+      ...(canTerminal.value ? [
+        {
+          label: '在终端中打开', icon: 'terminal',
+          onClick: () => store.open('terminal', { policyId: currentPolicy.value!.id, path: path.value }, { title: '终端' })
+        }
+      ] : []),
       { separator: true },
       { label: '属性', icon: 'info', onClick: () => showProps(path.value) }
     )
@@ -1848,7 +1858,8 @@ function onItemCtx(f: FileItem, e: MouseEvent) {
       { label: '剪切', icon: 'cut', onClick: cutSel, disabled: readOnly.value },
       { label: '复制', icon: 'copy', onClick: copySel, disabled: readOnly.value },
       { separator: true },
-      { label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: !group.value.allowArchive || readOnly.value },
+      // 「压缩」功能被组禁用时整体隐藏（不再显示禁用态）
+      ...(group.value.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: readOnly.value }] : []),
       { label: '删除', icon: 'trash', danger: true, onClick: deleteSel, disabled: readOnly.value },
       { separator: true },
       { label: '属性', icon: 'info', onClick: () => showProps(selPaths.value[0]) }
@@ -1861,16 +1872,18 @@ function onItemCtx(f: FileItem, e: MouseEvent) {
       { label: '打开', icon: 'fwd', onClick: () => openItem(f) },
       { label: '复制路径', icon: 'link', onClick: () => copyPath(f.path) },
       { label: '下载 (zip)', icon: 'download', onClick: downloadSel },
-      { label: '分享', icon: 'share2', onClick: shareSel, disabled: !canShare.value },
-      { label: '共享…', icon: 'user', onClick: shareUserSel, disabled: !canShare.value },
+      ...(canSharePub.value ? [{ label: '分享', icon: 'share2', onClick: shareSel }] : []),
+      ...(canShareUser.value ? [{ label: '共享…', icon: 'user', onClick: shareUserSel }] : []),
       { separator: true },
-      { label: starred ? '取消收藏' : '收藏到快速访问', icon: starred ? 'star' : 'starFill', onClick: () => toggleStar(f) },
+      // 游客为共享账号：收藏是共享状态，入口隐藏（后端 GuestReadOnly 兜底）
+      ...(session.isGuest ? [] : [{ label: starred ? '取消收藏' : '收藏到快速访问', icon: starred ? 'star' : 'starFill', onClick: () => toggleStar(f) }]),
       { label: '剪切', icon: 'cut', onClick: cutSel, disabled: readOnly.value },
       { label: '复制', icon: 'copy', onClick: copySel, disabled: readOnly.value },
       { label: '粘贴到内部', icon: 'paste', onClick: pasteInto(f), disabled: !clip.mode || readOnly.value },
       { label: '重命名', icon: 'rename', onClick: renameSel, disabled: readOnly.value },
       { separator: true },
-      { label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: !group.value.allowArchive || readOnly.value },
+      // 「压缩」功能被组禁用时整体隐藏（不再显示禁用态）
+      ...(group.value.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: readOnly.value }] : []),
       { label: '删除', icon: 'trash', danger: true, onClick: deleteSel, disabled: readOnly.value },
       { separator: true },
       { label: '属性', icon: 'info', onClick: () => showProps(f.path) }
@@ -1883,18 +1896,19 @@ function onItemCtx(f: FileItem, e: MouseEvent) {
     { label: '打开方式', icon: 'openwith', children: buildOpenWith(f) },
     { label: '复制路径', icon: 'link', onClick: () => copyPath(f.path) },
     { label: '下载', icon: 'download', onClick: downloadSel },
-    { label: '分享', icon: 'share', onClick: shareSel, disabled: !canShare.value },
+    ...(canSharePub.value ? [{ label: '分享', icon: 'share', onClick: shareSel }] : []),
     { label: '提取直链', icon: 'link', onClick: dlinkSel },
     { separator: true },
-    { label: starred ? '取消收藏' : '收藏到快速访问', icon: starred ? 'star' : 'starFill', onClick: () => toggleStar(f) },
+    ...(session.isGuest ? [] : [{ label: starred ? '取消收藏' : '收藏到快速访问', icon: starred ? 'star' : 'starFill', onClick: () => toggleStar(f) }]),
     { label: '剪切', icon: 'cut', onClick: cutSel, disabled: readOnly.value },
     { label: '复制', icon: 'copy', onClick: copySel, disabled: readOnly.value },
     { label: '重命名', icon: 'rename', onClick: renameSel, disabled: readOnly.value },
     { separator: true },
     ...(f.ext?.toLowerCase() === 'zip' || /\.(tar|tgz|tbz2|gz)$/i.test(f.name || '')
-      ? [{ label: '解压到当前目录', icon: 'archive', onClick: extractSel, disabled: readOnly.value }]
+      ? (group.value.allowArchive ? [{ label: '解压到当前目录', icon: 'archive', onClick: extractSel, disabled: readOnly.value }] : [])
       : []),
-    { label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: !group.value.allowArchive || readOnly.value },
+    // 「压缩」功能被组禁用时整体隐藏（不再显示禁用态）
+    ...(group.value.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: readOnly.value }] : []),
     { label: '删除', icon: 'trash', danger: true, onClick: deleteSel, disabled: readOnly.value },
     { separator: true },
     { label: '属性', icon: 'info', onClick: () => showProps(f.path) }
@@ -1932,10 +1946,12 @@ function pasteInto(f: FileItem) {
 function onPolicyCtx(p: Policy, e: MouseEvent) {
   const menu: any[] = [
     { label: '打开', icon: 'fwd', onClick: () => openPolicy(p) },
-    {
-      label: '在终端中打开', icon: 'terminal',
-      onClick: () => store.open('terminal', { policyId: p.id, path: '/' }, { title: '终端' })
-    }
+    ...(canTerminal.value ? [
+      {
+        label: '在终端中打开', icon: 'terminal',
+        onClick: () => store.open('terminal', { policyId: p.id, path: '/' }, { title: '终端' })
+      }
+    ] : [])
   ]
   if (session.user?.role === 'admin') {
     menu.push({ separator: true })
