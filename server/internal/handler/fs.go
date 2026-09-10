@@ -63,11 +63,17 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 		model.DB.Model(&model.User{}).Where("username = ? AND disabled = false", "guest").Count(&gn)
 		guestLogin = gn > 0
 	}
+	// 站点主题：管理员全局设置，所有用户（游客/普通/管理员）访问都渲染该主题
+	theme := s["site_theme"]
+	if theme != "win12" && theme != "macos" && theme != "deepin" {
+		theme = "win12"
+	}
 	dto.OK(c, gin.H{
 		"siteName": s["site_name"], "registerOpen": regOpen, "needInviteCode": invite,
 		"officeConfigured": s["onlyoffice_url"] != "",
 		"announcement":     s["announcement"],
 		"guestLogin":       guestLogin,
+		"theme":            theme,
 	})
 }
 

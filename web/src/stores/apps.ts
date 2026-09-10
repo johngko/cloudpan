@@ -24,7 +24,7 @@ export const APPS: AppDef[] = [
   { id: 'notepad', name: '记事本', icon: 'notepad', w: 760, h: 560, desktop: true, pinned: true },
   { id: 'terminal', name: '终端', icon: 'terminal', w: 1040, h: 640, desktop: true, pinned: true, feature: 'terminal' },
   { id: 'calculator', name: '计算器', icon: 'calculator', w: 340, h: 500, desktop: true, pinned: true },
-  { id: 'speedtest', name: '网络测速', icon: 'speedtest', w: 480, h: 640, desktop: true, pinned: true },
+  { id: 'speedtest', name: '网络测速', icon: 'speedtest', w: 480, h: 640, desktop: true, pinned: true, feature: 'speedtest' },
   { id: 'browser', name: '浏览器', icon: 'browser', w: 1100, h: 700, desktop: true, pinned: true, feature: 'browser' },
   { id: 'imageviewer', name: '图片查看器', icon: 'image', w: 880, h: 620 },
   { id: 'mediaviewer', name: '媒体播放器', icon: 'media', w: 880, h: 580 },

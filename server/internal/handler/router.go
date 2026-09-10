@@ -86,10 +86,11 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.PUT("/settings", site.UserSettingsSet)
 
 		// 网络测速（内置应用，界面仿 LibreSpeed；download 随机数据 no-store，upload 丢弃）
+		// 受「网络测速」功能门控：游客（访客组）无权限，API 403 且桌面/应用中心入口隐藏
 		st := &SpeedTestHandler{}
-		ug.GET("/speedtest/ping", st.Ping)
-		ug.GET("/speedtest/download", st.Download)
-		ug.POST("/speedtest/upload", st.Upload)
+		ug.GET("/speedtest/ping", middleware.AppGate("speedtest"), st.Ping)
+		ug.GET("/speedtest/download", middleware.AppGate("speedtest"), st.Download)
+		ug.POST("/speedtest/upload", middleware.AppGate("speedtest"), st.Upload)
 
 		ug.GET("/shares", middleware.AppGate("share"), sh.Mine)
 		ug.POST("/shares", middleware.AppGate("share"), sh.Create)

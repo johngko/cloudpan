@@ -349,8 +349,9 @@ func InitDB(dataDir string) {
 	seed()
 }
 
-// guestAppPerms 访客组默认应用权限：保留基础应用 + 内部共享（查看共享），禁止终端/浏览器/Office 等
-const guestAppPerms = `{"terminal":false,"browser":false,"office":false,"webdav":false,"share":false,"offline_http":false,"bt":false,"system_monitor":false}`
+// guestAppPerms 访客组默认应用权限：保留基础应用 + 内部共享（查看共享），禁止终端/浏览器/Office 等。
+// 应用中心与网络测速对游客隐藏（基础应用之外不提供功能管理/测速入口）
+const guestAppPerms = `{"terminal":false,"browser":false,"office":false,"webdav":false,"share":false,"offline_http":false,"bt":false,"system_monitor":false,"app_center":false,"speedtest":false}`
 
 func seed() {
 	var gc int64
@@ -382,7 +383,7 @@ func seed() {
 		defaults := map[string]string{
 			"site_name": "CloudPan 网盘", "register_open": "false", "register_invite_code": "",
 			"onlyoffice_url": "", "onlyoffice_jwt": "", "webdav_enabled": "true", "announcement": "",
-			"guest_login": "true",
+			"guest_login": "true", "site_theme": "win12",
 		}
 		for k, v := range defaults {
 			DB.Create(&SiteSetting{Key: k, Value: v})

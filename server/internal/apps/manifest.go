@@ -28,6 +28,7 @@ var Manifest = []Def{
 	{Key: "browser", Name: "内置浏览器", Icon: "browser", Desc: "桌面内置浏览器（服务端代理访问网站）", Version: "1.0", DefaultEnabled: true},
 	{Key: "system_monitor", Name: "系统监控", Icon: "admin", Desc: "CPU/内存/磁盘/网络实时监控", Version: "1.0", DefaultEnabled: true},
 	{Key: "terminal", Name: "终端", Icon: "terminal", Desc: "本地真实终端与远程 SSH 终端（含 SFTP 文件管理）", Version: "2.0", DefaultEnabled: true},
+	{Key: "speedtest", Name: "网络测速", Icon: "speedtest", Desc: "内置网络速度测试", Version: "1.0", DefaultEnabled: true},
 }
 
 // Find 按 key 查清单

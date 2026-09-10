@@ -80,10 +80,11 @@ function onDeskDown(e: MouseEvent) {
 }
 
 function onDeskCtx(e: MouseEvent) {
+  // 个性化（站点主题）为管理员全局设置：非管理员（含游客）不显示入口
+  const isAdmin = session.user?.role === 'admin'
   ctx.show(e.clientX, e.clientY, [
     { label: '刷新', icon: 'refresh', onClick: () => window.dispatchEvent(new CustomEvent('cp-refresh-explorer')) },
-    { separator: true },
-    { label: '个性化', icon: 'sun', onClick: () => store.open('settings') }
+    ...(isAdmin ? [{ separator: true }, { label: '个性化', icon: 'sun', onClick: () => store.open('settings', { tab: 'person' }) }] : [])
   ])
 }
 

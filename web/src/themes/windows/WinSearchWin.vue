@@ -90,12 +90,14 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { visibleApps } from '../../stores/apps'
 import { useWindows } from '../../stores/windows'
+import { useSession } from '../../stores/session'
 import { fsApi } from '../../api/modules'
 import AppIcon from '../../components/AppIcon.vue'
 
 const props = defineProps<{ shown: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 const store = useWindows()
+const session = useSession()
 
 const kw = ref('')
 const tab = ref('全部')
@@ -130,10 +132,14 @@ const SETTINGS_AREAS = [
   { id: 'offline', name: '离线下载', icon: 'download', kws: ['离线', '下载', '磁力', '种子'] },
   { id: 'about', name: '关于', icon: 'info', kws: ['关于', '版本'] }
 ]
+// 个性化（站点主题）为管理员全局设置：非管理员（含游客）搜不到该设置区
+const settingsAreas = computed(() =>
+  session.user?.role === 'admin' ? SETTINGS_AREAS : SETTINGS_AREAS.filter(s => s.id !== 'person'))
 const settingsHits = computed(() => {
   const v = q.value
-  if (!v) return SETTINGS_AREAS
-  return SETTINGS_AREAS.filter(s => s.name.toLowerCase().includes(v) || s.kws.some(k => k.includes(v)))
+  const areas = settingsAreas.value
+  if (!v) return areas
+  return areas.filter(s => s.name.toLowerCase().includes(v) || s.kws.some(k => k.includes(v)))
 })
 
 function searchApps(v: string) {

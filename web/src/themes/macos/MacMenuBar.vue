@@ -110,10 +110,10 @@ const openItems = computed<MBItem[]>(() => {
         { label: '刷新', icon: 'refresh', onClick: () => window.dispatchEvent(new CustomEvent('cp-refresh-explorer')) }
       ]
     case 'view':
+      // 个性化（站点主题）为管理员全局设置：非管理员（含游客）不显示入口
       return [
         { label: '刷新', icon: 'refresh', onClick: () => window.dispatchEvent(new CustomEvent('cp-refresh-explorer')) },
-        { sep: true },
-        { label: '个性化…', icon: 'sun', onClick: () => store.open('settings') }
+        ...(session.user?.role === 'admin' ? [{ sep: true }, { label: '个性化…', icon: 'sun', onClick: () => store.open('settings', { tab: 'person' }) }] : [])
       ]
     case 'window':
       return [

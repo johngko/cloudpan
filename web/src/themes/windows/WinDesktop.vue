@@ -80,14 +80,18 @@ function onDeskDown(e: MouseEvent) {
 
 function onDeskCtx(e: MouseEvent) {
   // 演示站桌面右键：刷新 / 切换主题 / 个性化 / 关于（1:1 项目集）
+  // 个性化（主题/深色）为管理员全局设置：非管理员（含游客）不显示这些入口
+  const isAdmin = session.user?.role === 'admin'
   ctx.show(e.clientX, e.clientY, [
     { label: '刷新', icon: 'refresh', onClick: () => window.dispatchEvent(new CustomEvent('cp-refresh-explorer')) },
     { separator: true },
-    { label: session.dark ? '切换为浅色主题' : '切换为深色主题', icon: 'sun', onClick: () => session.setDark(!session.dark) },
-    { label: '个性化', icon: 'settings', onClick: () => store.open('settings') },
+    ...(isAdmin ? [
+      { label: session.dark ? '切换为浅色主题' : '切换为深色主题', icon: 'sun', onClick: () => session.setDark(!session.dark) },
+      { label: '个性化', icon: 'settings', onClick: () => store.open('settings', { tab: 'person' }) },
+    ] : []),
     { label: '显示桌面', icon: 'grid', onClick: () => store.minimizeAll() },
     { separator: true },
-    { label: '关于 CloudPan', icon: 'info', onClick: () => store.open('settings') }
+    { label: '关于 CloudPan', icon: 'info', onClick: () => store.open('settings', { tab: 'about' }) }
   ])
 }
 

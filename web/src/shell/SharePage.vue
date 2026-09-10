@@ -95,16 +95,30 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
-import { resolveTheme } from '../themes/registry'
+import { resolveTheme, availableThemes } from '../themes/registry'
 import { wallpaperClass } from '../assets/wallpapers'
 import { getToken } from '../api/http'
 
-// 分享页为公开页：按访客本机主题/壁纸渲染（localStorage），缺失时回落默认
+// 分享页为公开页：按站点主题渲染（管理员全局设置，游客/登录用户访问都一致），拉取失败回落 win12
+const siteTheme = ref('win12')
 const wpClass = computed(() => {
-  const t = resolveTheme(localStorage.getItem('cp_theme'))
+  const t = resolveTheme(siteTheme.value)
   const key = localStorage.getItem('cp_wallpaper')
   return wallpaperClass(t.wallpapers.some(w => w.key === key) ? key! : t.defaultWallpaper)
 })
+
+async function loadSiteTheme() {
+  try {
+    const r: any = (await api.get('/site/public')).data
+    const th = r.data?.theme
+    if (th === 'win12' || th === 'macos' || th === 'deepin') {
+      siteTheme.value = th
+      const el = document.documentElement
+      for (const t of availableThemes()) el.classList.remove(t.rootClass)
+      el.classList.add(resolveTheme(th).rootClass)
+    }
+  } catch { /* 回落默认主题 */ }
+}
 
 const route = useRoute()
 const token = route.params.token as string
@@ -189,6 +203,7 @@ async function doSave() {
 }
 
 onMounted(async () => {
+  loadSiteTheme() // 站点主题（公开接口，无需登录）
   try {
     const r: any = (await api.get(`/s/${token}/info`)).data
     if (r.code !== 0) throw new Error(r.msg)

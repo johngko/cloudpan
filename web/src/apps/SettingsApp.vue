@@ -10,7 +10,7 @@
         <!-- 个性化 -->
         <template v-if="tab === 'person'">
           <h2 style="font-size: 19px; margin-bottom: 20px">个性化</h2>
-          <div style="font-size: 13px; color: var(--text-2); margin-bottom: 10px">系统主题（切换后整个桌面外壳随之改变）</div>
+          <div style="font-size: 13px; color: var(--text-2); margin-bottom: 10px">站点主题（管理员设置，对全体用户生效——游客与普通用户访问都看到该主题，且无此设置入口）</div>
           <div style="display: flex; gap: 12px; margin-bottom: 22px">
             <div v-for="t in themes" :key="t.id"
               style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: var(--radius); border: 1.5px solid var(--stroke); background: var(--card)"
@@ -212,17 +212,24 @@ async function addOffline() {
 async function cancelOffline(t: any) {
   try { await adel(`/offline/${t.id}`); loadOffline() } catch (e: any) { alert(e.message) }
 }
-const tabs = [
-  { id: 'person', name: '个性化', icon: 'sun' },
+// 个性化（站点主题/壁纸/深色）为管理员全局设置：仅管理员可见此 tab，
+// 游客与普通用户从所有入口都看不到主题个性化功能
+const isAdmin = computed(() => session.user?.role === 'admin')
+const tabs = computed(() => [
+  ...(isAdmin.value ? [{ id: 'person', name: '个性化', icon: 'sun' }] : []),
   { id: 'account', name: '账号', icon: 'user' },
   { id: 'shares', name: '我的分享', icon: 'share' },
   { id: 'offline', name: '离线下载', icon: 'download' },
   { id: 'about', name: '关于', icon: 'info' }
-]
+])
 const winProps = defineProps<{ winId: number; props: any }>()
 const tab = ref('person')
-// 深链：搜索面板「设置」分类 / 其他入口带 { tab } 打开时直接跳到对应页
-watch(() => winProps.props?.tab, v => { if (v && tabs.some(t => t.id === v)) tab.value = v }, { immediate: true })
+// 当前 tab 不可见时（非管理员无个性化 / 角色异步到位）回落到第一个可见 tab
+watch([tabs, () => session.user?.role], () => {
+  if (!tabs.value.some(t => t.id === tab.value)) tab.value = tabs.value[0]?.id || 'account'
+}, { immediate: true })
+// 深链：搜索面板「设置」分类 / 其他入口带 { tab } 打开时直接跳到对应页（仍受可见性约束）
+watch(() => winProps.props?.tab, v => { if (v && tabs.value.some(t => t.id === v)) tab.value = v }, { immediate: true })
 const nickname = ref(session.user?.nickname || '')
 const oldPwd = ref(''); const newPwd = ref(''); const davPwd = ref('')
 const shares = ref<any[]>([])

@@ -255,6 +255,14 @@
               <div class="ac-set-lbl"><b>公告</b><span>登录页展示的公告文字</span></div>
               <input class="input" v-model="settings.announcement" style="width: 260px" />
             </div>
+            <div class="ac-set-row">
+              <div class="ac-set-lbl"><b>站点主题</b><span>全局生效：游客/普通用户/管理员访问都渲染该主题（非管理员无设置入口）</span></div>
+              <select class="input" v-model="settings.site_theme" style="width: 260px">
+                <option value="win12">Windows 12 概念版</option>
+                <option value="macos">macOS（Sonoma）</option>
+                <option value="deepin">Deepin（DDE）</option>
+              </select>
+            </div>
             <div class="ac-set-sep"></div>
             <div class="ac-set-title">注册</div>
             <div class="ac-set-row">
