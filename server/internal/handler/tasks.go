@@ -366,6 +366,11 @@ func (p *TaskPool) runOffline(t *model.Task) error {
 		return err
 	}
 	total := resp.ContentLength
+	// 硬性总量上限（20GB）：即使未设配额，也防止恶意链接拖爆磁盘
+	const offlineHardCap int64 = 20 << 30
+	if total > offlineHardCap {
+		return fmt.Errorf("文件大小 %dMB 超过 20GB 上限，已拒绝", total>>20)
+	}
 	// 配额预检（用户个人覆盖优先）：已知总大小且将超限时直接失败，避免白下
 	if total > 0 {
 		var u model.User
@@ -389,11 +394,17 @@ func (p *TaskPool) runOffline(t *model.Task) error {
 		}
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
+			written += int64(n)
+			if written > offlineHardCap {
+				// Content-Length 缺失/谎报时按实际流入字节兜底
+				f.Close()
+				os.Remove(tmpPath)
+				return fmt.Errorf("下载量超过 20GB 上限，已中止")
+			}
 			if _, werr := f.Write(buf[:n]); werr != nil {
 				f.Close()
 				return werr
 			}
-			written += int64(n)
 			if total > 0 {
 				pct := int(written * 100 / total)
 				if pct != lastPct {
@@ -694,11 +705,26 @@ func (h *OfflineHandler) Create(c *gin.Context) {
 		return
 	}
 	kind := sniffOfflineKind(in.URL)
+	trimmed := strings.TrimSpace(in.URL)
 	// SSRF 防护：非磁力链（http 直链 / .torrent）都按 URL 校验，禁止内网/保留地址
-	if !strings.HasPrefix(strings.TrimSpace(in.URL), "magnet:") {
+	if !strings.HasPrefix(trimmed, "magnet:") {
 		if err := validateFetchURL(in.URL); err != nil {
 			dto.Fail(c, 400, err.Error())
 			return
+		}
+	}
+	if kind == "bt" {
+		// BT/磁力要求「BT/磁力」功能独立开启（offline_http 只覆盖 HTTP 直链，
+		// 避免仅有直链权限的用户借磁力链走 P2P 下载通道）
+		if !model.AppAllowed("bt", x.user) {
+			dto.Fail(c, 403, "BT/磁力功能未启用")
+			return
+		}
+		if strings.HasPrefix(trimmed, "magnet:") {
+			if err := validateMagnetTrackers(trimmed); err != nil {
+				dto.Fail(c, 400, err.Error())
+				return
+			}
 		}
 	}
 	props, _ := json.Marshal(map[string]interface{}{

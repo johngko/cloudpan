@@ -159,7 +159,11 @@ func (h *AdminHandler) UserResetPassword(c *gin.Context) {
 		dto.Fail(c, 404, "用户不存在")
 		return
 	}
-	model.DB.Model(&u).UpdateColumn("password_hash", hashPassword(in.Password))
+	// 令牌版本自增：重置密码后该用户全部旧 JWT 立即失效
+	model.DB.Model(&u).Updates(map[string]interface{}{
+		"password_hash": hashPassword(in.Password),
+		"token_ver":     u.TokenVer + 1,
+	})
 	middleware.Audit(c, "admin", "重置用户密码 "+u.Username)
 	dto.OK(c, nil)
 }

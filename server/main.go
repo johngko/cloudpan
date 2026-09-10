@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -39,6 +41,26 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
+	// ClientIP 信任边界：默认不信任任何 X-Forwarded-For（直接取 TCP 对端地址），
+	// 防止攻击者伪造 XFF 头绕过登录限速/锁定等按 IP 的防护。
+	// 部署在反向代理之后时，用环境变量 CP_TRUSTED_PROXIES 显式声明代理网段（逗号分隔 CIDR/IP），
+	// 此时 gin 才从 XFF 链中取真实客户端 IP。
+	if tp := strings.TrimSpace(os.Getenv("CP_TRUSTED_PROXIES")); tp != "" {
+		var proxies []string
+		for _, s := range strings.Split(tp, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				proxies = append(proxies, s)
+			}
+		}
+		if len(proxies) > 0 {
+			if err := r.SetTrustedProxies(proxies); err != nil {
+				log.Printf("CP_TRUSTED_PROXIES 配置无效，回退为不信任任何代理: %v", err)
+			}
+		}
+	} else {
+		// 显式置空 = 不信任任何代理
+		_ = r.SetTrustedProxies(nil)
+	}
 	// 访问日志打码敏感查询参数：t=JWT、token=直链签名、st=分享提取码、pt=浏览器代理票据
 	r.Use(middleware.AccessLogger("t", "token", "st", "pt"), gin.Recovery(), middleware.SecurityHeaders())
 	r.MaxMultipartMemory = 64 << 20

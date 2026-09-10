@@ -358,6 +358,37 @@ async function renderDocx() {
   }
 }
 
+// xlsx 预览 HTML 的 DOM 净化：白名单只放行表格类标签与安全属性，
+// 其余标签（script/style/iframe/img 等）整体替换为纯文本，事件属性与
+// javascript:/expression()/url() 值一律剔除——恶意构造的表格文件即便携带
+// HTML 载荷，渲染在本域也不会执行（XSS 兜底，sheet_to_html 输出同样过一遍）
+const SHEET_ALLOWED_TAGS = new Set(['TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'COL', 'COLGROUP', 'BR', 'SPAN', 'DIV', 'P', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'FONT'])
+function sanitizeSheetHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const walk = (el: Element) => {
+    for (const child of Array.from(el.children)) {
+      walk(child)
+      if (!SHEET_ALLOWED_TAGS.has(child.tagName)) {
+        const span = doc.createElement('span')
+        span.textContent = child.textContent ?? ''
+        child.replaceWith(span)
+        continue
+      }
+      for (const attr of Array.from(child.attributes)) {
+        const n = attr.name.toLowerCase()
+        const dangerous = /javascript:|vbscript:|expression\(|url\(/i.test(attr.value)
+        if (n === 'style') {
+          if (dangerous) child.removeAttribute(attr.name)
+        } else if (dangerous || !['colspan', 'rowspan', 'class'].includes(n)) {
+          child.removeAttribute(attr.name)
+        }
+      }
+    }
+  }
+  walk(doc.body)
+  return doc.body.innerHTML
+}
+
 async function renderXlsx() {
   try {
     const buf = await fetchBuffer()
@@ -372,11 +403,11 @@ async function renderXlsx() {
         // 超大表限制预览行数，避免只读 DOM 过大导致打开卡顿；完整内容请下载
         const oldRef = sh['!ref']
         sh['!ref'] = 'A1:' + colAddr(Math.max(cols, 1)) + MAX_PREVIEW_ROWS
-        let html = XLSX.utils.sheet_to_html(sh, { header: '', footer: '' })
+        let html = sanitizeSheetHtml(XLSX.utils.sheet_to_html(sh, { header: '', footer: '' }))
         sh['!ref'] = oldRef
         sheetHtml.value = html + `<tr><td colspan="${Math.max(cols, 1)}" style="text-align:center;color:#98a0a8;padding:10px">… 仅预览前 ${MAX_PREVIEW_ROWS} 行（共 ${rows} 行），完整内容请下载查看 …</td></tr>`
       } else {
-        sheetHtml.value = XLSX.utils.sheet_to_html(sh, { header: '', footer: '' })
+        sheetHtml.value = sanitizeSheetHtml(XLSX.utils.sheet_to_html(sh, { header: '', footer: '' }))
       }
     }
     render(0)

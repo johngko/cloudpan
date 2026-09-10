@@ -73,6 +73,51 @@ func validateFetchURL(raw string) error {
 	return nil
 }
 
+// validateMagnetTrackers 校验磁力链中显式指定的 tracker（tr= 参数）。
+// 磁力链本体不经过服务器代下载（由 BT 客户端按 P2P 协议工作），但 http/https tracker
+// 会由服务器发起真实请求，必须同样落入 SSRF 防护：IP 字面量直接判网段，域名解析后
+// 任一结果落在内网/保留段即拒绝。udp tracker 不发起服务器 HTTP 请求，放行。
+func validateMagnetTrackers(magnet string) error {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return fmt.Errorf("磁力链非法")
+	}
+	trs, _ := url.ParseQuery(u.Query().Encode())
+	for _, raw := range trs["tr"] {
+		tu, perr := url.Parse(raw)
+		if perr != nil {
+			return fmt.Errorf("磁力链 tracker 非法")
+		}
+		switch tu.Scheme {
+		case "udp", "websocket", "wss":
+			continue // P2P/长连接协议，不走服务器 HTTP
+		case "http", "https":
+			host := tu.Hostname()
+			if host == "" {
+				return fmt.Errorf("磁力链 tracker 缺少主机")
+			}
+			if ip := net.ParseIP(host); ip != nil {
+				if ssrfBlocked(ip) {
+					return fmt.Errorf("磁力链 tracker 指向内网/保留网段，已拒绝")
+				}
+				continue
+			}
+			ips, lerr := net.DefaultResolver.LookupIPAddr(context.Background(), host)
+			if lerr != nil {
+				return fmt.Errorf("磁力链 tracker 域名无法解析: %s", host)
+			}
+			for _, ipa := range ips {
+				if ssrfBlocked(ipa.IP) {
+					return fmt.Errorf("磁力链 tracker 域名 %s 解析到内网/保留地址，已拒绝", host)
+				}
+			}
+		default:
+			return fmt.Errorf("磁力链 tracker 协议不支持: %s", tu.Scheme)
+		}
+	}
+	return nil
+}
+
 // ssrfCheckRedirect 每次重定向都复检目标（含重定向次数上限）
 func ssrfCheckRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {

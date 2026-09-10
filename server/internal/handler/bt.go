@@ -60,15 +60,19 @@ func (p *TaskPool) runBT(t *model.Task) error {
 	if strings.HasPrefix(props.URL, "magnet:") {
 		tr, err = client.AddMagnet(props.URL)
 	} else {
-		// http(s) .torrent 种子文件（SSRF 防护客户端）
+		// http(s) .torrent 种子文件（SSRF 防护客户端）；.torrent 正常为 KB 级，100MB 上限兜底
 		resp, herr := ssrfHTTP.Get(props.URL)
 		if herr != nil {
 			return fmt.Errorf("种子下载失败: %w", herr)
 		}
-		body, rerr := io.ReadAll(resp.Body)
+		const maxTorrent = 100 << 20
+		body, rerr := io.ReadAll(io.LimitReader(resp.Body, maxTorrent))
 		resp.Body.Close()
 		if rerr != nil {
 			return rerr
+		}
+		if len(body) >= maxTorrent {
+			return fmt.Errorf("种子文件过大（超过 100MB），已拒绝")
 		}
 		if resp.StatusCode >= 400 {
 			return fmt.Errorf("种子下载失败 HTTP %d", resp.StatusCode)
@@ -94,8 +98,21 @@ func (p *TaskPool) runBT(t *model.Task) error {
 	props.RTName = info.BestName()
 	p.saveProps(t.ID, props)
 
-	tr.DownloadAll()
 	total := info.TotalLength()
+	// 硬性总量上限（20GB）：恶意种子可虚报/携带超大内容，先卡死再下载
+	if total > 20<<30 {
+		return fmt.Errorf("种子总大小 %dMB 超过 20GB 上限，已拒绝", total>>20)
+	}
+	// 配额预检：已知总大小且将超限时不开始下载
+	if u := userOfID(t.UserID); u != nil {
+		var g model.UserGroup
+		if model.DB.First(&g, u.GroupID).Error == nil {
+			if limit, limited := effectiveQuotaBytes(u, &g); limited && u.UsedBytes+total > limit {
+				return fmt.Errorf("超出配额（已用 %dMB / 上限 %dMB），未开始下载", u.UsedBytes>>20, limit>>20)
+			}
+		}
+	}
+	tr.DownloadAll()
 
 	// 进度循环
 	for {

@@ -150,23 +150,42 @@ func DavAuth() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		// 与 Web 登录同一套失败锁定（IP+用户名，5 次失败锁 15 分钟），防 WebDAV 密码暴破
+		lockKey := c.ClientIP() + "|" + user
+		if loginLocked(lockKey) {
+			c.String(http.StatusTooManyRequests, "失败次数过多，已临时锁定，请 15 分钟后再试")
+			c.Abort()
+			return
+		}
 		var u model.User
 		if err := model.DB.Where("username = ? AND disabled = false", user).First(&u).Error; err != nil {
+			loginFail(lockKey)
 			c.String(http.StatusUnauthorized, "用户不存在")
 			c.Abort()
 			return
 		}
 		if u.WebdavPasswordHash == "" || bcryptCompare(u.WebdavPasswordHash, pass) != nil {
+			loginFail(lockKey)
 			c.String(http.StatusUnauthorized, "WebDAV 密码错误（请在设置中先行设置）")
 			c.Abort()
 			return
 		}
+		loginFails.Delete(lockKey)
 		var g model.UserGroup
 		model.DB.First(&g, u.GroupID)
 		if !g.AllowWebdav {
 			c.String(http.StatusForbidden, "当前用户组未启用 WebDAV")
 			c.Abort()
 			return
+		}
+		// 只读用户组：WebDAV 只放行读操作，拒绝一切变更请求
+		if g.ReadOnly {
+			switch c.Request.Method {
+			case http.MethodPut, http.MethodDelete, http.MethodPost, "MKCOL", "COPY", "MOVE", "PROPPATCH":
+				c.String(http.StatusForbidden, "当前用户组为只读")
+				c.Abort()
+				return
+			}
 		}
 		// /dav/{username}/... 校验用户名一致
 		rest := strings.TrimPrefix(c.Request.URL.Path, "/dav/")

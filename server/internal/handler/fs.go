@@ -96,6 +96,11 @@ func (h *SiteHandler) Policies(c *gin.Context) {
 				}
 			}
 		}
+		// 信息泄露防护：非管理员不暴露服务器物理根路径与驱动状态明细（可能含路径/凭据错误上下文）
+		if x.user.Role != "admin" {
+			p.RootPath = ""
+			p.StatusMsg = ""
+		}
 		out = append(out, p)
 	}
 	dto.OK(c, out)
@@ -823,6 +828,9 @@ func (h *SiteHandler) ReadText(c *gin.Context) {
 }
 
 func (h *SiteHandler) WriteText(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in struct {
 		PolicyID uint   `json:"policyId"`
 		Path     string `json:"path"`
@@ -943,27 +951,48 @@ func (h *SiteHandler) Properties(c *gin.Context) {
 	}
 	props, _ := h.Fs.Properties(d, vp)
 	out := gin.H{"entry": e, "count": props.Count, "dirCount": props.DirCount, "size": props.Size, "path": vp}
-	// 文件属性附带 SHA-256（流式计算，≤4GB；超大文件不计算避免阻塞）
+	// 文件属性附带 SHA-256：本地盘优先复用秒传账本（免重读大文件），
+	// 未命中/大小不符/云盘才流式计算（≤4GB；超大文件不计算避免阻塞）
 	if !e.IsDir {
-		const maxHashSize = int64(4 << 30)
-		if e.Size <= maxHashSize {
-			if rc, err := d.Open(vp); err == nil {
-				hf := sha256.New()
-				_, cerr := io.Copy(hf, rc)
-				rc.Close()
-				if cerr == nil {
-					out["sha256"] = hex.EncodeToString(hf.Sum(nil))
-				}
+		out["sha256"] = ""
+		if phys, perr := fscore.PhysicalOf(d, vp); perr == nil {
+			if s, ok := fscore.HashOfPhys(phys, e.Size); ok {
+				out["sha256"] = s
 			}
-		} else {
-			out["sha256"] = ""
-			out["sha256Note"] = "文件超过 4GB，未计算"
+		}
+		if out["sha256"] == "" {
+			const maxHashSize = int64(4 << 30)
+			if e.Size <= maxHashSize {
+				if rc, err := d.Open(vp); err == nil {
+					hf := sha256.New()
+					_, cerr := io.Copy(hf, rc)
+					rc.Close()
+					if cerr == nil {
+						out["sha256"] = hex.EncodeToString(hf.Sum(nil))
+					}
+				}
+			} else {
+				out["sha256Note"] = "文件超过 4GB，未计算"
+			}
 		}
 	}
 	dto.OK(c, out)
 }
 
 // ---- 原始流（预览）与下载 ----
+
+// forceAttachmentExts 浏览器会当作可执行文档渲染的扩展名：
+// 若以 inline 方式直接响应，内容里的脚本会在本站域执行（存储型 XSS 面）。
+// 这些类型一律强制 attachment 下载（图片查看器等预览入口按扩展名白名单工作，不受影响）。
+var forceAttachmentExts = map[string]bool{"html": true, "htm": true, "xhtml": true, "svg": true}
+
+// dispositionOf 按扩展名决定 Content-Disposition：危险文档类型强制下载，其余 inline
+func dispositionOf(name string) string {
+	if forceAttachmentExts[strings.ToLower(strings.TrimPrefix(path.Ext(name), "."))] {
+		return "attachment"
+	}
+	return "inline"
+}
 
 func (h *SiteHandler) Raw(c *gin.Context) {
 	_, d, ok := h.resolve(c)
@@ -993,7 +1022,7 @@ func (h *SiteHandler) Raw(c *gin.Context) {
 		h.serveCover(c, x, d, rc, vp, name)
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename*=UTF-8''%s`, urlEscape(name)))
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(name), urlEscape(name)))
 	// no-cache 允许 304 协商缓存，但文件被在线编辑覆盖后必须重新拉取最新内容
 	c.Header("Cache-Control", "no-cache")
 	rc = wrapThrottle(rc, x.group.DownloadSpeedKB)
@@ -1036,7 +1065,7 @@ func (h *SiteHandler) serveThumb(c *gin.Context, x ctx3, d fscore.Driver, rc fsc
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		// 解码失败（可能是伪装扩展名）：回退原流，不落缓存
-		c.Header("Content-Disposition", fmt.Sprintf(`inline; filename*=UTF-8''%s`, urlEscape(name)))
+		c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(name), urlEscape(name)))
 		c.Header("Cache-Control", "no-cache")
 		http.ServeContent(c.Writer, c.Request, name, time.UnixMilli(e.ModTime), bytes.NewReader(data))
 		return
@@ -1057,7 +1086,7 @@ func (h *SiteHandler) serveThumb(c *gin.Context, x ctx3, d fscore.Driver, rc fsc
 
 // serveRawStream 无缩略图语义时的原流输出（inline + no-cache）
 func (h *SiteHandler) serveRawStream(c *gin.Context, rc fscore.ReadSeekCloser, name string) {
-	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename*=UTF-8''%s`, urlEscape(name)))
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(name), urlEscape(name)))
 	c.Header("Cache-Control", "no-cache")
 	http.ServeContent(c.Writer, c.Request, name, modTimeOf(rc), rc)
 }
@@ -1371,6 +1400,9 @@ func (h *SiteHandler) Download(c *gin.Context) {
 // ---- 压缩 / 解压（同步实现，后续接入任务队列） ----
 
 func (h *SiteHandler) Archive(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
 	var in struct {
 		PolicyID uint     `json:"policyId"`
 		Paths    []string `json:"paths"`

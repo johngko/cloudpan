@@ -429,7 +429,8 @@ func (h *ShareHandler) serveShareFile(c *gin.Context, sh *model.Share, target st
 		return
 	}
 	defer rc.Close()
-	disposition := "inline"
+	// dispositionOf 对 html/svg 等可执行文档类型强制 attachment（XSS 防护）
+	disposition := dispositionOf(e.Name)
 	if attachment {
 		disposition = "attachment"
 	}

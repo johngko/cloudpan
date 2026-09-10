@@ -198,6 +198,24 @@ func reconcileHash(hash string) {
 	}
 }
 
+// HashOfPhys 按物理路径反查秒传账本，返回 sha256 hex。
+// 属性面板等场景优先走这里（免重读大文件流式算哈希）；wantSize 传入时
+// 额外要求索引记录的大小一致（物理文件在账本登记后被绕过系统修改则视为失效）。
+func HashOfPhys(phys string, wantSize int64) (string, bool) {
+	var c model.FileHashCopy
+	if err := model.DB.Where("phys_path = ?", phys).First(&c).Error; err != nil {
+		return "", false
+	}
+	var fh model.FileHash
+	if err := model.DB.Where("hash = ?", c.Hash).First(&fh).Error; err != nil {
+		return "", false
+	}
+	if wantSize > 0 && fh.Size != wantSize {
+		return "", false
+	}
+	return fh.Hash, true
+}
+
 // HashPathGone 物理文件（或目录）被永久删除后调用：移除副本记录并对账（目录遍历其下文件；须在删除前或删除后调用均可）
 func HashPathGone(phys string) {
 	if phys == "" {
@@ -350,7 +368,8 @@ func (s *Service) SaveChunk(sid string, idx int, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	n, err := io.Copy(f, r)
+	// 限制读取上限（声明分片大小 + 4KB 容差）：超限请求提前截断，避免恶意大分片占满临时盘
+	n, err := io.Copy(f, io.LimitReader(r, sess.ChunkSize+4096))
 	closeErr := f.Close()
 	if err != nil {
 		return err
@@ -699,6 +718,25 @@ func (s *Service) Properties(d Driver, vp string) (*Properties, error) {
 // 流式实现：先落盘到临时区再解析目录表，zip 本身不整体读入内存（大 zip 不会 OOM）。
 // 返回解压写入的总字节数（未压缩大小，供配额记账）；precheck 在写任何文件前
 // 以该总数做配额预检（返回 error 则整体中止、不落盘）。
+// 解压资源硬上限：防 zip-bomb 类恶意归档拖爆磁盘/CPU（配额预检是业务约束，这里是安全兜底）
+const (
+	extractInputCap   = int64(20) << 30 // 压缩文件本身 ≤ 20GB
+	extractTotalCap   = int64(20) << 30 // 解压产物总量 ≤ 20GB
+	extractMaxEntries = 100000          // 条目数 ≤ 10 万
+)
+
+// copyArchiveInput 把归档完整复制到临时区，超过硬上限即中止
+func copyArchiveInput(rc io.Reader, tmp *os.File) error {
+	n, err := io.Copy(tmp, io.LimitReader(rc, extractInputCap+1))
+	if err != nil {
+		return err
+	}
+	if n > extractInputCap {
+		return errors.New("归档文件过大（超过 20GB），已拒绝解压")
+	}
+	return nil
+}
+
 func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, precheck func(totalUncompressed int64) error) (int64, error) {
 	rc, err := d.Open(zipVP)
 	if err != nil {
@@ -714,7 +752,7 @@ func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, pr
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
-	if _, err := io.Copy(tmp, rc); err != nil {
+	if err := copyArchiveInput(rc, tmp); err != nil {
 		tmp.Close()
 		return 0, err
 	}
@@ -728,6 +766,9 @@ func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, pr
 	zr, err := zip.NewReader(zf, fi.Size())
 	if err != nil {
 		return 0, errors.New("不是有效的 zip 文件")
+	}
+	if len(zr.File) > extractMaxEntries {
+		return 0, errors.New("归档条目数超过 10 万，已拒绝解压")
 	}
 	parent := zipVP[:strings.LastIndex(zipVP, "/")]
 	if parent == "" {
@@ -759,6 +800,9 @@ func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, pr
 			totalFiles++
 			totalUncompressed += int64(f.UncompressedSize64)
 		}
+	}
+	if totalUncompressed > extractTotalCap {
+		return 0, fmt.Errorf("解压后总大小 %dMB 超过 20GB 上限，已拒绝", totalUncompressed>>20)
 	}
 	if precheck != nil && totalUncompressed > 0 {
 		if err := precheck(totalUncompressed); err != nil {
@@ -938,7 +982,7 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
-	if _, err := io.Copy(tmp, rc); err != nil {
+	if err := copyArchiveInput(rc, tmp); err != nil {
 		tmp.Close()
 		return 0, err
 	}
@@ -1009,6 +1053,12 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 		case tar.TypeDir:
 			_ = d.Mkdir(vp)
 		case tar.TypeReg:
+			if n >= extractMaxEntries {
+				return 0, errors.New("归档条目数超过 10 万，已拒绝解压")
+			}
+			if written+hdr.Size > extractTotalCap {
+				return 0, fmt.Errorf("解压后总大小超过 20GB 上限，已拒绝")
+			}
 			if err := d.CreateFile(vp, io.LimitReader(tr, hdr.Size)); err != nil {
 				return 0, err
 			}

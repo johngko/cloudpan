@@ -36,6 +36,8 @@ type User struct {
 	// 个人应用权限覆盖：JSON {"<appKey>":true|false}，仅存显式设置项，优先于用户组（见 appperm.go）
 	AppPerms           string `gorm:"size:512;default:''" json:"appPerms"`
 	UsedBytes          int64  `gorm:"default:0" json:"usedBytes"`
+	// 令牌版本：改密/重置密码时自增，使该用户旧 JWT 立即失效（旧令牌内嵌旧版本号，中间件比对拒绝）
+	TokenVer           uint   `gorm:"default:0" json:"-"`
 	CreatedAt          time.Time `json:"createdAt"`
 	LastLoginAt        *time.Time  `json:"lastLoginAt"`
 }
@@ -375,10 +377,13 @@ func visitorGroupProfile() UserGroup {
 }
 
 func seed() {
+	// 默认用户组禁用终端（安全加固：终端可执行任意 shell 命令，仅管理员默认可用；
+	// 管理员可在用户组权限里显式放行）
+	const defaultGroupAppPerms = `{"terminal":false}`
 	var gc int64
 	DB.Model(&UserGroup{}).Count(&gc)
 	if gc == 0 {
-		DB.Create(&UserGroup{Name: "默认用户组", QuotaMB: 10240, AllowShare: true, AllowWebdav: true, AllowArchive: true, AllowOffline: true, IsDefault: true, Remark: "系统默认"})
+		DB.Create(&UserGroup{Name: "默认用户组", QuotaMB: 10240, AllowShare: true, AllowWebdav: true, AllowArchive: true, AllowOffline: true, IsDefault: true, AppPerms: defaultGroupAppPerms, Remark: "系统默认"})
 		vis := visitorGroupProfile()
 		DB.Create(&vis)
 	} else {
@@ -393,13 +398,25 @@ func seed() {
 				"read_only": prof.ReadOnly, "app_perms": prof.AppPerms, "remark": prof.Remark,
 			})
 		}
+		// 存量部署：默认用户组幂等补「终端禁用」（已显式设置过的尊重管理员自定义，不覆盖）
+		var dg UserGroup
+		if err := DB.Where("is_default = ?", true).First(&dg).Error; err == nil {
+			perms := ParseAppPerms(dg.AppPerms)
+			if _, ok := perms["terminal"]; !ok {
+				perms["terminal"] = false
+				DB.Model(&dg).UpdateColumn("app_perms", AppPermsJSON(perms))
+			}
+		}
 	}
 	var uc int64
 	DB.Model(&User{}).Count(&uc)
 	if uc == 0 {
 		var g UserGroup
 		DB.Where("is_default = ?", true).First(&g)
-		DB.Create(&User{Username: "admin", PasswordHash: hashPwd("admin123"), Nickname: "管理员", Role: "admin", GroupID: g.ID})
+		// 首次部署管理员密码随机生成、仅启动日志打印一次（不落库外任何位置），登录后立即改密
+		adminPwd := "admin" + randomToken(8)
+		DB.Create(&User{Username: "admin", PasswordHash: hashPwd(adminPwd), Nickname: "管理员", Role: "admin", GroupID: g.ID})
+		log.Printf("[CloudPan] 首次部署：初始管理员密码为 %s（仅本次日志输出，登录请立即修改）", adminPwd)
 	}
 	// 游客账号：登录页「游客登录」的共享身份（密码随机不可知，仅经 /auth/guest 登录）。
 	// 幂等：缺失即补建；管理员关闭游客登录用站点开关 guest_login 或禁用该账号

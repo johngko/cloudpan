@@ -16,11 +16,12 @@ import (
 type Claims struct {
 	UID  uint   `json:"uid"`
 	Role string `json:"role"`
+	Ver  uint   `json:"ver"` // 用户令牌版本（User.TokenVer）：改密后旧令牌立即失效
 	jwt.RegisteredClaims
 }
 
-func MakeToken(uid uint, role string, secret []byte, ttl time.Duration) (string, error) {
-	claims := Claims{UID: uid, Role: role,
+func MakeToken(uid uint, role string, ver uint, secret []byte, ttl time.Duration) (string, error) {
+	claims := Claims{UID: uid, Role: role, Ver: ver,
 		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)), IssuedAt: jwt.NewNumericDate(time.Now())}}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(secret)
 }
@@ -58,6 +59,11 @@ func Auth(secret []byte) gin.HandlerFunc {
 		var user model.User
 		if err := model.DB.First(&user, claims.UID).Error; err != nil || user.Disabled {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "账号不可用"})
+			return
+		}
+		// 令牌版本比对：改密/重置密码后旧令牌作废（存量令牌无 ver 字段解析为 0，与默认 TokenVer 一致）
+		if user.TokenVer != claims.Ver {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "登录状态已失效，请重新登录"})
 			return
 		}
 		c.Set("user", &user)

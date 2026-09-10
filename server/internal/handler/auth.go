@@ -71,8 +71,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		dto.Fail(c, 4001, "用户名或密码错误")
 		return
 	}
+	// 枚举防护：账号禁用与密码错误返回完全一致的提示，避免借响应差异枚举有效用户名
 	if u.Disabled {
-		dto.Fail(c, 4002, "账号已被禁用")
+		dto.Fail(c, 4001, "用户名或密码错误")
 		return
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)) != nil {
@@ -83,7 +84,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	loginFails.Delete(lockKey)
 	now := time.Now()
 	model.DB.Model(&u).UpdateColumn("last_login_at", &now)
-	token, err := middleware.MakeToken(u.ID, u.Role, h.Secret, 7*24*time.Hour)
+	token, err := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, 7*24*time.Hour)
 	if err != nil {
 		dto.Fail(c, 500, "签发令牌失败")
 		return
@@ -108,7 +109,7 @@ func (h *AuthHandler) GuestLogin(c *gin.Context) {
 	}
 	now := time.Now()
 	model.DB.Model(&u).UpdateColumn("last_login_at", &now)
-	token, err := middleware.MakeToken(u.ID, u.Role, h.Secret, 24*time.Hour)
+	token, err := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, 24*time.Hour)
 	if err != nil {
 		dto.Fail(c, 500, "签发令牌失败")
 		return
@@ -157,7 +158,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		dto.Fail(c, 500, "注册失败")
 		return
 	}
-	token, _ := middleware.MakeToken(u.ID, u.Role, h.Secret, 7*24*time.Hour)
+	token, _ := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, 7*24*time.Hour)
 	dto.OK(c, gin.H{"token": token, "user": u, "isGuest": false})
 }
 
@@ -207,7 +208,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		dto.Fail(c, 4006, "原密码错误")
 		return
 	}
-	model.DB.Model(u).UpdateColumn("password_hash", hashPassword(in.New))
+	// 令牌版本自增：改密后该用户其余会话的旧 JWT 立即失效
+	model.DB.Model(u).Updates(map[string]interface{}{
+		"password_hash": hashPassword(in.New),
+		"token_ver":     u.TokenVer + 1,
+	})
 	middleware.Audit(c, "password", "修改登录密码")
 	dto.OK(c, nil)
 }

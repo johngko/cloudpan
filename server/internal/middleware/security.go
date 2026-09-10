@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -10,25 +11,68 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"cloudpan/internal/dto"
+	"cloudpan/internal/model"
 )
 
-// SecurityHeaders 全局安全响应头。
-// CSP 说明：script-src/frame-src 放行 https: 是因为 ONLYOFFICE 文档服务器地址可配置，
-// DocsAPI 会从该域名动态注入脚本与 iframe；对自托管场景如需收紧，可在此改为具体来源。
-func SecurityHeaders() gin.HandlerFunc {
-	const csp = "default-src 'self'; " +
-		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; " +
-		"style-src 'self' 'unsafe-inline' https:; " +
-		"img-src 'self' data: blob: https:; " +
-		"media-src 'self' blob: https:; " +
-		"connect-src 'self' https:; " +
+// dsOrigin 读取站点配置的 ONLYOFFICE 文档服务器 origin（scheme://host），未配置返回空。
+// 站点设置变更最多 10 秒后生效（下方 TTL 缓存）。
+func dsOrigin() string {
+	var row model.SiteSetting
+	if err := model.DB.Where("key = ?", "onlyoffice_url").First(&row).Error; err != nil || row.Value == "" {
+		return ""
+	}
+	u, err := url.Parse(row.Value)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// buildCSP 按当前 ONLYOFFICE 来源生成 CSP。
+// 收紧点（相对旧版）：
+//  - 移除 'unsafe-eval' 与 script/style/connect/frame 的 https: 通配——
+//    原写法等于允许任意第三方站点注入脚本/建立连接，是存储型 XSS 的放大器；
+//  - ONLYOFFICE 文档服务器是动态配置的第三方来源，DocsAPI 需要从其加载脚本、
+//    建 iframe、发起 API 连接，按配置值精确放行该 origin 即可。
+func buildCSP(origin string) string {
+	csp := "default-src 'self'; " +
+		"script-src 'self' 'unsafe-inline'; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data: blob:; " +
+		"media-src 'self' blob:; " +
+		"connect-src 'self'; " +
 		"font-src 'self' data:; " +
-		"frame-src 'self' https:; " +
+		"frame-src 'self'; " +
 		"frame-ancestors 'none'; " +
 		"object-src 'none'; " +
 		"base-uri 'self'; " +
 		"form-action 'self'"
+	if origin != "" {
+		csp = strings.ReplaceAll(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' "+origin)
+		csp = strings.ReplaceAll(csp, "connect-src 'self'", "connect-src 'self' "+origin)
+		csp = strings.ReplaceAll(csp, "frame-src 'self'", "frame-src 'self' "+origin)
+		csp = strings.ReplaceAll(csp, "img-src 'self' data: blob:", "img-src 'self' data: blob: "+origin)
+		csp = strings.ReplaceAll(csp, "media-src 'self' blob:", "media-src 'self' blob: "+origin)
+		csp = strings.ReplaceAll(csp, "font-src 'self' data:", "font-src 'self' data: "+origin)
+	}
+	return csp
+}
+
+// SecurityHeaders 全局安全响应头（CSP 按请求生成，10 秒 TTL 缓存避免每请求查库）
+func SecurityHeaders() gin.HandlerFunc {
+	var (
+		mu       sync.Mutex
+		cached   string
+		cachedAt time.Time
+	)
 	return func(c *gin.Context) {
+		mu.Lock()
+		if time.Since(cachedAt) > 10*time.Second {
+			cached = buildCSP(dsOrigin())
+			cachedAt = time.Now()
+		}
+		csp := cached
+		mu.Unlock()
 		h := c.Writer.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")

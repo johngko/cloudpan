@@ -12,6 +12,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -379,9 +380,26 @@ func (h *OfficeHandler) Callback(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"error": 0})
 }
 
-// saveCallbackBody 拉取 DS 保存产物并覆盖原文件（覆盖前归档旧版本）
+// saveCallbackBody 拉取 DS 保存产物并覆盖原文件（覆盖前归档旧版本）。
+// 安全：cbURL 指向 ONLYOFFICE 文档服务器（DS）的受控地址，必须与站点配置的
+// onlyoffice_url 同 host 且仅 http/https，防止回调被利用发起对任意内网地址的请求（SSRF）。
 func (h *OfficeHandler) saveCallbackBody(cbURL, vp string, d fscore.Driver, archive func(phys string), auditDetail string) {
-	resp, err := http.Get(cbURL)
+	// host 白名单校验：仅允许拉取配置中 ONLYOFFICE 服务同源的地址
+	u, err := url.Parse(cbURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return
+	}
+	allowed := ""
+	if v := GetSiteSettings()["onlyoffice_url"]; v != "" {
+		if du, perr := url.Parse(v); perr == nil && du.Host != "" {
+			allowed = du.Host
+		}
+	}
+	if allowed == "" || u.Host != allowed {
+		return // 与配置的 ONLYOFFICE 服务不同源，拒绝拉取
+	}
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(cbURL)
 	if err != nil {
 		return
 	}

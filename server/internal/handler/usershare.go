@@ -16,15 +16,24 @@ import (
 // UserShareHandler 站内用户共享：把目录共享给其他注册用户（ro 只读 / rw 可写）
 type UserShareHandler struct{ Site *SiteHandler }
 
-// Users 列出可共享目标用户（登录即可见，仅基础字段）
+// Users 列出可共享目标用户（登录即可见，仅基础字段）。
+// 游客（共享账号）无共享发起能力，不开放用户枚举接口
 func (h *UserShareHandler) Users(c *gin.Context) {
+	if model.IsGuestUser(ctxOf(c).user) {
+		dto.Fail(c, 403, "游客不能使用该功能")
+		return
+	}
 	var items []model.User
 	model.DB.Where("disabled = false").Select("id, username, nickname, avatar").Find(&items)
 	dto.OK(c, items)
 }
 
-// Groups 列出用户组（共享对话框选组用；登录即可见，仅 id+名称）
+// Groups 列出用户组（共享对话框选组用；登录即可见，仅 id+名称）。游客同上
 func (h *UserShareHandler) Groups(c *gin.Context) {
+	if model.IsGuestUser(ctxOf(c).user) {
+		dto.Fail(c, 403, "游客不能使用该功能")
+		return
+	}
 	var items []model.UserGroup
 	model.DB.Select("id, name").Order("id").Find(&items)
 	dto.OK(c, items)
@@ -301,7 +310,7 @@ func (h *UserShareHandler) Raw(c *gin.Context) {
 	}
 	defer rc.Close()
 	rc = wrapThrottle(rc, ctxOf(c).group.DownloadSpeedKB)
-	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename*=UTF-8''%s`, urlEscape(e.Name)))
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(e.Name), urlEscape(e.Name)))
 	httpServe(c, e.Name, modTimeOf(rc), rc)
 }
 

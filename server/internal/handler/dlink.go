@@ -132,11 +132,12 @@ func (h *DLHandler) Serve(c *gin.Context) {
 	}
 	defer rc.Close()
 	name := baseOf(t.Path)
+	// html/svg 等可执行文档类型即使请求 inline 也强制 attachment（XSS 防护）
+	disposition := dispositionOf(name)
 	if c.Query("att") == "1" {
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, urlEscape(name)))
-	} else {
-		c.Header("Content-Disposition", fmt.Sprintf(`inline; filename*=UTF-8''%s`, urlEscape(name)))
+		disposition = "attachment"
 	}
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, disposition, urlEscape(name)))
 	// 免登录直链：全局共享桶限速（20MB/s），防签名 URL 被滥用
 	rc = wrapDlink(rc)
 	http.ServeContent(c.Writer, c.Request, name, modTimeOf(rc), rc)

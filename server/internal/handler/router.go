@@ -25,10 +25,12 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 	// 公开分享（受「公开分享」功能门控）
 	sh := &ShareHandler{Site: site, Secret: cfg.Secret}
+	// 分享提取码验证按 IP 限速：带密码的分享链接可被暴力试码
+	verifyLimiter := middleware.NewIPRateLimiter(20, 8) // 20 次/分钟，突发 8
 	sg := api.Group("/s/:token", middleware.AppGate("share"))
 	{
 		sg.GET("/info", sh.Info)
-		sg.POST("/verify", sh.Verify)
+		sg.POST("/verify", middleware.RateLimit(verifyLimiter), sh.Verify)
 		sg.GET("/list", sh.List)
 		sg.GET("/download", sh.Download)
 		sg.GET("/raw", sh.Raw)
@@ -102,11 +104,11 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		office := &OfficeHandler{Site: site}
 		ug.GET("/office/config", middleware.AppGate("office"), office.Config)
 
-		// 云盘授权
+		// 云盘授权（管理员专属：涉及云盘凭据绑定/token 交换，普通用户无权限操作存储策略）
 		ca := &CloudAuth{Site: site}
-		ug.GET("/cloud/auth-url", ca.AuthURL)
-		ug.POST("/cloud/exchange", ca.Exchange)
-		ug.GET("/cloud/status", ca.Status)
+		ug.GET("/cloud/auth-url", middleware.AdminOnly(), ca.AuthURL)
+		ug.POST("/cloud/exchange", middleware.AdminOnly(), ca.Exchange)
+		ug.GET("/cloud/status", middleware.AdminOnly(), ca.Status)
 
 		// 离线下载（HTTP 或 BT 任一启用即放行）
 		off := &OfflineHandler{}
@@ -142,19 +144,21 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		// 系统功能清单（应用中心数据源）
 		ug.GET("/apps", site.AppList)
 
-		// 终端：本地真实 shell（PTY/ConPTY）/ 远程 SSH 终端 + SFTP 文件管理（受「终端」功能门控）
-		th := NewTerminalHandler(cfg.Secret)
-		ug.GET("/terminal/ws", middleware.AppGate("terminal"), th.WebSocket)
-		ug.GET("/terminal/platform", th.Platform)
-		ug.POST("/terminal/conns", middleware.AppGate("terminal"), th.ConnSave)
-		ug.GET("/terminal/conns", th.ConnList)
-		ug.PUT("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnUpdate)
-		ug.DELETE("/terminal/conns/:id", th.ConnDelete)
-		ug.POST("/terminal/conns/:id/test", middleware.AppGate("terminal"), th.ConnTest)
-		ug.GET("/terminal/fs/list", th.FSList)
-		ug.POST("/terminal/fs/op", middleware.AppGate("terminal"), th.FSOps)
-		ug.GET("/terminal/fs/download", th.FSDownload)
-		ug.POST("/terminal/fs/upload", middleware.AppGate("terminal"), th.FSUpload)
+			// 终端：本地真实 shell（PTY/ConPTY）/ 远程 SSH 终端 + SFTP 文件管理。
+			// 每个端点都挂「终端」功能门控（无门控端点 = 绕过功能开关的 shell 入口，已修复）；
+			// 默认仅管理员可用（默认用户组 AppPerms 禁用 terminal，应用清单默认关闭）
+			th := NewTerminalHandler(cfg.Secret)
+			ug.GET("/terminal/ws", middleware.AppGate("terminal"), th.WebSocket)
+			ug.GET("/terminal/platform", middleware.AppGate("terminal"), th.Platform)
+			ug.POST("/terminal/conns", middleware.AppGate("terminal"), th.ConnSave)
+			ug.GET("/terminal/conns", middleware.AppGate("terminal"), th.ConnList)
+			ug.PUT("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnUpdate)
+			ug.DELETE("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnDelete)
+			ug.POST("/terminal/conns/:id/test", middleware.AppGate("terminal"), th.ConnTest)
+			ug.GET("/terminal/fs/list", middleware.AppGate("terminal"), th.FSList)
+			ug.POST("/terminal/fs/op", middleware.AppGate("terminal"), th.FSOps)
+			ug.GET("/terminal/fs/download", middleware.AppGate("terminal"), th.FSDownload)
+			ug.POST("/terminal/fs/upload", middleware.AppGate("terminal"), th.FSUpload)
 	}
 
 	// 内置浏览器代理：iframe 子资源请求没有 Authorization 头，故独立鉴权——
