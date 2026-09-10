@@ -50,30 +50,40 @@
               </div>
             </div>
           </div>
-          <div class="form-row">
-            <label>昵称</label>
-            <input class="input" v-model="nickname" style="width: 260px" />
-            <button class="btn" @click="saveProfile">保存</button>
-          </div>
-          <div class="form-row" style="margin-top: 22px">
-            <label>修改密码</label>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap">
-              <input class="input" type="password" v-model="oldPwd" placeholder="原密码" style="width: 180px" />
-              <input class="input" type="password" v-model="newPwd" placeholder="新密码（至少6位）" style="width: 180px" />
-              <button class="btn" @click="doChangePwd">修改密码</button>
+          <!-- 游客为共享只读身份（全体访客共用一个账号），不提供昵称/密码/WebDAV 自管理入口 -->
+          <div v-if="session.isGuest" class="form-row">
+            <label>账号说明</label>
+            <div style="font-size: 13px; color: var(--text-3); max-width: 560px; line-height: 1.7">
+              当前为**游客**共享只读身份：所有访客共用同一账号，仅可浏览与下载。
+              账号管理（修改昵称/密码等）不适用，如需完整功能请使用账号登录或联系管理员开通。
             </div>
           </div>
-          <div class="form-row" style="margin-top: 22px">
-            <label>WebDAV 独立密码（用于挂载到 Windows 资源管理器）</label>
-            <div style="display: flex; gap: 8px">
-              <input class="input" v-model="davPwd" placeholder="设置/重置 WebDAV 密码" style="width: 260px" />
-              <button class="btn" @click="doDavPwd">保存</button>
+          <template v-else>
+            <div class="form-row">
+              <label>昵称</label>
+              <input class="input" v-model="nickname" style="width: 260px" />
+              <button class="btn" @click="saveProfile">保存</button>
             </div>
-            <div v-if="session.group && session.group.allowWebdav" style="font-size: 12px; color: var(--text-3); margin-top: 6px">
-              挂载地址：http://你的服务器地址/dav/{{ session.user?.username }}
+            <div class="form-row" style="margin-top: 22px">
+              <label>修改密码</label>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                <input class="input" type="password" v-model="oldPwd" placeholder="原密码" style="width: 180px" />
+                <input class="input" type="password" v-model="newPwd" placeholder="新密码（至少6位）" style="width: 180px" />
+                <button class="btn" @click="doChangePwd">修改密码</button>
+              </div>
             </div>
-            <div v-else style="font-size: 12px; color: var(--text-3); margin-top: 6px">当前用户组未启用 WebDAV</div>
-          </div>
+            <div class="form-row" style="margin-top: 22px">
+              <label>WebDAV 独立密码（用于挂载到 Windows 资源管理器）</label>
+              <div style="display: flex; gap: 8px">
+                <input class="input" v-model="davPwd" placeholder="设置/重置 WebDAV 密码" style="width: 260px" />
+                <button class="btn" @click="doDavPwd">保存</button>
+              </div>
+              <div v-if="session.group && session.group.allowWebdav" style="font-size: 12px; color: var(--text-3); margin-top: 6px">
+                挂载地址：http://你的服务器地址/dav/{{ session.user?.username }}
+              </div>
+              <div v-else style="font-size: 12px; color: var(--text-3); margin-top: 6px">当前用户组未启用 WebDAV</div>
+            </div>
+          </template>
         </template>
 
         <!-- 共享管理 -->

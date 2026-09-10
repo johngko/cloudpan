@@ -20,6 +20,8 @@ export const useSession = defineStore('session', {
   state: () => ({
     user: null as User | null,
     group: null as UserGroup | null,
+    // 游客共享账号：系统托管身份（全体访客共用），无账号自管理入口（后端 GuestReadOnly 兜底）
+    isGuest: false,
     site: { siteName: 'CloudPan', registerOpen: false, needInviteCode: false, officeConfigured: false, announcement: '', guestLogin: false, theme: 'win12' },
     wallpaper: localStorage.getItem('cp_wallpaper') || 'win12',
     dark: localStorage.getItem('cp_dark') === '1',
@@ -41,6 +43,7 @@ export const useSession = defineStore('session', {
       const d = await authApi.me()
       this.user = d.user
       this.group = d.group
+      this.isGuest = !!d.isGuest
       return d
     },
     setWallpaper(w: string) {

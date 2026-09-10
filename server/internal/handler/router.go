@@ -34,8 +34,8 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		sg.GET("/raw", sh.Raw)
 	}
 
-	// 需登录
-	ug := api.Group("", middleware.Auth(cfg.Secret))
+	// 需登录（GuestReadOnly：游客共享账号只读兜底，见 middleware/guest.go）
+	ug := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
 	{
 		ug.GET("/auth/me", auth.Me)
 		ug.PUT("/users/me", auth.UpdateMe)
@@ -169,7 +169,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 	// 直链提取：签发需登录，访问免登录
 	dlh := &DLHandler{Site: site}
-	ug2 := api.Group("", middleware.Auth(cfg.Secret))
+	ug2 := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
 	ug2.GET("/fs/dlink", dlh.Create)
 	api.GET("/dl", dlh.Serve)
 

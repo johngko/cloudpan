@@ -60,7 +60,7 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 	guestLogin := s["guest_login"] != "false"
 	if guestLogin {
 		var gn int64
-		model.DB.Model(&model.User{}).Where("username = ? AND disabled = false", "guest").Count(&gn)
+		model.DB.Model(&model.User{}).Where("username = ? AND disabled = false", model.GuestUsername).Count(&gn)
 		guestLogin = gn > 0
 	}
 	// 站点主题：管理员全局设置，所有用户（游客/普通/管理员）访问都渲染该主题

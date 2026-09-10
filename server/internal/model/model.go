@@ -349,6 +349,14 @@ func InitDB(dataDir string) {
 	seed()
 }
 
+// GuestUsername 游客共享账号的系统用户名。该账号由系统托管（随机密码不可知、
+// 仅经 /auth/guest 登录、多访客共用一个身份），不允许任何自管理操作——
+// 由 middleware.GuestReadOnly 统一兜底拦截（详见该文件注释）。
+const GuestUsername = "guest"
+
+// IsGuestUser 判断是否为游客共享账号
+func IsGuestUser(u *User) bool { return u != nil && u.Username == GuestUsername }
+
 // guestAppPerms 访客组默认应用权限：保留基础应用 + 内部共享（查看共享），禁止终端/浏览器/Office 等。
 // 应用中心与网络测速对游客隐藏（基础应用之外不提供功能管理/测速入口）
 const guestAppPerms = `{"terminal":false,"browser":false,"office":false,"webdav":false,"share":false,"offline_http":false,"bt":false,"system_monitor":false,"app_center":false,"speedtest":false}`
@@ -372,9 +380,9 @@ func seed() {
 	var gg UserGroup
 	if err := DB.Where("name = ?", "访客").First(&gg).Error; err == nil {
 		var gn int64
-		DB.Model(&User{}).Where("username = ?", "guest").Count(&gn)
+		DB.Model(&User{}).Where("username = ?", GuestUsername).Count(&gn)
 		if gn == 0 {
-			DB.Create(&User{Username: "guest", PasswordHash: hashPwd(randomToken(16)), Nickname: "游客", Role: "user", GroupID: gg.ID, QuotaMB: -1})
+			DB.Create(&User{Username: GuestUsername, PasswordHash: hashPwd(randomToken(16)), Nickname: "游客", Role: "user", GroupID: gg.ID, QuotaMB: -1})
 		}
 	}
 	var sc int64

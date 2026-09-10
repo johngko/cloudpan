@@ -89,7 +89,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	model.DB.Create(&model.AuditLog{UserID: u.ID, Username: u.Username, Action: "login", Detail: "用户登录", IP: c.ClientIP()})
-	dto.OK(c, gin.H{"token": token, "user": u})
+	dto.OK(c, gin.H{"token": token, "user": u, "isGuest": model.IsGuestUser(&u)})
 }
 
 // GuestLogin 游客登录：登录页「游客登录」入口。
@@ -102,7 +102,7 @@ func (h *AuthHandler) GuestLogin(c *gin.Context) {
 		return
 	}
 	var u model.User
-	if err := model.DB.Where("username = ?", "guest").First(&u).Error; err != nil || u.Disabled {
+	if err := model.DB.Where("username = ?", model.GuestUsername).First(&u).Error; err != nil || u.Disabled {
 		dto.Fail(c, 403, "游客登录未开启")
 		return
 	}
@@ -114,7 +114,7 @@ func (h *AuthHandler) GuestLogin(c *gin.Context) {
 		return
 	}
 	model.DB.Create(&model.AuditLog{UserID: u.ID, Username: u.Username, Action: "guest-login", Detail: "游客登录", IP: c.ClientIP()})
-	dto.OK(c, gin.H{"token": token, "user": u})
+	dto.OK(c, gin.H{"token": token, "user": u, "isGuest": true})
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -158,14 +158,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	token, _ := middleware.MakeToken(u.ID, u.Role, h.Secret, 7*24*time.Hour)
-	dto.OK(c, gin.H{"token": token, "user": u})
+	dto.OK(c, gin.H{"token": token, "user": u, "isGuest": false})
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
 	u := middleware.CurrentUser(c)
 	var g model.UserGroup
 	model.DB.First(&g, u.GroupID)
-	dto.OK(c, gin.H{"user": u, "group": g})
+	// isGuest：前端据此隐藏账号自管理入口（改密/改昵称/WebDAV 密码等）；
+	// 后端兜底拦截见 middleware.GuestReadOnly
+	dto.OK(c, gin.H{"user": u, "group": g, "isGuest": model.IsGuestUser(u)})
 }
 
 func (h *AuthHandler) UpdateMe(c *gin.Context) {
