@@ -402,6 +402,36 @@ func addQuota(userID uint, delta int64) {
 		UpdateColumn("used_bytes", gorm.Expr("MAX(used_bytes + ?, 0)", delta))
 }
 
+// commitQuotaUpload 上传净增量的原子配额提交（借鉴 Cloudreve 的条件 UPDATE 原子配额）：
+// 正增量用单条 SQL 原子校验「used + delta <= limit」——并发上传时后到者直接 403，
+// 消除两个请求各自读请求头 UsedBytes 再写绝对值造成的超配额与丢失更新窗口；
+// 非正增量（小文件覆盖大文件）直接走 addQuota 扣减。超限返回 false（已写 403 响应，调用方须回滚落盘文件）。
+func commitQuotaUpload(c *gin.Context, x ctx3, delta int64) bool {
+	if delta <= 0 {
+		addQuota(x.user.ID, delta)
+		return true
+	}
+	var u model.User
+	if model.DB.Select("id", "quota_mb", "group_id", "used_bytes").First(&u, x.user.ID).Error != nil {
+		addQuota(x.user.ID, delta)
+		return true
+	}
+	limit, limited := effectiveQuotaBytes(&u, x.group)
+	if !limited {
+		addQuota(x.user.ID, delta)
+		return true
+	}
+	res := model.DB.Model(&model.User{}).
+		Where("id = ? AND used_bytes + ? <= ?", x.user.ID, delta, limit).
+		UpdateColumn("used_bytes", gorm.Expr("used_bytes + ?", delta))
+	if res.Error != nil || res.RowsAffected == 0 {
+		NotifyQuotaExceeded(x.user.ID, limit>>20, u.UsedBytes)
+		dto.Fail(c, 403, fmt.Sprintf("超出配额：已用 %dMB / 上限 %dMB", u.UsedBytes>>20, limit>>20))
+		return false
+	}
+	return true
+}
+
 func (h *SiteHandler) Copy(c *gin.Context) {
 	if !requireWritable(c) {
 		return
@@ -1605,25 +1635,39 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 		dto.Fail(c, 500, "版本物理路径缺失")
 		return
 	}
-	src, err := os.Open(ver.PhysicalPath)
-	if err != nil {
-		dto.Fail(c, 500, "源文件已丢失")
-		return
-	}
-	defer src.Close()
 	if err := os.MkdirAll(filepath.Dir(physTarget), 0o755); err != nil {
 		dto.Fail(c, 500, "目录创建失败")
 		return
 	}
-	dst, err := os.Create(physTarget)
-	if err != nil {
-		dto.Fail(c, 500, "目标创建失败")
-		return
-	}
-	defer dst.Close()
-	if _, err := io.Copy(dst, src); err != nil {
-		dto.Fail(c, 500, "恢复失败："+err.Error())
-		return
+	// 优先硬链接（借鉴 Cloudreve「副本 = 引用共享」）：与版本原件共享 inode，零磁盘重复。
+	// 安全前提：系统内任何覆盖都会先 SaveVersion 把当前文件改名归档（目录项替换），
+	// 且 CreateFile 已改为 rename-in 原子替换——不存在就地截断写，链接不会被就地改坏。
+	if err := os.Link(ver.PhysicalPath, physTarget); err != nil {
+		if t1, e1 := os.Stat(ver.PhysicalPath); e1 == nil {
+			if t2, e2 := os.Stat(physTarget); e2 == nil && os.SameFile(t1, t2) {
+				// 极端情形（归档改名失败）目标已与版本原件同 inode：内容已在位，补登记即可
+				fscore.HashPathCopied(ver.PhysicalPath, physTarget)
+				dto.OK(c, gin.H{"version": ver.Version, "path": in.Path})
+				return
+			}
+		}
+		// 链接失败（跨设备等）回退字节拷贝
+		src, err := os.Open(ver.PhysicalPath)
+		if err != nil {
+			dto.Fail(c, 500, "源文件已丢失")
+			return
+		}
+		defer src.Close()
+		dst, err := os.Create(physTarget)
+		if err != nil {
+			dto.Fail(c, 500, "目标创建失败")
+			return
+		}
+		defer dst.Close()
+		if _, err := io.Copy(dst, src); err != nil {
+			dto.Fail(c, 500, "恢复失败："+err.Error())
+			return
+		}
 	}
 	// 版本恢复产生新物理副本：登记之（版本原件仍是另一份存活副本）
 	fscore.HashPathCopied(ver.PhysicalPath, physTarget)

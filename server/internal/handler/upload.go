@@ -121,8 +121,12 @@ func (h *UploadHandler) Init(c *gin.Context) {
 		if model.IsGuestUser(x.user) {
 			_ = os.Chtimes(phys, time.Now(), time.Now())
 		}
-		model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
-			UpdateColumn("used_bytes", max(0, x.user.UsedBytes+in.Size-oldSize))
+		// 配额原子提交：超限则回滚刚落盘文件（旧版本归档保留，可从版本历史恢复）
+		if !commitQuotaUpload(c, x, in.Size-oldSize) {
+			fscore.HashPathGone(phys)
+			_ = os.Remove(phys)
+			return
+		}
 		middleware.Audit(c, "upload-instant", p.Name+":"+parent+"/"+in.Name)
 		dto.OK(c, gin.H{"instant": true, "path": parent + "/" + in.Name})
 		return
@@ -202,9 +206,15 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 		dto.Fail(c, 400, err.Error())
 		return
 	}
-	model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
-		UpdateColumn("used_bytes", max(0, x.user.UsedBytes+entry.Size-oldSize))
 	targetVP, _ := fscore.Join(sess.ParentPath, sess.Name)
+	// 配额原子提交：超限则回滚刚落盘文件（会话已 completed，用户清理出空间后重新上传即可）
+	if !commitQuotaUpload(c, x, entry.Size-oldSize) {
+		if phys, perr := fscore.PhysicalOf(d, targetVP); perr == nil {
+			fscore.HashPathGone(phys)
+			_ = os.Remove(phys)
+		}
+		return
+	}
 	middleware.Audit(c, "upload", p.Name+":"+targetVP)
 	dto.OK(c, gin.H{"instant": false, "entry": entry, "path": targetVP})
 }

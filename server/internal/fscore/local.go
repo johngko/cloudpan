@@ -264,13 +264,33 @@ func (d *LocalDriver) CreateFile(p string, r io.Reader) error {
 	if err := os.MkdirAll(filepath.Dir(phys), 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(phys)
+	// rename-in 原子替换：先写同目录临时文件再改名覆盖目标（借鉴 Cloudreve「写入即产生新 blob」）。
+	// 避免 os.Create 就地截断：① 并发读者（下载/预览）不会读到写一半的文件；② 崩溃时目标保留旧内容；
+	// ③ 目标若是版本文件的硬链接，替换目录项不影响版本原件。
+	// Windows 下 Rename 不能覆盖已存在文件，先 Remove 再 Rename（存在极短空窗，可接受）。
+	tmp := phys + ".cp-part"
+	f, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(f, r)
-	return err
+	_, werr := io.Copy(f, r)
+	cerr := f.Close()
+	if werr != nil || cerr != nil {
+		_ = os.Remove(tmp)
+		if werr != nil {
+			return werr
+		}
+		return cerr
+	}
+	if err := os.Remove(phys); err != nil && !os.IsNotExist(err) {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, phys); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (d *LocalDriver) DirectURL(p string) (string, error) { return "", nil }

@@ -332,7 +332,12 @@ func (h *AdminHandler) PolicyCreate(c *gin.Context) {
 		}
 	}
 	if err := model.DB.Create(&p).Error; err != nil {
-		dto.Fail(c, 400, "盘符可能重复："+err.Error())
+		// 唯一约束冲突（盘符重复）给出友好提示，避免把原始 SQLite 报错直接抛给前端
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "constraint") {
+			dto.Fail(c, 400, "虚拟盘符已被占用，请更换")
+			return
+		}
+		dto.Fail(c, 400, "创建存储策略失败："+err.Error())
 		return
 	}
 	middleware.Audit(c, "admin", "挂载存储 "+p.Name)
