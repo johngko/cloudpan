@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -192,10 +193,16 @@ func (h *UserShareHandler) Cancel(c *gin.Context) {
 // ---- 共享内容访问（被共享者视角） ----
 
 func (h *UserShareHandler) loadForTarget(c *gin.Context) (*model.UserShare, fscore.Driver, bool) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	return h.loadShareByID(c, uint(id))
+}
+
+// loadShareByID 按显式 id 加载共享（供 /office/config?shareId= 等非 :id 路由复用）
+func (h *UserShareHandler) loadShareByID(c *gin.Context, id uint) (*model.UserShare, fscore.Driver, bool) {
 	x := ctxOf(c)
 	var sh model.UserShare
 	q, args := shareVisibleWhere(x.user.ID, x.user.GroupID)
-	if err := model.DB.Where("id = ? AND ("+q+")", append([]interface{}{c.Param("id")}, args...)...).First(&sh).Error; err != nil {
+	if err := model.DB.Where("id = ? AND ("+q+")", append([]interface{}{id}, args...)...).First(&sh).Error; err != nil {
 		dto.Fail(c, 404, "共享不存在或已取消")
 		return nil, nil, false
 	}

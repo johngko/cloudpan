@@ -124,6 +124,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 		// 站内用户共享（受「内部共享」功能门控）
 		ush := &UserShareHandler{Site: site}
+		office.LoadShare = ush.loadShareByID // Office 编辑器支持共享盘文件（Config 需共享可见性校验）
 		ug.GET("/users", ush.Users)
 		ug.GET("/groups", ush.Groups)
 		ug.POST("/usershares", middleware.AppGate("usershare"), ush.Create)
@@ -201,6 +202,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 		ag.GET("/settings", ad.SettingsGet)
 		ag.PUT("/settings", ad.SettingsSet)
+		ag.POST("/office-test", (&OfficeHandler{Site: site}).Health)
 		ag.GET("/logs", ad.LogList)
 		ag.GET("/logs/export", ad.LogExport)
 		ag.GET("/notifications", ad.NotificationList)

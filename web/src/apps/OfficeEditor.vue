@@ -30,8 +30,8 @@
       <div id="cp-office-placeholder" style="position: absolute; inset: 0"></div>
     </div>
 
-    <!-- PDF 内嵌预览 -->
-    <iframe v-show="mode === 'pdf'" :src="rawSrc" style="flex: 1; border: none; background: #525659"></iframe>
+    <!-- PDF 内嵌预览（v-if：非 PDF 模式不得挂载——iframe 加载 docx 等不可渲染类型会触发浏览器下载） -->
+    <iframe v-if="mode === 'pdf'" :src="rawSrc" style="flex: 1; border: none; background: #525659"></iframe>
 
     <!-- 静态预览（docx / xlsx / pptx 离线） -->
     <div v-show="mode === 'static' && !editing" ref="staticHost" class="static-preview">
@@ -87,7 +87,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import axios from 'axios'
 import { get, post, put } from '../api/http'
-import { rawUrl, downloadUrl } from '../api/modules'
+import { rawUrl, downloadUrl, userShareApi } from '../api/modules'
 import { useSession } from '../stores/session'
 import { useToast } from '../stores/dialog'
 import AppIcon from '../components/AppIcon.vue'
@@ -96,6 +96,10 @@ const props = defineProps<{ winId: number; props: any }>()
 const session = useSession()
 const toast = useToast()
 const ext = computed(() => (props.props?.ext || '').toLowerCase())
+
+// 文件来源：本地盘（policyId+path）或共享盘（shareId+rel，perm 来自共享）
+const isShared = computed(() => !!props.props?.shareId)
+const canWriteFile = computed(() => !isShared.value || props.props?.perm === 'rw')
 
 const mode = ref<'ds' | 'pdf' | 'static' | 'none'>('none')
 const dsError = ref('')
@@ -114,12 +118,14 @@ const editing = ref(false)
 const saving = ref(false)
 
 const isEditable = computed(() =>
-  (ext.value === 'xlsx' || ext.value === 'xls' || ext.value === 'csv') && !editor
+  (ext.value === 'xlsx' || ext.value === 'xls' || ext.value === 'csv') && !editor && canWriteFile.value
 )
 const fallbackMode = computed(() => mode.value !== 'ds')
 // 缓存穿透计数：保存后递增，强制 iframe/文档重新拉取最新内容
 const cacheBust = ref(0)
-const rawSrc = computed(() => rawUrl(props.props.policyId, props.props.path) + '&b=' + cacheBust.value)
+const rawSrc = computed(() => (isShared.value
+  ? userShareApi.rawUrl(props.props.shareId, props.props.rel)
+  : rawUrl(props.props.policyId, props.props.path)) + '&b=' + cacheBust.value)
 const noPreviewHint = computed(() => {
   if (ext.value === 'ppt') {
     return '旧版 .ppt 格式暂不支持在线预览，请下载后用本地 PowerPoint 打开。'
@@ -267,39 +273,38 @@ async function saveEdit() {
     }
 
     // 上传新文件（覆盖原文件）
-    // 先 init 上传 session
-    const initResp = await post('/upload/init', {
-      policyId: props.props.policyId,
-      parent: props.props.path.substring(0, props.props.path.lastIndexOf('/')) || '/',
-      name: props.props.name,
-      size: buf.byteLength,
-      chunkSize: 8 * 1024 * 1024,
-      hash: ''
-    })
-
-    if (initResp.instant) {
-      // 秒传成功
-      toast.success('保存成功')
-      editing.value = false
-      cacheBust.value++
-      return
-    }
-
-    // 分块上传（put 封装自带 /api 前缀与 Bearer 鉴权）
-    const chunkSize = 8 * 1024 * 1024
-    const chunks: number = Math.ceil(buf.byteLength / chunkSize)
-    for (let i = 0; i < chunks; i++) {
-      const start = i * chunkSize
-      const end = Math.min(start + chunkSize, buf.byteLength)
-      await put(`/upload/chunk/${initResp.sessionId}/${i}`, buf.slice(start, end), {
-        headers: { 'Content-Type': 'application/octet-stream' },
-        timeout: 0
+    if (isShared.value) {
+      // 共享盘：multipart 直传（rel=父目录；服务端 CreateFile 截断覆盖，ro 共享由后端 403）
+      const parent = props.props.rel.substring(0, props.props.rel.lastIndexOf('/'))
+      const fd = new FormData()
+      fd.append('file', new Blob([buf], { type: 'application/octet-stream' }), props.props.name)
+      fd.append('rel', parent)
+      await post('/shared/' + props.props.shareId + '/upload', fd)
+    } else {
+      // 本地盘：分块上传会话（秒传直接返回）
+      const initResp = await post('/upload/init', {
+        policyId: props.props.policyId,
+        parent: props.props.path.substring(0, props.props.path.lastIndexOf('/')) || '/',
+        name: props.props.name,
+        size: buf.byteLength,
+        chunkSize: 8 * 1024 * 1024,
+        hash: ''
       })
-    }
 
-    await post('/upload/complete', {
-      sessionId: initResp.sessionId
-    })
+      if (!initResp.instant) {
+        const chunkSize = 8 * 1024 * 1024
+        const chunks: number = Math.ceil(buf.byteLength / chunkSize)
+        for (let i = 0; i < chunks; i++) {
+          const start = i * chunkSize
+          const end = Math.min(start + chunkSize, buf.byteLength)
+          await put(`/upload/chunk/${initResp.sessionId}/${i}`, buf.slice(start, end), {
+            headers: { 'Content-Type': 'application/octet-stream' },
+            timeout: 0
+          })
+        }
+        await post('/upload/complete', { sessionId: initResp.sessionId })
+      }
+    }
 
     toast.success('保存成功')
     editing.value = false
@@ -419,7 +424,12 @@ async function fetchBuffer(): Promise<ArrayBuffer> {
 
 async function initDs() {
   try {
-    const d = await get<any>(`/office/config?policyId=${props.props.policyId}&path=${encodeURIComponent(props.props.path)}&mode=${props.props.mode || 'edit'}`)
+    const qs = isShared.value
+      ? `shareId=${props.props.shareId}&rel=${encodeURIComponent(props.props.rel)}`
+      : `policyId=${props.props.policyId}&path=${encodeURIComponent(props.props.path)}`
+    // 只读共享后端会强制 view，前端同步传 view 以便编辑器直接进入只读态
+    const wantMode = (isShared.value && props.props?.perm !== 'rw') ? 'view' : (props.props.mode || 'edit')
+    const d = await get<any>(`/office/config?${qs}&mode=${wantMode}`)
     await loadScript(d.documentServer + '/web-apps/apps/api/documents/api.js')
     editor = new (window as any).DocsAPI.DocEditor('cp-office-placeholder', {
       ...d.config,
@@ -434,6 +444,7 @@ async function initDs() {
           else if (ext.value === 'pptx') { mode.value = 'static'; await renderPptx() }
           else if (['xlsx', 'xls', 'csv'].includes(ext.value)) { mode.value = 'static'; await renderXlsx() }
           else if (ext.value === 'pdf') { mode.value = 'pdf' }
+          else mode.value = 'none' // 旧格式等无内置渲染器时明确提示，不留空白页
         }
       }
     })
@@ -478,6 +489,10 @@ function loadScript(src: string): Promise<void> {
 }
 
 function download() {
+  if (isShared.value) {
+    window.open(userShareApi.dlUrl(props.props.shareId, props.props.rel))
+    return
+  }
   window.open(downloadUrl(props.props.policyId, [props.props.path]))
 }
 </script>

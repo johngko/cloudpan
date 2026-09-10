@@ -1010,12 +1010,19 @@ function toggleAll() {
 }
 
 // ---- 打开 ----
-// 共享盘内打开：目录=进入；文件=预览（raw 内嵌）或下载（与 SharedBrowser 同一套 URL）
+// 共享盘内打开：目录=进入；Office=内置编辑器（共享源）；图片/媒体/PDF=raw 内嵌；其余=下载
 function openSharedItem(f: any) {
   if (f.isDir) { goto(f.path); return }
   const sp = sharedPathParse(f.path)
   if (!sp) return
   const ext = (f.ext || '').toLowerCase()
+  if (['docx', 'xlsx', 'pptx', 'pdf', 'doc', 'xls', 'ppt'].includes(ext)) {
+    store.open('officeeditor', {
+      shareId: sp.shareId, rel: sp.rel, name: f.name, size: f.size, ext,
+      perm: currentShare.value?.perm || 'ro'
+    }, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
+    return
+  }
   const previewExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a', 'pdf']
   if (previewExts.includes(ext)) window.open(userShareApi.rawUrl(sp.shareId, sp.rel))
   else window.open(userShareApi.dlUrl(sp.shareId, sp.rel))

@@ -286,8 +286,17 @@
               <input class="input" v-model="settings.onlyoffice_url" style="width: 300px" />
             </div>
             <div class="ac-set-row">
+              <div class="ac-set-lbl"><b>公开地址</b><span>Document Server 回拉文件/回调用的本系统地址（须 DS 能访问，如 http://192.168.1.10:18322 或 https://pan.example.com）；留空按访客浏览器地址自动推导，也可用环境变量 CP_PUBLIC_URL 强制指定</span></div>
+              <input class="input" v-model="settings.public_url" style="width: 300px" placeholder="留空 = 自动推导" />
+            </div>
+            <div class="ac-set-row">
               <div class="ac-set-lbl"><b>JWT Secret</b><span>留空表示 Document Server 未启用 JWT（如 Cloudreve 部署）；启用 JWT 时须与 local.json 一致</span></div>
               <input class="input" v-model="settings.onlyoffice_jwt" style="width: 300px" placeholder="留空 = 免 JWT" />
+            </div>
+            <div class="ac-set-row">
+              <div class="ac-set-lbl"><b>连接测试</b><span>服务端探测 {{ settings.onlyoffice_url || '（未填地址）' }}/healthcheck；Document Server 必须能访问本系统地址（站点设置「公开地址」），否则编辑器无法回拉文件</span></div>
+              <button class="tool-btn" :disabled="officeTesting" @click="testOffice">{{ officeTesting ? '探测中…' : '测试连接' }}</button>
+              <span v-if="officeTestMsg" style="font-size: 12px; margin-left: 10px" :style="{ color: officeTestOk ? 'var(--accent)' : '#e5534b' }">{{ officeTestMsg }}</span>
             </div>
             <div class="ac-set-sep"></div>
             <div class="ac-set-title">WebDAV</div>
@@ -879,6 +888,27 @@ async function saveSettings() {
     await session.loadSite()
     toast.success('设置已保存')
   } catch (e: any) { toast.error(e.message) }
+}
+// ONLYOFFICE 连接探测：先确保当前填写的地址已保存，再由服务端 /healthcheck
+const officeTesting = ref(false)
+const officeTestMsg = ref('')
+const officeTestOk = ref(false)
+async function testOffice() {
+  if (!settings.value.onlyoffice_url) { toast.error('请先填写 Document Server 地址并保存'); return }
+  officeTesting.value = true
+  officeTestMsg.value = ''
+  try {
+    // 未保存的地址探测不到：先落库再测
+    await adminApi.settingsSet(settings.value)
+    const r = await adminApi.officeTest()
+    officeTestOk.value = r.ok
+    officeTestMsg.value = r.msg
+  } catch (e: any) {
+    officeTestOk.value = false
+    officeTestMsg.value = e.message || '探测失败'
+  } finally {
+    officeTesting.value = false
+  }
 }
 async function adminDelShare(s: any) {
   if (!(await uiDlg.confirm('取消分享', `取消分享「${s.name}」？外链将立即失效。`, { danger: true, okText: '取消分享' }))) return

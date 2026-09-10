@@ -134,7 +134,8 @@ export const adminApi = {
   tasks: () => get<any[]>('/admin/tasks'),
   shares: (page = 1, size = 50, keyword = '') => get<any>(`/admin/shares?page=${page}&size=${size}&keyword=${encodeURIComponent(keyword)}`),
   shareDelete: (id: number) => del(`/admin/shares/${id}`),
-  appToggle: (key: string, enabled: boolean) => post(`/admin/apps/${key}/toggle`, { enabled })
+  appToggle: (key: string, enabled: boolean) => post(`/admin/apps/${key}/toggle`, { enabled }),
+  officeTest: () => post<{ ok: boolean; msg: string }>('/admin/office-test')
 }
 
 // 分块上传

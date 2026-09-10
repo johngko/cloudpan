@@ -11,6 +11,9 @@ type Config struct {
 	DataDir   string // 绝对路径：数据库、回收站、上传临时区
 	Secret    []byte // JWT/签名共用密钥（持久化在 DataDir/secret.key）
 	PublicURL string // 对外可访问地址（ONLYOFFICE 拉取文件/回调用）
+	// PublicURLOverridden 仅当环境变量 CP_PUBLIC_URL 显式设置时为真；
+	// 未设置时 PublicURL 是 localhost 默认值，不代表运维意图
+	PublicURLOverridden bool
 }
 
 func Load() *Config {
@@ -31,6 +34,7 @@ func Load() *Config {
 
 	if u := os.Getenv("CP_PUBLIC_URL"); u != "" {
 		c.PublicURL = u
+		c.PublicURLOverridden = true
 	} else {
 		c.PublicURL = "http://localhost:" + c.Port
 	}
