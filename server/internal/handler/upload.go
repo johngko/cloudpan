@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -112,6 +114,12 @@ func (h *UploadHandler) Init(c *gin.Context) {
 		if err := h.Site.Fs.InstantPut(fh, phys, x.user.ID, in.PolicyID, vp); err != nil {
 			dto.Fail(c, 500, "秒传失败："+err.Error())
 			return
+		}
+		// 游客秒传：硬链接会继承源文件 mtime（可能已远超 24h），
+		// 而游客文件按 mtime 做 24h TTL 清理——必须把时间戳重置为"现在"，
+		// 否则游客秒传的文件会被立即清掉
+		if model.IsGuestUser(x.user) {
+			_ = os.Chtimes(phys, time.Now(), time.Now())
 		}
 		model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
 			UpdateColumn("used_bytes", max(0, x.user.UsedBytes+in.Size-oldSize))

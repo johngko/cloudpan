@@ -17,20 +17,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { fsApi } from '../api/modules'
 import { useWindows } from '../stores/windows'
-import { useSession } from '../stores/session'
 import { useToast } from '../stores/dialog'
 
 const props = defineProps<{ winId: number; props: any }>()
 const store = useWindows()
-const session = useSession()
 const toast = useToast()
 const path = ref(props.props?.path || '')
 const policyId = ref(props.props?.policyId || 0)
 const content = ref('')
 const dirty = ref(false)
 const editable = ref(!!path.value && !!policyId.value)
-// 游客为共享只读身份：可打开查看，但不可保存（后端 GuestReadOnly 兜底拦截）
-const canSave = computed(() => editable.value && !session.isGuest)
+// 保存 = 往自己盘写文本文件（/api/fs/text 在游客白名单内，受 24h TTL 管理）
+const canSave = computed(() => editable.value)
 
 onMounted(async () => {
   if (editable.value) {

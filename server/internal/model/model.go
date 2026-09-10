@@ -357,16 +357,42 @@ const GuestUsername = "guest"
 // IsGuestUser 判断是否为游客共享账号
 func IsGuestUser(u *User) bool { return u != nil && u.Username == GuestUsername }
 
-// guestAppPerms 访客组默认应用权限：保留基础应用 + 内部共享（查看共享），禁止终端/浏览器/Office 等。
+// guestAppPerms 访客组默认应用权限：基础应用 + 内部共享（查看共享）+ 在线 Office +
+// HTTP 离线下载；禁止终端/浏览器/WebDAV/公开分享/BT/系统监控。
 // 应用中心与网络测速对游客隐藏（基础应用之外不提供功能管理/测速入口）
-const guestAppPerms = `{"terminal":false,"browser":false,"office":false,"webdav":false,"share":false,"offline_http":false,"bt":false,"system_monitor":false,"app_center":false,"speedtest":false}`
+const guestAppPerms = `{"terminal":false,"browser":false,"office":true,"webdav":false,"share":false,"offline_http":true,"bt":false,"system_monitor":false,"app_center":false,"speedtest":false}`
+
+// visitorGroupProfile 系统托管「访客」组的标准画像（游客 = 24 小时临时工作区）：
+// 可写自己盘（上传/管理/在线编辑/离线下载，文件 24h 后自动清除），
+// 不可分享/不可 WebDAV/不可压缩；自管理类操作由 middleware.GuestReadOnly 账号级兜底
+func visitorGroupProfile() UserGroup {
+	return UserGroup{
+		Name: "访客", QuotaMB: 1024,
+		AllowShare: false, AllowWebdav: false, AllowArchive: false, AllowOffline: true,
+		ReadOnly: false, AppPerms: guestAppPerms,
+		Remark: "游客：24 小时临时工作区（可上传/离线下载/在线 Office；文件 24 小时后自动清除）",
+	}
+}
 
 func seed() {
 	var gc int64
 	DB.Model(&UserGroup{}).Count(&gc)
 	if gc == 0 {
 		DB.Create(&UserGroup{Name: "默认用户组", QuotaMB: 10240, AllowShare: true, AllowWebdav: true, AllowArchive: true, AllowOffline: true, IsDefault: true, Remark: "系统默认"})
-		DB.Create(&UserGroup{Name: "访客", QuotaMB: 1024, AllowShare: false, AllowWebdav: false, AllowArchive: false, AllowOffline: false, ReadOnly: true, AppPerms: guestAppPerms, Remark: "只读访客：仅查看与下载，基础应用"})
+		vis := visitorGroupProfile()
+		DB.Create(&vis)
+	} else {
+		// 存量部署幂等刷新访客组画像：语义从"只读访客"演进为"24h 临时工作区"
+		// （quota/限速等运维自定义项不动，只对齐标志与权限）
+		var gg UserGroup
+		if err := DB.Where("name = ?", "访客").First(&gg).Error; err == nil {
+			prof := visitorGroupProfile()
+			DB.Model(&gg).Updates(map[string]interface{}{
+				"allow_share": prof.AllowShare, "allow_webdav": prof.AllowWebdav,
+				"allow_archive": prof.AllowArchive, "allow_offline": prof.AllowOffline,
+				"read_only": prof.ReadOnly, "app_perms": prof.AppPerms, "remark": prof.Remark,
+			})
+		}
 	}
 	var uc int64
 	DB.Model(&User{}).Count(&uc)

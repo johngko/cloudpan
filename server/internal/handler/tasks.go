@@ -42,17 +42,115 @@ func InitTaskPool(svc *fscore.Service, btDir string) {
 	go pool.sweepLoop()
 }
 
-// sweepLoop 定期清扫孤儿上传分片（会话已结束/超时 48h 的临时目录）与回收站超期项
+// sweepLoop 定期清扫：游客 24h 临时工作区（每小时，TTL 需要较细粒度）+
+// 孤儿上传分片/回收站超期项（每 6 小时）
 func (p *TaskPool) sweepLoop() {
 	p.sweepUploads()
 	fscore.PruneAll()
 	p.sweepRecycle()
-	t := time.NewTicker(6 * time.Hour)
+	p.sweepGuestWorkspace()
+	hours := 0
+	t := time.NewTicker(1 * time.Hour)
 	for range t.C {
-		p.sweepUploads()
-		fscore.PruneAll()
-		p.sweepRecycle()
+		hours++
+		p.sweepGuestWorkspace()
+		if hours%6 == 0 {
+			p.sweepUploads()
+			fscore.PruneAll()
+			p.sweepRecycle()
+		}
 	}
+}
+
+// sweepGuestWorkspace 游客临时工作区 24 小时 TTL 清理（游客定位见 middleware.GuestReadOnly）：
+// ① 游客自己本地盘：mtime 超过 24h 的文件物理删除（含 .versions 版本目录），
+//   空目录自底向上删除，秒传副本账本与配额同步对账
+// ② 游客回收站项：全部永久物理删除（临时空间无回收站保留）
+// ③ 游客 FileVersion 账本行、超 24h 的离线/BT 任务行：清除
+func (p *TaskPool) sweepGuestWorkspace() {
+	var gu model.User
+	if err := model.DB.Where("username = ?", model.GuestUsername).First(&gu).Error; err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	var freed int64
+
+	var pols []model.Policy
+	model.DB.Where("type = ? AND status = ?", "local", "active").Find(&pols)
+	for i := range pols {
+		d, err := p.Svc.DriverFor(&pols[i], &gu)
+		if err != nil {
+			continue
+		}
+		root, err := fscore.PhysicalOf(d, "/")
+		if err != nil || root == "" {
+			continue
+		}
+		freed += sweepGuestDir(root, true, cutoff)
+	}
+
+	// 回收站：临时空间内的一切永久物理删除
+	var items []model.RecycleItem
+	model.DB.Where("user_id = ?", gu.ID).Find(&items)
+	for _, item := range items {
+		trashPhys := filepath.Join(p.Svc.RecycleDir, fmt.Sprint(gu.ID), item.TrashPath)
+		fscore.HashPathGone(trashPhys)
+		if item.Size > 0 {
+			// 目录项 Size 为删除前统计的递归总大小；文件项按实际大小更准
+			if fi, err := os.Stat(trashPhys); err == nil && !fi.IsDir() {
+				freed += fi.Size()
+			} else {
+				freed += item.Size
+			}
+		}
+		_ = os.RemoveAll(trashPhys)
+		model.DB.Delete(&item)
+	}
+
+	// 版本账本行（版本文件已随盘目录物理删除）
+	model.DB.Where("user_id = ?", gu.ID).Delete(&model.FileVersion{})
+	// 超 24h 的游客离线/BT 任务行（下载内容已随盘清除）
+	model.DB.Where("user_id = ? AND type IN ? AND created_at < ?", gu.ID, []string{"offline", "bt"}, cutoff).Delete(&model.Task{})
+
+	if freed > 0 {
+		model.DB.Model(&model.User{}).Where("id = ?", gu.ID).
+			UpdateColumn("used_bytes", gorm.Expr("MAX(used_bytes - ?, 0)", freed))
+	}
+}
+
+// sweepGuestDir 递归清理物理目录：mtime 早于 cutoff 的文件物理删除，.versions 目录整体删除，
+// 空目录自底向上删除（isRoot 目录本身保留）；返回释放字节数
+func sweepGuestDir(dir string, isRoot bool, cutoff time.Time) int64 {
+	var freed int64
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if e.IsDir() {
+			// .versions 与常规目录同样按文件 mtime 判定（版本文件继承归档时旧文件的
+			// mtime：主文件未过期则其版本一并保留，主文件过期则随同清除）
+			freed += sweepGuestDir(p, false, cutoff)
+			if rest, rerr := os.ReadDir(p); rerr == nil && len(rest) == 0 {
+				_ = os.Remove(p)
+			}
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			sz := info.Size()
+			fscore.HashPathGone(p)
+			if err := os.Remove(p); err == nil && sz > 0 {
+				freed += sz
+			}
+		}
+	}
+	_ = isRoot
+	return freed
 }
 
 // sweepRecycle 按用户组的回收站保留天数永久删除超期项，并回补配额

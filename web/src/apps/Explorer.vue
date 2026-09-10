@@ -10,6 +10,11 @@
       </div>
       <div class="exp-tab-add" title="新建标签页" @click="addTab(null, '/')"><AppIcon name="plus" :size="13" /></div>
     </div>
+    <!-- 游客临时空间提示：上传的文件 24 小时后自动清除（后端 sweepGuestWorkspace 执行清理） -->
+    <div v-if="session.isGuest && !onSharedDrive" class="guest-ttl-bar">
+      <AppIcon name="info" :size="13" />
+      <span>游客临时空间：文件在上传 24 小时后自动清除，重要内容请及时下载</span>
+    </div>
     <!-- 工具栏 -->
     <div class="app-toolbar">
       <button class="tool-btn" :disabled="!canBack" @click="back" title="后退"><AppIcon name="back" :size="16" /></button>
@@ -2014,6 +2019,14 @@ function fmtTime(ms: number) {
   justify-content: center; cursor: pointer; color: var(--text-3); flex: none;
 }
 .exp-tab-add:hover { background: var(--hover-b); color: var(--text); }
+
+/* 游客临时空间提示条 */
+.guest-ttl-bar {
+  display: flex; align-items: center; gap: 6px; padding: 4px 12px; flex: none;
+  font-size: 12px; color: var(--text-2);
+  background: var(--hover-b); border-bottom: 1px solid var(--stroke-b);
+}
+.guest-ttl-bar :deep(svg) { color: var(--accent, var(--text-2)); flex: none; }
 
 .side-title { font-size: 11.5px; color: var(--text-3); padding: 8px 10px 4px; }
 .side-item {
