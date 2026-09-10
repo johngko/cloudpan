@@ -730,7 +730,13 @@
   border: 1.5px solid #6f6f6f30;
   background-color: var(--w12-unfoc);
   box-shadow: 2px 2px 5px var(--w12-shadow);
+  /* 几何过渡：最大化/还原/贴边分屏/拖出最大化时窗口矩形平滑变形（真实系统手感） */
+  transition: left 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-radius 0.2s, box-shadow 0.25s;
 }
+/* 拖拽/缩放中禁用几何过渡，保证 1:1 跟手（useWindowChrome 挂 .win-dragging） */
+.theme-win12 .window.win-dragging { transition: none; }
 .theme-win12 .window.foc {
   background: var(--w12-mica) no-repeat fixed center;
   background-size: cover;

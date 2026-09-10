@@ -158,7 +158,13 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow: 0 12px 48px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.12);
+  /* 几何过渡：最大化/还原/拖出最大化时窗口矩形平滑变形 */
+  transition: left 0.2s var(--anim-pop), top 0.2s var(--anim-pop),
+    width 0.2s var(--anim-pop), height 0.2s var(--anim-pop),
+    border-radius 0.2s, box-shadow 0.25s;
 }
+/* 拖拽/缩放中禁用几何过渡，保证 1:1 跟手 */
+.theme-macos .window.win-dragging { transition: none; }
 /* 入场（macOS：从略大处淡入，无位移） */
 .theme-macos .window.entering { animation: mac-in 0.22s var(--anim-pop); }
 /* 最小化飞向底部 Dock，恢复反向 */

@@ -73,6 +73,7 @@ export const useWindows = defineStore('windows', {
     },
     close(id: number) {
       // 动画过渡中的窗口被直接关闭：清掉落定 timer，回调里 find 不到也不会误伤
+      // （移出列表后由桌面 TransitionGroup 播 win-anim leave 离场动画）
       const t = settleTimers.get(id)
       if (t) { window.clearTimeout(t); settleTimers.delete(id) }
       const i = this.wins.findIndex(w => w.id === id)

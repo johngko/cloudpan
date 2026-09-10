@@ -171,7 +171,13 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow: 0 8px 36px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.10);
+  /* 几何过渡：最大化/还原/拖出最大化时窗口矩形平滑变形 */
+  transition: left 0.18s var(--anim-pop), top 0.18s var(--anim-pop),
+    width 0.18s var(--anim-pop), height 0.18s var(--anim-pop),
+    border-radius 0.18s, box-shadow 0.25s;
 }
+/* 拖拽/缩放中禁用几何过渡，保证 1:1 跟手 */
+.theme-deepin .window.win-dragging { transition: none; }
 .theme-deepin .window.foc {
   border-color: rgba(31,110,231,0.55);
   box-shadow: 0 16px 56px rgba(0,0,0,0.30), 0 3px 10px rgba(0,0,0,0.12);
