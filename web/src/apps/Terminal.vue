@@ -64,7 +64,10 @@ watch(mode, m => {
 })
 
 const sftpKey = computed(() => connId.value)
-const termReady = computed(() => mode.value === 'local' || !!connId.value)
+// 本地模式必须等 platform 接口给出 defaultShell 后再挂面板：否则 TermPanel 会以
+// 空 shell 先发一条 WS（服务端起一次完整会话），shell 解析完再重连——白白多占一个
+// 终端并发槽位，且旧连接的异步 onclose 可能覆盖新会话状态
+const termReady = computed(() => (mode.value === 'local' ? !!shell.value : !!connId.value))
 
 const statusText = computed(() => {
   if (status.value === 'connecting') return '连接中'

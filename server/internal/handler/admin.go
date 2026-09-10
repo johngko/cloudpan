@@ -3,7 +3,10 @@ package handler
 import (
 	"encoding/csv"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -311,6 +314,18 @@ func (h *AdminHandler) PolicyCreate(c *gin.Context) {
 			dto.Fail(c, 400, "本地存储必须填写根目录")
 			return
 		}
+		// 跨平台校验：必须为本机绝对路径；非 Windows 主机拒绝反斜杠，
+		// 防止 Linux 上粘贴 E:\x 这类路径被当作相对目录名静默建到 CWD 下
+		if runtime.GOOS != "windows" && strings.Contains(in.RootPath, "\\") {
+			dto.Fail(c, 400, "根目录路径不合法：Linux/macOS 请使用 / 分隔的绝对路径")
+			return
+		}
+		if !filepath.IsAbs(in.RootPath) {
+			if runtime.GOOS != "windows" || !filepath.IsAbs(filepath.FromSlash(in.RootPath)) {
+				dto.Fail(c, 400, "根目录必须是绝对路径（如 /data/storage）")
+				return
+			}
+		}
 		if _, err := fscore.NewLocal(in.RootPath); err != nil {
 			dto.Fail(c, 400, "根目录不可用："+err.Error())
 			return
@@ -586,3 +601,4 @@ func marshalOpts(m map[string]string) string {
 	b, _ := jsonMarshal(m)
 	return string(b)
 }
+

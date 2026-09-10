@@ -221,6 +221,9 @@ func (h *ShareHandler) loadShare(token string) (*model.Share, *model.User, error
 	if err := model.DB.Where("token = ?", token).First(&sh).Error; err != nil {
 		return nil, nil, errors.New("分享不存在或已取消")
 	}
+	if sh.RemainDownloads == 0 {
+		return nil, nil, errors.New("下载次数已用完")
+	}
 	if !sh.Available() {
 		return nil, nil, errors.New("分享已过期")
 	}
@@ -362,15 +365,16 @@ func (h *ShareHandler) Download(c *gin.Context) {
 		dto.Fail(c, 403, "分享者禁止下载")
 		return
 	}
-	if sh.RemainDownloads > 0 {
-		model.DB.Model(sh).UpdateColumn("remain_downloads", sh.RemainDownloads-1)
-	}
-	model.DB.Model(sh).UpdateColumn("downloads", sh.Downloads+1)
 	target, ok := shareTarget(sh, c.Query("path"))
 	if !ok {
 		dto.FailHTTP(c, 404, "文件不存在")
 		return
 	}
+	// 计数在文件确认存在后执行：404 不应消耗下载次数
+	if sh.RemainDownloads > 0 {
+		model.DB.Model(sh).UpdateColumn("remain_downloads", sh.RemainDownloads-1)
+	}
+	model.DB.Model(sh).UpdateColumn("downloads", sh.Downloads+1)
 	h.serveShareFile(c, sh, target, true)
 }
 

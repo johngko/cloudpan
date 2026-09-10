@@ -26,3 +26,4 @@ nohup.out
 .zcode/
 .DS_Store
 Thumbs.db
+server/cloudpan-linux

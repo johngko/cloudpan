@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { authApi, siteApi, type User, type UserGroup } from '../api/modules'
+import { clearToken } from '../api/http'
 import type { ThemeId } from '../themes/types'
 import { resolveTheme, availableThemes } from '../themes/registry'
 
@@ -55,7 +56,7 @@ export const useSession = defineStore('session', {
       applyTheme(this.dark, id)
     },
     logout() {
-      localStorage.removeItem('cp_token')
+      clearToken()
       this.user = null
       this.locked = false
       location.hash = '#/login'

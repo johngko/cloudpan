@@ -25,7 +25,9 @@ export const useAppState = defineStore('appstate', {
       } catch { /* 离线或功能被停用时忽略 */ }
     },
     set(key: string, on: boolean) {
-      this.enabled[key] = on
+      // 必须整体替换对象：桌面/Dock/开始菜单入口以 watch(() => apps.enabled)
+      // 引用比较驱动响应式增删，原地改属性不会触发
+      this.enabled = { ...this.enabled, [key]: on }
       this.loaded = true
     },
     async loadInstalled() {

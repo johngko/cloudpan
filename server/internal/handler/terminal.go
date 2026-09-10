@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"golang.org/x/crypto/ssh"
@@ -22,6 +22,24 @@ import (
 	"cloudpan/internal/dto"
 	"cloudpan/internal/middleware"
 )
+
+// localShell 平台无关的本地 shell 抽象（实现见 terminal_unix.go / terminal_windows.go）：
+//   - Unix：creack/pty（openpty + setsid），完整 PTY 体验
+//   - Windows：ConPTY（CreatePseudoConsole）；若伪控制台在该环境未生效
+//     （输出始终走真实控制台），自动回退为普通管道（shell 自行回显整行）
+type localShell struct {
+	read   func([]byte) (int, error)
+	write  func([]byte) (int, error)
+	resize func(cols, rows uint16)
+	kill   func()
+	wait   func() int
+	close  func()
+}
+
+func (s *localShell) killAndWait() int {
+	s.kill()
+	return s.wait()
+}
 
 // 终端功能：本地真实 shell（PTY/ConPTY）与远程 SSH 终端。
 // 前端 xterm.js 与本端点之间：二进制帧 = 原始 PTY 字节双向透传，
@@ -39,18 +57,22 @@ var (
 	termTotal   int
 )
 
+// termAcquire 槽位获取：超限返回 false（WS 端点回 429）。
+// DENY 日志保留——429 对用户可见但对运维不透明，日志能直接指出撞的是全局限额还是用户限额
 func termAcquire(kind string, uid uint) bool {
 	termSlotsMu.Lock()
 	defer termSlotsMu.Unlock()
-	if termTotal >= maxTermTotal {
-		return false
-	}
 	k := kind + ":" + strconv.FormatUint(uint64(uid), 10)
 	limit := maxLocalPerUser
 	if kind == "ssh" {
 		limit = maxSSHPerUser
 	}
+	if termTotal >= maxTermTotal {
+		log.Printf("[term] DENY total=%d slots=%v（全局限额 %d）", termTotal, termSlots, maxTermTotal)
+		return false
+	}
 	if termSlots[k] >= limit {
+		log.Printf("[term] DENY k=%s slots=%v（用户限额 %d）", k, termSlots, limit)
 		return false
 	}
 	termSlots[k]++
@@ -230,32 +252,23 @@ func (h *TerminalHandler) runLocal(c *gin.Context, x ctx3, ws *websocket.Conn,
 	}
 
 	cmd := exec.Command(shell)
-	if runtime.GOOS != "windows" {
-		if home, err := os.UserHomeDir(); err == nil {
-			cmd.Dir = home
-		}
-		cmd.Env = append(cmd.Environ(), "TERM=xterm-256color")
-	} else {
-		cmd.Env = append(cmd.Environ(), "TERM=xterm-256color", "ANSICON=140-0")
-	}
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 32, Cols: 120})
+	ls, err := startLocalShell(cmd)
 	if err != nil {
 		sendMsg(wsMsg{Type: "error", Msg: "启动终端失败: " + err.Error()})
 		return
 	}
-	defer ptmx.Close()
-	defer func() { _ = cmd.Process.Kill() }()
+	defer ls.close()
 
 	middleware.Audit(c, "terminal", "local "+shell)
 	sendMsg(wsMsg{Type: "hello", Mode: "local", OS: runtime.GOOS, Shell: shell})
 
-	// PTY 输出 → 前端
+	// shell 输出 → 前端
 	quit := make(chan struct{})
 	go func() {
 		defer close(quit)
 		buf := make([]byte, 32*1024)
 		for {
-			n, rerr := ptmx.Read(buf)
+			n, rerr := ls.read(buf)
 			if n > 0 {
 				if werr := write(websocket.BinaryMessage, buf[:n]); werr != nil {
 					return
@@ -267,7 +280,7 @@ func (h *TerminalHandler) runLocal(c *gin.Context, x ctx3, ws *websocket.Conn,
 		}
 	}()
 
-	// 前端 → PTY（含 resize 控制帧）
+	// 前端 → shell（含 resize 控制帧）
 	for {
 		mt, data, rerr := ws.ReadMessage()
 		if rerr != nil {
@@ -276,28 +289,20 @@ func (h *TerminalHandler) runLocal(c *gin.Context, x ctx3, ws *websocket.Conn,
 		if mt == websocket.TextMessage {
 			var m wsMsg
 			if json.Unmarshal(data, &m) == nil && m.Type == "resize" && m.Cols > 0 && m.Rows > 0 {
-				_ = pty.Setsize(ptmx, &pty.Winsize{Rows: m.Rows, Cols: m.Cols})
+				ls.resize(m.Cols, m.Rows)
 			}
 			continue
 		}
 		if mt != websocket.BinaryMessage {
 			continue
 		}
-		if _, werr := ptmx.Write(data); werr != nil {
+		if _, werr := ls.write(data); werr != nil {
 			break
 		}
 	}
 
 	// 前端断开：杀进程，等 shell 退出
-	_ = cmd.Process.Kill()
-	code := 0
-	if err := cmd.Wait(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			code = ee.ExitCode()
-		} else {
-			code = 1
-		}
-	}
+	code := ls.killAndWait()
 	<-quit
 	sendMsg(wsMsg{Type: "exit", Code: code})
 }

@@ -272,6 +272,10 @@
           <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareAllowDl" />允许下载</label>
           <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="sharePreview" />允许预览</label>
         </div>
+        <div class="row">
+          <label>下载次数限制（留空不限）</label>
+          <input class="input" v-model.number="shareMaxDl" type="number" min="1" placeholder="不限" style="width: 100%" />
+        </div>
         <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all">
           {{ shareLink }}
         </div>
@@ -1589,6 +1593,7 @@ const shareShow = ref(false)
 const shareTarget = ref<FileItem | null>(null)
 const sharePwd = ref('')
 const shareExpire = ref(0)
+const shareMaxDl = ref<number>(0)
 const shareAllowDl = ref(true)
 const sharePreview = ref(true)
 const shareLink = ref('')
@@ -1596,7 +1601,7 @@ function shareSel() {
   if (selPaths.value.length !== 1) return
   if (onSharedDrive.value) { toast.error('共享盘内不能创建分享链接'); return }
   shareTarget.value = items.value.find(i => i.path === selPaths.value[0]) || null
-  sharePwd.value = ''; shareExpire.value = 0; shareLink.value = ''
+  sharePwd.value = ''; shareExpire.value = 0; shareMaxDl.value = 0; shareLink.value = ''
   shareShow.value = true
 }
 async function doShare() {
@@ -1605,6 +1610,7 @@ async function doShare() {
     const s = await shareApi.create({
       policyId: currentPolicy.value.id, path: shareTarget.value.path,
       password: sharePwd.value || undefined, expireDays: shareExpire.value,
+      remainDownloads: (Number.isFinite(shareMaxDl.value) && shareMaxDl.value > 0) ? Math.floor(shareMaxDl.value) : 0,
       allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value
     })
     shareLink.value = location.origin + location.pathname + '#/s/' + s.token
@@ -1635,8 +1641,9 @@ async function loadVersions(path: string) {
   if (!currentPolicy.value) return
   versionLoading.value = true
   try {
-    const res = await fsApi.fileVersions(currentPolicy.value.id, path)
-    versions.value = (res.code === 0 && res.data) || []
+    // fsApi.* 已解包返回 data（http.ts 统一抛错），这里直接取数组
+    const data = await fsApi.fileVersions(currentPolicy.value.id, path)
+    versions.value = data || []
   } catch (e: any) { toast.error(e.message) }
   finally { versionLoading.value = false }
 }
@@ -1647,17 +1654,12 @@ function downloadVersion(version: number) {
 async function restoreVersion(path: string, version: number) {
   if (!currentPolicy.value) return
   try {
-    const res = await fsApi.fileVersionRestore(currentPolicy.value.id, path, version)
-    if (res.code === 0) {
-      toast.success(`已恢复至版本 ${version}`)
-      await loadVersions(path)
-      // 刷新当前视图
-      if (currentPolicy.value && path.startsWith('/')) {
-        const dir = path.substring(0, path.lastIndexOf('/')) || '/'
-        const name = path.split('/').pop()
-        await refreshList(currentPolicy.value.id, dir, name)
-      }
-    }
+    // fsApi.* 已解包返回 data（http.ts 统一抛错），resolve 即成功
+    await fsApi.fileVersionRestore(currentPolicy.value.id, path, version)
+    toast.success(`已恢复至版本 ${version}`)
+    await loadVersions(path)
+    // 刷新当前视图
+    refresh()
   } catch (e: any) { toast.error(e.message) }
 }
 function fmtVersionDate(ts: number) {

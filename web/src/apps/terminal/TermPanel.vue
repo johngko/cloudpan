@@ -120,9 +120,11 @@ onMounted(() => {
   connect()
 })
 
-// 会话参数变化：断开重连
+// 会话参数变化：断开重连。旧 ws 的 onclose 是异步触发的，若不先置 manualClose，
+// 它的 'closed/连接已断开' 会在新连接建立后到达，把新会话的状态覆盖成已断开
 watch(() => [props.mode, props.shell, props.connId], () => {
   if (!term) return
+  manualClose = true
   ws?.close()
   ws = null
   term.reset()
@@ -148,6 +150,7 @@ defineExpose({
   focus: () => term?.focus(),
   reconnect: () => {
     if (!term) return
+    manualClose = true // 防止旧 ws 的 onclose 异步覆盖新会话状态
     ws?.close()
     ws = null
     term.clear()

@@ -3,15 +3,16 @@ import axios from 'axios'
 export const http = axios.create({ baseURL: '/api', timeout: 60000 })
 
 const TOKEN_KEY = 'cp_token'
-
+// 会话令牌存 sessionStorage：按标签页隔离。localStorage 同源共享，
+// 多用户共用浏览器时在任一标签页登录（如游客登录）会顶掉其他标签页的会话。
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return sessionStorage.getItem(TOKEN_KEY)
 }
 export function setToken(t: string) {
-  localStorage.setItem(TOKEN_KEY, t)
+  sessionStorage.setItem(TOKEN_KEY, t)
 }
 export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
 }
 
 http.interceptors.request.use(cfg => {

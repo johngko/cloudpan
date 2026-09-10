@@ -822,8 +822,13 @@ async function checkPolicy(p: any) {
   try {
     const { get } = await import('../api/http')
     const st = await get<{ ok: boolean; msg?: string; used?: number; total?: number }>(`/cloud/status?policyId=${p.id}`)
-    if (st.ok) await uiDlg.alert('测通结果', `连通正常！已用 ${fmt(st.used || 0)}${st.total ? ' / 总量 ' + fmt(st.total) : ''}`)
-    else await uiDlg.alert('测通失败', st.msg || '未知错误')
+    if (st.ok) {
+      // 本地策略无配额信息：直接展示 msg（"本地存储"），避免出现"已用 -"
+      const detail = st.used || st.total
+        ? `已用 ${fmt(st.used || 0)}${st.total ? ' / 总量 ' + fmt(st.total) : ''}`
+        : (st.msg || '正常')
+      await uiDlg.alert('测通结果', `连通正常！${detail}`)
+    } else await uiDlg.alert('测通失败', st.msg || '未知错误')
   } catch (e: any) { toast.error(e.message) }
 }
 async function togglePolicy(p: any) {

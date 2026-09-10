@@ -816,6 +816,12 @@ func (h *SiteHandler) WriteText(c *gin.Context) {
 	if !checkQuota(c, x, add) {
 		return
 	}
+	// 版本管理：目标文件已存在时，覆盖前归档旧版本（与上传/Office 覆盖路径一致）
+	if p.Type == "local" {
+		if phys, err := fscore.PhysicalOf(d, vp); err == nil {
+			fscore.SaveVersion(in.PolicyID, x.user.ID, vp, phys)
+		}
+	}
 	if err := d.CreateFile(vp, strings.NewReader(in.Content)); err != nil {
 		dto.Fail(c, 400, "保存失败："+err.Error())
 		return

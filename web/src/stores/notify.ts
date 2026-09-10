@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { notifyApi } from '../api/modules'
+import { getToken } from '../api/http'
 
 // 站内通知：30s 轮询未读数，打开面板时拉取列表
 export const useNotify = defineStore('notify', {
@@ -64,7 +65,7 @@ export const useNotify = defineStore('notify', {
     // 连上新通知立即刷新；连接失败自动重连，连续 3 次失败（如功能被管理员停用）则放弃，靠 30s 轮询兜底。
     startStream() {
       this.stopStream()
-      const t = localStorage.getItem('cp_token')
+      const t = getToken()
       if (!t) return
       let es: EventSource
       try { es = new EventSource('/api/notify/stream?t=' + t) } catch { return }
