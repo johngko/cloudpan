@@ -281,27 +281,81 @@ Nginx: `location / { proxy_pass http://127.0.0.1:18322; proxy_set_header Host $h
 
 ---
 
-## 云盘接入准备
+## 云盘接入与扫码绑定教程
 
-| 云盘 | 需要什么 | 在哪获取 |
-|---|---|---|
-| 123云盘 | clientID + clientSecret | 123 开放平台 https://www.123pan.com/developer |
-| 阿里云盘 | client_id + client_secret（授权后自动保存 refresh_token） | 阿里云盘开放平台（需申请应用） |
-| 百度网盘 | AppKey + SecretKey（OAuth 后自动保存 access_token；上传需白名单，默认只读） | 百度网盘开放平台 |
-| 天翼云盘 | 网页版 Cookie（实验性） | 浏览器登录天翼云盘后复制 |
+支持的云盘：**123云盘**（官方开放平台）、**阿里云盘**（开放平台 OAuth）、**百度网盘**（官方 API，OAuth）、**天翼云盘**（Cookie，实验性）。
+阿里云盘 / 百度网盘支持**手机扫二维码一键绑定**（参考 AList 的挂载体验）：管理台把厂商授权页渲染成二维码，手机扫码→登录确认→厂商重定向回系统回调接口→token 自动落库，全程无需复制粘贴。
 
-管理控制台 → 存储策略 → 挂载存储 → 选择类型、填入密钥 → 「测通」验证连通性；OAuth 类云盘点「授权」完成 code 交换。
+### 通用前置：配置「公开地址」
 
-## Cloud Storage Backends
+扫码绑定依赖厂商把手机浏览器重定向回本系统（`<公开地址>/api/cloud/callback`），因此**手机必须能访问该地址**：
 
-| Cloud | Credentials | Where to get them |
-|---|---|---|
-| 123Pan | clientID + clientSecret | 123 developer platform https://www.123pan.com/developer |
-| Aliyun Drive | client_id + client_secret (refresh_token stored after OAuth) | Aliyun open platform (app registration required) |
-| Baidu Wangpan | AppKey + SecretKey (access_token stored after OAuth; upload needs allow-list, read-only by default) | Baidu open platform |
-| Tianyi Cloud | Web cookie (experimental) | Copy from a logged-in browser session |
+1. 管理控制台 → 站点设置 → **公开地址**，填写手机可访问的地址（如 `https://pan.example.com` 或内网 `http://192.168.1.10:18322`）
+2. 纯内网部署：手机与服务器处于同一局域网，填内网 IP 即可
+3. 公网部署：域名需能解析到服务器（含反向代理）
+4. 手机完全不可达本站时，可改用对话框内的「粘贴授权码」回退模式（oob 授权页直接显示授权码，人工粘贴）
 
-Admin Console → Storage Policies → Mount → pick a type and fill in credentials → verify with "test connection"; OAuth clouds use the "authorize" button for the code exchange.
+### 阿里云盘（扫码绑定）
+
+1. 打开 <https://open.alipan.com>（阿里云盘开放平台），注册开发者账号
+2. 「应用管理」→ 创建应用，获得 **ClientID / ClientSecret**
+3. CloudPan 管理控制台 → 存储策略 → **挂载存储** → 类型选「阿里云盘」→ 填入 ClientID/ClientSecret
+4. 点「**扫码授权**」→ 对话框出现二维码 → 用**阿里云盘 App**（或手机浏览器）扫描二维码
+5. 手机上登录阿里云盘账号并确认授权 → 手机页面显示「绑定成功」
+6. 管理台对话框 3 秒内自动检测到绑定、token 自动填入 → 点「挂载」保存 → 列表「测通」验证
+7. 此后 access_token 自动续期（refresh_token 轮换后自动落库），长期有效
+
+### 百度网盘（扫码绑定）
+
+1. 打开 <https://console.bce.baidu.com>（百度智能云控制台）→ 「百度应用开放体系」创建应用，获得 **AppKey / SecretKey**
+2. **在应用配置里登记回调地址**：`<本站公开地址>/api/cloud/callback`（百度要求回调地址预先登记，必须与站点设置一致）
+3. CloudPan 管理控制台 → 存储策略 → 挂载存储 → 类型选「百度网盘」→ 填入 AppKey/SecretKey
+4. 点「**扫码授权**」→ 手机扫二维码 → 登录百度账号并确认授权 → 自动回填
+5. 保存 → 「测通」验证
+6. 说明：**上传/写操作**（新建/上传/移动/删除）需向百度申请接口白名单，未获批前为**只读挂载**（浏览/预览/下载/秒传不受限）；token 自动滚动续期（30 天有效期自动刷新）
+
+### 123云盘 / 天翼云盘
+
+- **123云盘**：<https://www.123pan.com/developer> 注册开发者 → 创建应用 → 填入 ClientID/ClientSecret → 挂载 → 测通（无需 OAuth 跳转）
+- **天翼云盘**（实验性，社区逆向 Cookie，随时可能失效）：电脑浏览器登录天翼云盘网页版 → F12 复制 Cookie 整串填入
+
+## Cloud Storage Backends & QR-Scan Binding
+
+Supported: **123Pan** (official open platform), **Aliyun Drive** (open-platform OAuth), **Baidu Wangpan** (official API, OAuth), **Tianyi Cloud** (cookie, experimental).
+Aliyun Drive / Baidu Wangpan support **one-click binding by scanning a QR code with your phone** (AList-style mounting experience): the admin console renders the vendor's OAuth authorization page as a QR code — scan with your phone → log in and confirm → the vendor redirects back to the system's callback endpoint → tokens are stored automatically, with zero copy-paste.
+
+### Prerequisite: configure the "Public URL"
+
+QR binding relies on the vendor redirecting the phone's browser back to `<public-url>/api/cloud/callback`, so **the phone must be able to reach that address**:
+
+1. Admin Console → Site Settings → **Public URL** — set an address reachable from your phone (e.g. `https://pan.example.com`, or the LAN IP `http://192.168.1.10:18322` for LAN deployments)
+2. LAN-only deployment: put the phone on the same network and use the LAN IP
+3. Public deployment: the domain must resolve to the server (reverse proxy included)
+4. If your phone cannot reach the site at all, use the dialog's "paste the authorization code" fallback (the oob authorization page displays the code directly)
+
+### Aliyun Drive (QR binding)
+
+1. Go to <https://open.alipan.com>, register a developer account
+2. Create an app under App Management — note the **ClientID / ClientSecret**
+3. CloudPan Admin Console → Storage Policies → **Mount** → type "Aliyun Drive" → fill in ClientID/ClientSecret
+4. Click **Scan & Authorize** → a QR code appears → scan it with the **Aliyun Drive app** (or a phone browser)
+5. Log in and confirm on the phone → the phone shows "binding succeeded"
+6. The dialog detects the binding within ~3s and fills in the token automatically → click Mount to save → verify with "test connection"
+7. access_token auto-renews from then on (rotated refresh tokens are persisted), so the mount stays valid long-term
+
+### Baidu Wangpan (QR binding)
+
+1. Go to <https://console.bce.baidu.com> → create an app under the Baidu open platform — note the **AppKey / SecretKey**
+2. **Register the callback URL in the app settings**: `<your-public-url>/api/cloud/callback` (Baidu requires callbacks to be pre-registered; it must match the site setting)
+3. Admin Console → Storage Policies → Mount → type "Baidu Wangpan" → fill in AppKey/SecretKey
+4. Click **Scan & Authorize** → scan with your phone → log in to Baidu and confirm → tokens fill in automatically
+5. Save → verify with "test connection"
+6. Note: **write operations** (mkdir / upload / move / delete) require a Baidu API allow-list approval; until granted the mount is **read-only** (browsing / preview / download / instant-upload dedup are unaffected). Tokens auto-renew (30-day access tokens are refreshed automatically).
+
+### 123Pan / Tianyi Cloud
+
+- **123Pan**: <https://www.123pan.com/developer> → register → create an app → fill in ClientID/ClientSecret → Mount → test (no OAuth redirect needed)
+- **Tianyi Cloud** (experimental, community-reverse-engineered cookie, may break at any time): log in to the Tianyi web drive in a desktop browser → copy the full Cookie string via F12 → paste it in
 
 ---
 
@@ -312,6 +366,8 @@ Admin Console → Storage Policies → Mount → pick a type and fill in credent
 
 ### 2026-09-10
 
+- **云盘扫码一键绑定（阿里云盘 / 百度网盘）+ token 自动续期**：参考 AList 的挂载体验，管理台「挂载存储」对话框点「**扫码授权**」即把厂商 OAuth 授权页渲染成**二维码**——手机用云盘 App / 浏览器扫码 → 登录确认 → 厂商重定向回系统新增的公开回调接口 `/api/cloud/callback` → 授权码换 token 自动落库 → 对话框轮询检测到绑定后 token 自动回填，**全程零复制粘贴**；手机不便时可点链接在电脑浏览器打开，手机完全不可达本站时对话框提供「粘贴授权码」回退模式（oob）。安全设计：回调不依赖登录态，改用 **HMAC 签名 state**（绑定策略 ID/类型/回调地址，30 分钟过期）防伪造回调、防跨策略注入 code、防重放；回调结果渲染为手机友好的成功/失败页。同时修复两个 token 生命周期隐患：① 百度网盘驱动原先只存 access_token（30 天过期即挂载失效），现支持 refresh_token **滚动续期并自动落库**；② 阿里云盘驱动刷新时轮换出的新 refresh_token 原先只存内存、驱动缓存（10 分钟）过期后旧 token 已作废导致挂载永久失效，现轮换后立即落库。README 新增双语《云盘接入与扫码绑定教程》（含公开地址配置、百度回调登记、白名单只读说明）。E2E 14/14 + GUI 8/8 全部通过
+  - **One-click cloud-drive binding by QR scan (Aliyun Drive / Baidu Wangpan) + automatic token renewal**: referencing AList's mounting experience, the admin console's "Mount Storage" dialog now renders the vendor's OAuth authorization page as a **QR code** when you click **Scan & Authorize** — scan with the drive app / phone browser → log in and confirm → the vendor redirects back to the new public callback endpoint `/api/cloud/callback` → the code is exchanged for tokens and stored automatically → the dialog (polling) detects the binding and fills the token field in, with **zero copy-paste**. A "open in desktop browser" link is provided for convenience, and a "paste the authorization code" fallback (oob) covers the case where your phone cannot reach the site at all. Security design: the callback does not rely on a logged-in session; instead an **HMAC-signed state** (binding policy ID / type / callback URL, 30-minute expiry) prevents forged callbacks, cross-policy code injection, and replay; the result is rendered as a mobile-friendly success/failure page. Two token-lifecycle bugs fixed along the way: ① the Baidu driver previously stored only access_token (the mount died after its 30-day expiry) — it now supports **rolling refresh with auto-persistence**; ② the Aliyun driver's rotated refresh_token was previously kept in memory only, so after the 10-minute driver cache expired the (already-invalidated) old token was reused and the mount failed permanently — rotated tokens are now persisted immediately. The README gains a bilingual "Cloud Storage Backends & QR-Scan Binding" tutorial (public-URL setup, Baidu callback registration, allow-list read-only notes). E2E 14/14 + GUI 8/8
 - **游客 = 24 小时临时工作区（可上传 / 离线下载 / 在线 Office，到期自动清除）**：游客定位从"只读查看"升级为"临时工作区"——① **能力放开**：游客可以上传文件、新建/重命名/移动/复制/删除/记事本保存/回收站恢复等完整文件管理（自己盘内）、**离线下载**（HTTP 直链，下载内容落在自己盘）、**在线 Office 协作/编辑/预览**（docx/xlsx/pptx/pdf 打开即编辑器，rw 语义与注册用户一致）；终端/浏览器/公开分享/站内共享创建/BT/WebDAV/系统监控/应用中心/测速仍全部禁用。② **账号级白名单**：`GuestReadOnly` 中间件由"非 GET 一律 403"重构为**账号级默认拒绝 + 显式白名单**——白名单仅覆盖临时工作区自身文件管理、上传会话、离线任务创建/取消、被显式 rw 共享给访客的目录；改密码/改昵称/写用户设置/收藏/创建分享与共享等一切"修改自身账号状态"的操作仍全部 403（这些状态是全体访客共用的，开放会互相污染），今后新增写端点默认对游客关闭。③ **24 小时自动清理**：新增 TTL 清扫任务（启动时 + 每小时）——游客自己盘内 mtime 超过 24h 的文件物理删除（含 .versions 版本目录按文件级判定、空目录自底向上删除），游客回收站项**全部**永久物理删除（临时空间无回收站保留），游客版本账本行与超 24h 的离线/BT 任务行清除，秒传副本账本逐文件对账（硬链接副本消失不伤及其他用户索引），最后一次性回补配额。④ **秒传 mtime 重置**：秒传（硬链接）原本继承源文件 mtime，游客秒传他人已传内容会得到"已被上传很久"的旧时间戳、瞬间过期；现游客秒传落盘后强制刷新 mtime 为当前时间，秒传文件同样享有完整 24h 寿命。⑤ **存量部署自动迁移**：启动种子幂等刷新线上"访客"组画像（readOnly=false、allowOffline=true、应用权限 office/offline_http 放行，配额/限速等运维自定义项不动），无需手工操作。⑥ **前端**：资源管理器对游客显示 24h 临时空间提示条（"文件在上传 24 小时后自动清除，重要内容请及时下载"）；上传/新建/删除/离线下载等入口对游客自动放开（随组标志生效）；记事本对游客恢复可保存；设置页账号信息改为"临时空间说明"。E2E 43/43 + GUI 10/10 + 回归 E2E 30/30 全部通过
   - **Guest = 24-hour ephemeral workspace (can upload / offline-download / use online Office; auto-purged after expiry)**: the guest's role is upgraded from "read-only viewer" to "ephemeral workspace" — ① **capabilities unlocked**: guests can upload files, do full file management on their own drive (new folder / rename / move / copy / delete / notepad save / recycle-bin restore), **offline download** (HTTP direct links, landing in their own drive), and **online Office collaboration / editing / preview** (docx/xlsx/pptx/pdf open straight into the editor, rw semantics identical to registered users); terminal / browser / public share / in-site share creation / BT / WebDAV / system monitor / app center / speed test all stay denied. ② **Account-level allowlist**: the `GuestReadOnly` middleware is rebuilt from "deny every non-GET" into **account-level default-deny + explicit allowlist** — the allowlist covers only the ephemeral workspace's own file management, upload sessions, offline task create/cancel, and folders explicitly shared rw to visitors; everything that "mutates the shared account's own state" (password / nickname / user settings KV / favorites / share creation) still returns 403 (that state is shared by all visitors; opening it would let them pollute each other), and any future write endpoint is denied to guests by default. ③ **24-hour auto-cleanup**: a new TTL sweep task (at startup + hourly) physically deletes guest-drive files whose mtime is older than 24h (including `.versions` judged per file, empty dirs removed bottom-up), **permanently purges every guest recycle-bin item** (no trash retention in an ephemeral space), drops the guest's version-ledger rows and offline/BT task rows older than 24h, reconciles the instant-upload copy ledger file by file (a vanished hard-linked copy never harms other users' indexes), and refunds the quota in a single update. ④ **Instant-upload mtime reset**: instant upload (hard link) used to inherit the source file's mtime, so a guest instantly uploading someone else's already-indexed content would get a stale timestamp and expire immediately; guest instant uploads now force mtime to "now", giving them the full 24h lifetime. ⑤ **In-place migration**: the startup seed idempotently refreshes the live "访客 (Visitor)" group profile (readOnly=false, allowOffline=true, office/offline_http allowed; operator-customized quota/speed limits untouched) — no manual steps on existing deployments. ⑥ **Frontend**: Explorer shows a 24h ephemeral-space banner to guests ("files are auto-deleted 24h after upload — download important content in time"); upload / new / delete / offline-download entries become available for guests automatically via the group flags; Notepad is saveable again for guests; the Settings account page now shows an "ephemeral space" note. E2E 43/43 + GUI 10/10 + regression E2E 30/30
 - **修复「打开 Office 文件触发浏览器下载」+ 在线 Office（ONLYOFFICE）对接整体加固**：① **根因修复**：Office 编辑器窗口内置的 PDF 预览 iframe 此前无条件绑定 `src`——打开 docx/xlsx/pptx 时隐藏 iframe 也会去拉取文件，而浏览器无法渲染 Office 类型，于是触发"浏览器自动下载文件"（即用户所见现象）。现 iframe 仅在 PDF 模式挂载（v-if），Office 文件打开后只渲染编辑器、零下载。② **共享盘 Office 文件可编辑器打开**：此前共享盘内双击 Office 文件直接触发浏览器下载；现双击打开内置编辑器（共享源：预览/下载/保存均走共享通道），rw 共享可在线编辑并保存（覆盖原文件、旧版本自动归档进版本历史），ro 共享强制只读视图；内置表格（xlsx/csv）在共享盘的编辑保存改走共享上传通道。③ **ONLYOFFICE 对接健壮性**：管理控制台站点设置新增「**公开地址**」——Document Server 回拉文件/发送保存回调所用的本系统地址（须 DS 可达；留空时按访客浏览器访问地址自动推导，也可用环境变量 CP_PUBLIC_URL 强制指定）。此前固定回退 localhost，远端 DS 永远拉不到文件、编辑器加载不出文档；新增「**连接测试**」按钮（服务端探测 Document Server 的 /healthcheck，结果直接显示）；文件拉取接口改为按扩展名/内容嗅探 Content-Type（原固定 octet-stream）；文件签名 token 改 JSON 载荷（原 "|" 分隔在路径含分隔符时存在歧义）。④ **安全修复**：回调 token 原先不记录编辑权限——只读组用户或 ro 共享查看者可以持合法 token 伪造保存回调、覆盖属主文件（绕过只读约束）。现 token 携带 Edit 标志：view 签发的 token 仅允许拉取文件，保存回调一律拒写。E2E 30/30 + GUI 15/15 + 回归 E2E 31/31 全部通过

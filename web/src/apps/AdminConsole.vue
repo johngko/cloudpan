@@ -172,7 +172,7 @@
         <template v-else-if="tab === 'policies'">
           <div class="ac-head">
             <h2 class="ac-h2">存储策略 / 磁盘挂载</h2>
-            <button class="btn primary" @click="editPolicy = { ...emptyPolicy }; pOpts = {}; policyShow = true"><AppIcon name="plus" :size="15" />挂载存储</button>
+            <button class="btn primary" @click="newPolicy"><AppIcon name="plus" :size="15" />挂载存储</button>
           </div>
           <div class="ac-card" style="padding: 4px 0">
             <table class="ac-table">
@@ -535,7 +535,7 @@
     </div>
 
     <!-- 存储策略对话框 -->
-    <div class="dialog-mask" v-if="policyShow" @click.self="policyShow = false">
+    <div class="dialog-mask" v-if="policyShow" @click.self="closePolicy">
       <div class="dialog" style="width: 480px">
         <h3>{{ editPolicy.id ? '编辑' : '挂载' }}存储</h3>
         <div class="row">
@@ -563,7 +563,7 @@
           <div class="row"><label>ClientSecret</label><input class="input" v-model="pOpts.client_secret" style="width: 100%" /></div>
           <div class="row">
             <label>refresh_token</label>
-            <div style="display: flex; gap: 8px"><input class="input" v-model="pOpts.refresh_token" style="flex: 1" /><button class="btn" @click="startAuth">授权</button></div>
+            <div style="display: flex; gap: 8px"><input class="input" v-model="pOpts.refresh_token" placeholder="扫码授权后自动填入，也可手动粘贴" style="flex: 1" /><button class="btn" @click="startAuth()">扫码授权</button></div>
           </div>
         </template>
         <template v-else-if="editPolicy.type === 'baidu'">
@@ -571,12 +571,23 @@
           <div class="row"><label>SecretKey</label><input class="input" v-model="pOpts.client_secret" style="width: 100%" /></div>
           <div class="row">
             <label>access_token</label>
-            <div style="display: flex; gap: 8px"><input class="input" v-model="pOpts.access_token" style="flex: 1" /><button class="btn" @click="startAuth">授权</button></div>
+            <div style="display: flex; gap: 8px"><input class="input" v-model="pOpts.access_token" placeholder="扫码授权后自动填入，也可手动粘贴" style="flex: 1" /><button class="btn" @click="startAuth()">扫码授权</button></div>
           </div>
         </template>
         <template v-else-if="editPolicy.type === 'tianyi'">
           <div class="row"><label>网页版 Cookie（实验性）</label><input class="input" v-model="pOpts.cookie" style="width: 100%" /></div>
         </template>
+        <!-- 扫码授权面板：二维码 = 厂商授权页地址（带签名 state），手机扫码→授权→厂商重定向回 /api/cloud/callback 自动完成 -->
+        <div v-if="qrImg" class="qr-panel">
+          <img :src="qrImg" alt="授权二维码" />
+          <div class="qr-actions">
+            <a :href="qrUrl" target="_blank" rel="noopener">手机不便？点此在电脑浏览器打开授权页</a>
+            <button class="btn" style="padding: 2px 10px" @click="stopQr">取消</button>
+          </div>
+          <div class="qr-actions" style="justify-content: center">
+            <a href="#" @click.prevent="startAuth(true)">手机无法访问本站？改用「粘贴授权码」模式</a>
+          </div>
+        </div>
         <div v-if="authMsg" style="font-size: 12px; color: var(--theme-2); margin-bottom: 10px; word-break: break-all">{{ authMsg }}</div>
         <div class="ac-guide">
           <template v-if="editPolicy.type === 'pan123'">
@@ -586,16 +597,18 @@
             ③ 挂载后点「测通」验证连通
           </template>
           <template v-else-if="editPolicy.type === 'aliyun'">
-            <b>阿里云盘开通步骤：</b>
-            ① 前往 <a href="https://www.alipan.com/dev/app" target="_blank">阿里云盘开放平台</a> 申请应用（审核后获得 ClientID/Secret）
-            ② 填入上方后点「授权」→ 用阿里云盘 App 扫码登录 → 复制授权码回填
-            ③ 挂载后点「测通」验证
+            <b>阿里云盘挂载教程：</b>
+            ① 前往 <a href="https://open.alipan.com" target="_blank">阿里云盘开放平台</a> 注册开发者并创建应用，获得 ClientID / ClientSecret 填入上方
+            ② 确认「站点设置 → 公开地址」为手机可访问的地址（纯内网部署填内网地址即可，手机需与服务器同网段）
+            ③ 点「扫码授权」→ 用阿里云盘 App / 手机浏览器扫二维码 → 登录并确认授权 → 手机显示绑定成功，本页 token 自动填入
+            ④ 保存后点列表「测通」验证连通
           </template>
           <template v-else-if="editPolicy.type === 'baidu'">
-            <b>百度网盘开通步骤：</b>
-            ① 前往 <a href="https://pan.baidu.com/union/login" target="_blank">百度网盘开放平台</a> 创建应用获得 AppKey/SecretKey
-            ② 填入上方后点「授权」→ 登录百度账号（支持扫码）→ 复制授权码回填
-            ③ 上传接口需白名单审批，未通过时为只读模式
+            <b>百度网盘挂载教程：</b>
+            ① 前往 <a href="https://console.bce.baidu.com" target="_blank">百度智能云控制台</a>（开放平台）创建应用，获得 AppKey / SecretKey 填入上方
+            ② 在应用的「回调地址」里登记 <code>本站公开地址 + /api/cloud/callback</code>（与站点设置一致，百度要求回调地址预先登记）
+            ③ 点「扫码授权」→ 手机扫码登录百度账号并确认授权 → 绑定成功自动回填
+            ④ 上传/写操作需申请接口白名单，未获批前为只读挂载（查看/下载不受限）
           </template>
           <template v-else-if="editPolicy.type === 'tianyi'">
             <b>天翼云盘（实验性）：</b>
@@ -603,7 +616,7 @@
           </template>
         </div>
         <div class="actions">
-          <button class="btn" @click="policyShow = false">取消</button>
+          <button class="btn" @click="closePolicy">取消</button>
           <button class="btn primary" @click="createPolicy">{{ editPolicy.id ? '保存' : '挂载' }}</button>
         </div>
       </div>
@@ -618,6 +631,7 @@ import { useAppState } from '../stores/appstate'
 import { useUiDialog, useToast } from '../stores/dialog'
 import { adminApi, appsApi } from '../api/modules'
 import AppIcon from '../components/AppIcon.vue'
+import QRCode from 'qrcode'
 
 const session = useSession()
 const uiDlg = useUiDialog()
@@ -756,7 +770,7 @@ function switchTab(id: string) {
 }
 
 onMounted(() => { loadAll(); startSysPoll() })
-onUnmounted(stopSysPoll)
+onUnmounted(() => { stopSysPoll(); stopAuthPoll() })
 async function loadAll() {
   try {
     dash.value = await adminApi.dashboard()
@@ -832,7 +846,13 @@ async function delGroup(g: any) {
 async function editPolicyRow(p: any) {
   editPolicy.value = { id: p.id, name: p.name, letter: p.letter, type: p.type, rootPath: p.rootPath }
   pOpts.value = { ...(p.options || {}) }
-  authMsg.value = ''
+  stopQr()
+  policyShow.value = true
+}
+function newPolicy() {
+  editPolicy.value = { ...emptyPolicy }
+  pOpts.value = {}
+  stopQr()
   policyShow.value = true
 }
 async function checkPolicy(p: any) {
@@ -862,26 +882,65 @@ async function savePolicy(silent = false) {
     const p = await adminApi.policyCreate(d)
     editPolicy.value.id = p.id
   }
-  if (!silent) { policyShow.value = false; loadAll() }
+  if (!silent) { closePolicy(); loadAll() }
 }
 async function createPolicy() {
   try { await savePolicy() } catch (e: any) { toast.error(e.message) }
 }
-async function startAuth() {
+// ---- 云盘扫码绑定：渲染厂商授权页二维码（带签名 state），轮询 /cloud/status 直到回调完成 ----
+const qrUrl = ref('')
+const qrImg = ref('')
+let authPoll: ReturnType<typeof setInterval> | null = null
+
+async function startAuth(codeMode = false) {
   authMsg.value = ''
+  qrImg.value = ''
+  stopAuthPoll()
   try {
     const { get, post } = await import('../api/http')
     await savePolicy(true)
-    const url = await get<{ url: string }>(`/cloud/auth-url?policyId=${editPolicy.value.id}`)
-    if (!url.url) { authMsg.value = '该类型无需跳转授权'; return }
-    window.open(url.url, '_blank')
-    const code = prompt('完成授权登录后，把页面上的授权码(code)粘贴到这里：')
-    if (!code) return
-    await post('/cloud/exchange', { policyId: editPolicy.value.id, type: editPolicy.value.type, code })
-    authMsg.value = '授权成功！'
-    loadAll()
+    // codeMode：手机完全不可达本站时的回退——oob 授权页直接显示授权码，人工粘贴
+    const r = await get<{ url: string; mode: string }>(`/cloud/auth-url?policyId=${editPolicy.value.id}${codeMode ? '&mode=code' : ''}`)
+    if (!r.url) { authMsg.value = '该类型无需跳转授权'; return }
+    if (r.mode === 'qr' && !codeMode) {
+      // 扫码绑定：二维码即厂商授权页（redirect 回 /api/cloud/callback），手机扫码→授权→自动回填
+      qrUrl.value = r.url
+      qrImg.value = await QRCode.toDataURL(r.url, { width: 180, margin: 1, errorCorrectionLevel: 'M' })
+      authMsg.value = '正在等待扫码授权… 用云盘 App / 手机浏览器扫描二维码并确认授权（手机需能访问本站「公开地址」）。'
+      pollAuth()
+    } else {
+      // 回退：授权码粘贴模式（站点公开地址不可达时使用）
+      window.open(r.url, '_blank')
+      const code = prompt('完成授权登录后，把页面上的授权码(code)粘贴到这里：')
+      if (!code) return
+      await post('/cloud/exchange', { policyId: editPolicy.value.id, type: editPolicy.value.type, code })
+      authMsg.value = '授权成功！'
+      loadAll()
+    }
   } catch (e: any) { authMsg.value = e.message }
 }
+function pollAuth() {
+  stopAuthPoll()
+  authPoll = setInterval(async () => {
+    try {
+      const { get } = await import('../api/http')
+      const st = await get<{ ok: boolean; msg?: string }>(`/cloud/status?policyId=${editPolicy.value.id}`)
+      if (!st.ok) return // 尚未绑定（缺 token 时 status 报"需要 refresh_token…"）
+      stopAuthPoll()
+      qrImg.value = ''
+      authMsg.value = '授权成功！'
+      // 拉取最新 options 回填 token 字段
+      const list = await get<any[]>('/admin/policies')
+      const p = (list || []).find((x: any) => x.id === editPolicy.value.id)
+      if (p) pOpts.value = { ...(p.options || {}) }
+      toast.success('云盘绑定成功')
+      loadAll()
+    } catch { /* 轮询中的网络抖动忽略 */ }
+  }, 2500)
+}
+function stopAuthPoll() { if (authPoll) { clearInterval(authPoll); authPoll = null } }
+function stopQr() { stopAuthPoll(); qrImg.value = ''; authMsg.value = '' }
+function closePolicy() { stopQr(); policyShow.value = false }
 async function saveSettings() {
   try {
     await adminApi.settingsSet(settings.value)
@@ -1001,6 +1060,14 @@ async function adminDelShare(s: any) {
 }
 .ac-guide b { color: var(--theme-2); display: block; margin-bottom: 2px; }
 .ac-guide a { color: var(--theme-2); }
+.qr-panel {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px; margin-bottom: 10px; border-radius: 10px;
+  background: var(--card, #fff); border: 1px solid var(--stroke-b, #e5e7eb);
+}
+.qr-panel img { border-radius: 8px; }
+.qr-panel .qr-actions { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.qr-panel .qr-actions a { color: var(--theme-2); }
 
 /* 系统资源监控 */
 .sys-card .ac-row-title { display: flex; align-items: center; gap: 8px; }

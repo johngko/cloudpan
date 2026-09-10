@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -21,6 +22,7 @@ const apiAli = "https://openapi.alipan.com"
 
 // Aliyun 阿里云盘开放平台驱动（需 client_id/client_secret + refresh_token）
 type Aliyun struct {
+	PolicyID     uint
 	ClientID     string
 	ClientSecret string
 	RefreshToken string
@@ -38,21 +40,34 @@ func NewAliyun(p *model.Policy) (fscore.Driver, error) {
 		return nil, fmt.Errorf("阿里云盘需要 refresh_token（开放平台授权后获取，在存储策略中配置）")
 	}
 	return &Aliyun{
+		PolicyID: p.ID,
 		ClientID: o["client_id"], ClientSecret: o["client_secret"], RefreshToken: o["refresh_token"],
 		idCache: map[string]string{"/": "root"},
 		http:    &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }
 
-// AuthURL 生成授权页地址（前端授权中心引导用户访问）
-func AliyunAuthURL(clientID string) string {
-	return fmt.Sprintf("%s/oauth/authorize?client_id=%s&redirect_uri=oob&scope=user:base,file:all:read,file:all:write", apiAli, clientID)
+// AuthURL 生成授权页地址。redirectURI 传回调地址（扫码绑定，授权后厂商重定向回系统回调接口）
+// 或 "oob"（授权码粘贴模式）；state 为系统签名状态，回调时校验
+func AliyunAuthURL(clientID, redirectURI, state string) string {
+	if redirectURI == "" {
+		redirectURI = "oob"
+	}
+	u := fmt.Sprintf("%s/oauth/authorize?client_id=%s&redirect_uri=%s&scope=user:base,file:all:read,file:all:write",
+		apiAli, url.QueryEscape(clientID), url.QueryEscape(redirectURI))
+	if state != "" {
+		u += "&state=" + url.QueryEscape(state)
+	}
+	return u
 }
 
-// ExchangeCode 用授权码换 token（管理端调用）
-func AliyunExchangeCode(clientID, clientSecret, code string) (refresh, access string, err error) {
+// ExchangeCode 用授权码换 token（redirectURI 必须与授权页所用一致）
+func AliyunExchangeCode(clientID, clientSecret, code, redirectURI string) (refresh, access string, err error) {
+	if redirectURI == "" {
+		redirectURI = "oob"
+	}
 	m, err := jreq("POST", apiAli+"/oauth/access_token", nil, map[string]interface{}{
-		"client_id": clientID, "client_secret": clientSecret, "grant_type": "authorization_code", "code": code, "redirect_uri": "oob",
+		"client_id": clientID, "client_secret": clientSecret, "grant_type": "authorization_code", "code": code, "redirect_uri": redirectURI,
 	})
 	if err != nil {
 		return "", "", err
@@ -77,6 +92,9 @@ func (d *Aliyun) token() (string, error) {
 	rt := jstr(m, "refresh_token")
 	if rt != "" {
 		d.RefreshToken = rt
+		// refresh_token 每次刷新会轮换、旧值作废：必须落库，否则驱动缓存（10 分钟）
+		// 过期重建后拿到的还是已作废的旧 token，挂载将永久失效
+		persistPolicyOpt(d.PolicyID, "refresh_token", rt)
 	}
 	exp := jnum(m, "expires_in")
 	if exp < 300 {

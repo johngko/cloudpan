@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"cloudpan/internal/model"
 )
 
 var client = &http.Client{Timeout: 60 * time.Second}
@@ -99,4 +101,23 @@ func truncate(s string, n int) string {
 		return s[:n] + "..."
 	}
 	return s
+}
+
+// persistPolicyOpt 把单个 key 写回策略 options（token 刷新轮换后落库，
+// 否则驱动实例（10 分钟缓存）销毁后轮换出的新 refresh_token 会丢失、授权永久失效）
+func persistPolicyOpt(policyID uint, key, val string) {
+	if policyID == 0 || val == "" {
+		return
+	}
+	var p model.Policy
+	if model.DB.First(&p, policyID).Error != nil {
+		return
+	}
+	o := p.Opts()
+	if o[key] == val {
+		return
+	}
+	o[key] = val
+	b, _ := json.Marshal(o)
+	_ = model.DB.Model(&p).UpdateColumn("options", string(b)).Error
 }
