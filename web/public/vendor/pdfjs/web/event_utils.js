@@ -1,0 +1,213 @@
+/* Copyright 2012 Mozilla Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { INTERNAL_EVT, internalOpt } from "./internal_evt.js";
+import { makeSet } from "pdfjs-lib";
+
+const WaitOnType = {
+  EVENT: "event",
+  TIMEOUT: "timeout",
+};
+
+/**
+ * @typedef {Object} WaitOnEventOrTimeoutParameters
+ * @property {Object} target - The event target, can for example be:
+ *   `window`, `document`, a DOM element, or an {EventBus} instance.
+ * @property {string} name - The name of the event.
+ * @property {number} delay - The delay, in milliseconds, after which the
+ *   timeout occurs (if the event wasn't already dispatched).
+ */
+
+/**
+ * Allows waiting for an event or a timeout, whichever occurs first.
+ * Can be used to ensure that an action always occurs, even when an event
+ * arrives late or not at all.
+ *
+ * @param {WaitOnEventOrTimeoutParameters}
+ * @returns {Promise} A promise that is resolved with a {WaitOnType} value.
+ */
+async function waitOnEventOrTimeout({ target, name, delay = 0 }) {
+  if (
+    typeof target !== "object" ||
+    !(name && typeof name === "string") ||
+    !(Number.isInteger(delay) && delay >= 0)
+  ) {
+    throw new Error("waitOnEventOrTimeout - invalid parameters.");
+  }
+  const { promise, resolve } = Promise.withResolvers();
+  const ac = new AbortController();
+
+  function handler(type) {
+    ac.abort(); // Remove event listener.
+    clearTimeout(timeout);
+
+    resolve(type);
+  }
+
+  const evtMethod = target instanceof EventBus ? "on" : "addEventListener";
+  const evtOpts =
+    target instanceof EventBus
+      ? { signal: ac.signal, ...internalOpt }
+      : { signal: ac.signal };
+  target[evtMethod](name, handler.bind(null, WaitOnType.EVENT), evtOpts);
+
+  const timeout = setTimeout(handler.bind(null, WaitOnType.TIMEOUT), delay);
+
+  return promise;
+}
+
+/**
+ * Simple event bus for an application. Listeners are attached using the `on`
+ * and `off` methods. To raise an event, the `dispatch` method shall be used.
+ */
+class EventBus {
+  #listeners = new Map();
+
+  constructor() {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+      // Prevent the class methods from being overridden by third-party users,
+      // to ensure that `INTERNAL_EVT` cannot be accessed from the outside.
+      Object.seal(this);
+    }
+  }
+
+  /**
+   * @param {string} eventName
+   * @param {function} listener
+   * @param {Object} [options]
+   */
+  on(eventName, listener, options = null) {
+    let rmAbort = null;
+    if (options?.signal instanceof AbortSignal) {
+      const { signal } = options;
+      if (signal.aborted) {
+        console.error("Cannot use an `aborted` signal.");
+        return;
+      }
+      const onAbort = () => this.off(eventName, listener);
+      rmAbort = () => signal.removeEventListener("abort", onAbort);
+
+      signal.addEventListener("abort", onAbort);
+    }
+
+    this.#listeners.getOrInsertComputed(eventName, makeSet).add({
+      listener,
+      internal: options?.internal === INTERNAL_EVT,
+      once: options?.once === true,
+      rmAbort,
+    });
+  }
+
+  /**
+   * @param {string} eventName
+   * @param {function} listener
+   * @param {Object} [options]
+   */
+  off(eventName, listener, options = null) {
+    const eventListeners = this.#listeners.get(eventName);
+    const evt = eventListeners?.keys().find(e => e.listener === listener);
+    if (evt) {
+      evt.rmAbort?.(); // Ensure that the `AbortSignal` listener is removed.
+      eventListeners.delete(evt);
+    }
+  }
+
+  /**
+   * @param {string} eventName
+   * @param {Object} data
+   */
+  dispatch(eventName, data) {
+    const eventListeners = this.#listeners.get(eventName);
+    if (!eventListeners?.size) {
+      return;
+    }
+    let extListeners;
+    // Always create a copy of the listeners in case they are modified
+    // during dispatch.
+    for (const { listener, internal, once } of new Set(eventListeners)) {
+      if (once) {
+        this.off(eventName, listener);
+      }
+      if (!internal) {
+        (extListeners ??= []).push(listener);
+        continue;
+      }
+      listener(data);
+    }
+    // Dispatch any "external" listeners *after* the internal ones, to give the
+    // viewer components time to handle events and update their state first.
+    if (extListeners) {
+      for (const listener of extListeners) {
+        listener(data);
+      }
+    }
+  }
+}
+
+/**
+ * NOTE: Only used in the Firefox built-in pdf viewer.
+ */
+class FirefoxEventBus extends EventBus {
+  #externalServices;
+
+  #globalEventNames;
+
+  #isInAutomation;
+
+  constructor(globalEventNames, externalServices, isInAutomation) {
+    super();
+    this.#globalEventNames = globalEventNames;
+    this.#externalServices = externalServices;
+    this.#isInAutomation = isInAutomation;
+  }
+
+  dispatch(eventName, data) {
+    if (typeof PDFJSDev !== "undefined" && !PDFJSDev.test("MOZCENTRAL")) {
+      throw new Error("Not implemented: FirefoxEventBus.dispatch");
+    }
+    super.dispatch(eventName, data);
+
+    if (this.#isInAutomation) {
+      const detail = Object.create(null);
+      if (data) {
+        for (const key in data) {
+          const value = data[key];
+          if (key === "source") {
+            if (value === window || value === document) {
+              return; // No need to re-dispatch (already) global events.
+            }
+            continue; // Ignore the `source` property.
+          }
+          detail[key] = value;
+        }
+      }
+      const event = new CustomEvent(eventName, {
+        bubbles: true,
+        cancelable: true,
+        detail,
+      });
+      document.dispatchEvent(event);
+    }
+
+    if (this.#globalEventNames?.has(eventName)) {
+      this.#externalServices.dispatchGlobalEvent({
+        eventName,
+        detail: data,
+      });
+    }
+  }
+}
+
+export { EventBus, FirefoxEventBus, waitOnEventOrTimeout, WaitOnType };

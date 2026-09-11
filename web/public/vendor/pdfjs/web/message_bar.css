@@ -1,0 +1,212 @@
+/* Copyright 2024 Mozilla Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.messageBar {
+  --closing-button-icon: url(images/messageBar_closingButton.svg);
+  --message-bar-close-button-color: var(--text-primary-color);
+  --message-bar-close-button-color-hover: var(--text-primary-color);
+  --message-bar-close-button-border-radius: var(--border-radius-small, 4px);
+  --message-bar-close-button-border: none;
+  --message-bar-close-button-hover-bg-color: var(
+    --button-background-color-hover,
+    light-dark(rgb(21 20 26 / 0.14), rgb(251 251 254 / 0.14))
+  );
+  --message-bar-close-button-active-bg-color: var(
+    --button-background-color-active,
+    light-dark(rgb(21 20 26 / 0.21), rgb(251 251 254 / 0.21))
+  );
+  --message-bar-close-button-focus-bg-color: var(
+    --button-background-color,
+    light-dark(rgb(21 20 26 / 0.07), rgb(251 251 254 / 0.07))
+  );
+
+  /* Use Nova's icon-button radius. */
+  /*#if MOZCENTRAL && !GECKOVIEW*/
+  @media -moz-pref("pdfjs.enableNova") and -moz-pref("browser.nova.enabled") {
+    --message-bar-close-button-border-radius: var(--button-border-radius);
+  }
+  /*#endif*/
+
+  @media screen and (forced-colors: active) {
+    --message-bar-close-button-color: var(--button-text-color, ButtonText);
+    --message-bar-close-button-border: 1px solid
+      var(--button-border-color, ButtonText);
+    /* One icon colour is shared by hover/active/focus, so all three backgrounds
+       read the -hover token and pair with --button-text-color-hover. The
+       fallbacks are SelectedItemText/SelectedItem for the same reason: the
+       previous ButtonText-behind-HighlightText hid the icon outright in any
+       theme whose button ink and highlight text are both light. */
+    --message-bar-close-button-hover-bg-color: var(
+      --button-background-color-hover,
+      SelectedItemText
+    );
+    --message-bar-close-button-active-bg-color: var(
+      --button-background-color-hover,
+      SelectedItemText
+    );
+    --message-bar-close-button-focus-bg-color: var(
+      --button-background-color-hover,
+      SelectedItemText
+    );
+    --message-bar-close-button-color-hover: var(
+      --button-text-color-hover,
+      SelectedItem
+    );
+  }
+
+  display: flex;
+  position: relative;
+  padding: 8px 8px 8px 16px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+
+  /* Nests inside .dialog, whose radius is --border-radius-medium, so it has to
+     scale with it to keep the inner corner tighter than the outer one. */
+  border-radius: var(--border-radius-small, 4px);
+
+  border: 1px solid var(--message-bar-border-color);
+  background: var(--message-bar-bg-color);
+  color: var(--message-bar-fg-color);
+
+  > div {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    align-self: stretch;
+
+    &::before {
+      content: "";
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      mask-image: var(--message-bar-icon);
+      mask-size: cover;
+      background-color: var(--message-bar-icon-color);
+      flex-shrink: 0;
+    }
+  }
+
+  button {
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: var(--focus-ring-outline);
+      outline-offset: 2px;
+    }
+  }
+
+  .closeButton {
+    width: 32px;
+    height: 32px;
+    background: none;
+    border-radius: var(--message-bar-close-button-border-radius);
+    border: var(--message-bar-close-button-border);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &::before {
+      content: "";
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      mask-image: var(--closing-button-icon);
+      mask-size: cover;
+      background-color: var(--message-bar-close-button-color);
+    }
+
+    &:is(:hover, :active, :focus)::before {
+      background-color: var(--message-bar-close-button-color-hover);
+    }
+
+    &:hover {
+      background-color: var(--message-bar-close-button-hover-bg-color);
+    }
+
+    &:active {
+      background-color: var(--message-bar-close-button-active-bg-color);
+    }
+
+    &:focus {
+      background-color: var(--message-bar-close-button-focus-bg-color);
+    }
+
+    > span {
+      display: inline-block;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+  }
+}
+
+#editorUndoBar {
+  --message-bar-icon: url(images/messageBar_info.svg);
+  --message-bar-icon-color: light-dark(#0060df, #73a7f3);
+  --message-bar-bg-color: light-dark(#deeafc, #003070);
+  --message-bar-fg-color: var(--text-primary-color);
+  --message-bar-border-color: light-dark(
+    rgb(0 0 0 / 0.08),
+    rgb(255 255 255 / 0.08)
+  );
+
+  /* Match Nova message bars: use a neutral surface and information icon. */
+  /*#if MOZCENTRAL && !GECKOVIEW*/
+  @media -moz-pref("pdfjs.enableNova") and -moz-pref("browser.nova.enabled") {
+    --message-bar-icon-color: var(--icon-color-information);
+    --message-bar-bg-color: var(--background-color-box);
+    --message-bar-border-color: var(--border-color-deemphasized);
+  }
+  /*#endif*/
+
+  @media screen and (forced-colors: active) {
+    --message-bar-icon-color: CanvasText;
+    --message-bar-bg-color: Canvas;
+    --message-bar-border-color: CanvasText;
+  }
+
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+
+  padding-block: 8px;
+  padding-inline: 16px 8px;
+
+  font: menu;
+  font-size: 15px;
+
+  cursor: default;
+
+  button {
+    cursor: pointer;
+  }
+
+  #editorUndoBarUndoButton {
+    margin-inline-start: 8px;
+    /* The generic secondary border is the same translucent wash as its fill,
+       which disappears on the tinted bar, so keep an explicit accent edge. */
+    border-color: var(--color-accent-primary, light-dark(#0060df, #0df));
+  }
+
+  > div {
+    align-items: center;
+  }
+}

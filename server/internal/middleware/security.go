@@ -108,12 +108,28 @@ func SecurityHeaders() gin.HandlerFunc {
 		mu.Unlock()
 		h := c.Writer.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// vendor 页面（mindmap host.html / pdfjs viewer / drawio）需要被主应用窗口
+		// 以同源 iframe 嵌入，frame-ancestors 放宽为 'self'（仍禁止跨站嵌入防点击劫持）；
+		// 其余页面保持 'none' + XFO DENY。
+		if frameableVendorPath(c.Request.URL.Path) {
+			h.Set("X-Frame-Options", "SAMEORIGIN")
+			csp = strings.Replace(csp, "frame-ancestors 'none'; ", "frame-ancestors 'self'; ", 1)
+		} else {
+			h.Set("X-Frame-Options", "DENY")
+		}
 		h.Set("Content-Security-Policy", csp)
 		c.Next()
 	}
+}
+
+// frameableVendorPath 判断是否为允许被同源 iframe 嵌入的 vendor 页面：
+// 思维导图（host.html）、PDF 阅读器（web/viewer.html）、流程图（drawio index）。
+func frameableVendorPath(p string) bool {
+	return strings.HasPrefix(p, "/vendor/mindmap/") ||
+		strings.HasPrefix(p, "/vendor/pdfjs/") ||
+		strings.HasPrefix(p, "/vendor/drawio")
 }
 
 // redactQueryValues 将 "path?query" 串中指定参数的值打码（保留参数顺序与其它参数原样）

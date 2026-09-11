@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>思维导图</title>
+<script>
+// 宿主桥（kalcaddle/mind-map 的 takeOverApp 契约，MIT）：
+// 父窗口（同源 iframe）在加载完成后：
+//   1) 写 iframe.contentWindow.__mmData（simple-mind-map 数据 JSON）
+//   2) 设 iframe.contentWindow.__mmOnSave = (data) => {...}（每次变更回调，含 Ctrl+S 前）
+//   3) 调 iframe.contentWindow.initApp() 实例化
+// 应用侧调用：getMindMapData（同步）/ saveMindMapData / getLanguage / saveLanguage / getLocalConfig / saveLocalConfig
+window.externalPublicPath = '/vendor/mindmap/'
+window.takeOverApp = true
+window.__mmData = null
+window.__mmDirty = false
+window.__mmReady = false
+window.takeOverAppMethods = {
+  getMindMapData: function () { return window.__mmData },
+  saveMindMapData: function (d) {
+    window.__mmData = d
+    window.__mmDirty = true
+    if (window.__mmOnSave) window.__mmOnSave(d)
+  },
+  getLanguage: function () { return 'zh' },
+  saveLanguage: function () {},
+  getLocalConfig: function () { return null },
+  saveLocalConfig: function () {}
+}
+window.addEventListener('load', function () { window.__mmReady = true })
+</script>
+<link rel="stylesheet" href="/vendor/mindmap/css/chunk-vendors.css">
+<link rel="stylesheet" href="/vendor/mindmap/css/app.css">
+</head>
+<body style="margin:0">
+<div id="app" style="width:100vw;height:100vh"></div>
+<script src="/vendor/mindmap/js/chunk-vendors.js"></script>
+<script src="/vendor/mindmap/js/app.js"></script>
+</body>
+</html>

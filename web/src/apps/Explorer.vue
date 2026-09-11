@@ -1101,6 +1101,15 @@ async function openItem(f: FileItem) {
     store.open('imageviewer', { ...p, list: siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(x.ext)) }, { title: f.name + ' - 图片查看器', icon: 'image', w: 900, h: 640 })
   } else if (['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
     store.open('mediaviewer', { ...p, list: siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext)) }, { title: f.name + ' - 媒体播放器', icon: 'media', w: 900, h: 620 })
+  } else if (ext === 'pdf' && apps.isAvailable('pdf_reader')) {
+    // PDF 阅读器（pdf.js vendored）；功能停用回落到下方 officeeditor 静态预览
+    store.open('pdfreader', p, { title: f.name + ' - PDF 阅读器', icon: 'pdfreader', w: 1080, h: 700 })
+  } else if (['smm', 'xmind'].includes(ext) && apps.isAvailable('mindmap')) {
+    store.open('mindmap', p, { title: f.name + ' - 思维导图', icon: 'mindmap', w: 1080, h: 700 })
+  } else if (ext === 'excalidraw' && apps.isAvailable('whiteboard')) {
+    store.open('whiteboard', p, { title: f.name + ' - 白板', icon: 'whiteboard', w: 1080, h: 700 })
+  } else if (ext === 'drawio' && apps.isAvailable('flowchart')) {
+    store.open('flowchart', p, { title: f.name + ' - 流程图', icon: 'flowchart', w: 1080, h: 700 })
   } else if (OFFICE_EXTS.includes(ext)) {
     // 配置了 Document Server：整页 ONLYOFFICE 编辑器（Cloudreve 模式：撑满整页 + 完整功能区，
     // 自己账号打开与分享链接打开同一形态）；PDF 走内嵌查看；未配置回退桌面窗口静态预览
@@ -1123,6 +1132,10 @@ const OFFICE_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 
 // 压缩包（压缩包浏览器在线查看/解压；功能未开启时回落下载）。
 // 单独 .gz/.bz2/.xz（非 tar 族）无目录表不可浏览，仍走下载/解压
 const ARCHIVE_EXTS = ['zip', '7z', 'rar', 'tar', 'tgz', 'tbz2', 'txz']
+// 新建创意文档模板（思维导图/白板/流程图，写入即带最小可编辑骨架）
+const MINDMAP_TEMPLATE = JSON.stringify({ root: { data: { text: '中心主题' }, children: [] }, theme: { template: 'avocado', config: {} }, layout: 'logicalStructure', config: {}, view: null }, null, 2)
+const WHITEBOARD_TEMPLATE = JSON.stringify({ type: 'excalidraw', version: 2, source: 'cloudpan', elements: [], appState: { viewBackgroundColor: '#ffffff', gridSize: null }, files: {} })
+const DRAWIO_TEMPLATE = '<mxfile host="CloudPan" agent="CloudPan" version="24.7.7" type="device">\n  <diagram id="page1" name="第 1 页">\n    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">\n      <root>\n        <mxCell id="0"/>\n        <mxCell id="1" parent="0"/>\n      </root>\n    </mxGraphModel>\n  </diagram>\n</mxfile>'
 
 // ---- 实时协作「正在编辑」徽章：30s 批量只读查询当前目录 Office 文件的协作状态 ----
 // 只读查询不把自己登记为编辑者；编辑者由整页编辑器的 20s 心跳维护（90s 无心跳视为离开）
@@ -1155,7 +1168,7 @@ function startEditPoll() {
 }
 
 // ---- 打开方式：强制用指定应用打开（覆盖默认路由） ----
-function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor' | 'archiveviewer') {
+function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor' | 'archiveviewer' | 'mindmap' | 'whiteboard' | 'flowchart' | 'imageeditor' | 'pdfreader') {
   const pid = (f as any).policyId || currentPolicy.value?.id || 0
   if (!pid) return
   const ext = (f.ext || '').toLowerCase()
@@ -1193,15 +1206,23 @@ function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 
     mediaviewer: { title: f.name + ' - 媒体播放器', icon: 'media', w: 880, h: 580 },
     notepad: { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 },
     officeeditor: { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 },
-    archiveviewer: { title: f.name + ' - 压缩包浏览器', icon: 'archive', w: 1000, h: 620 }
+    archiveviewer: { title: f.name + ' - 压缩包浏览器', icon: 'archive', w: 1000, h: 620 },
+    mindmap: { title: f.name + ' - 思维导图', icon: 'mindmap', w: 1080, h: 700 },
+    whiteboard: { title: f.name + ' - 白板', icon: 'whiteboard', w: 1080, h: 700 },
+    flowchart: { title: f.name + ' - 流程图', icon: 'flowchart', w: 1080, h: 700 },
+    imageeditor: { title: f.name + ' - 图片编辑器', icon: 'imageedit', w: 980, h: 660 },
+    pdfreader: { title: f.name + ' - PDF 阅读器', icon: 'pdfreader', w: 1080, h: 700 }
   }
   store.open(app, p, { title: map[app].title, icon: map[app].icon, w: map[app].w, h: map[app].h })
 }
 function buildOpenWith(f: FileItem) {
   const ext = (f.ext || '').toLowerCase()
   const items: any[] = [{ label: '默认程序', icon: iconOf(f), onClick: () => openItem(f) }]
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext))
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)) {
     items.push({ label: '图片查看器', icon: 'image', onClick: () => openWith(f, 'imageviewer') })
+    if (apps.isAvailable('image_editor'))
+      items.push({ label: '图片编辑器', icon: 'imageedit', onClick: () => openWith(f, 'imageeditor') })
+  }
   if (['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext))
     items.push({ label: '媒体播放器', icon: 'media', onClick: () => openWith(f, 'mediaviewer') })
   if (TEXT_EXTS.includes(ext) || !ext)
@@ -1210,6 +1231,14 @@ function buildOpenWith(f: FileItem) {
     items.push({ label: 'Office 编辑器', icon: 'office', onClick: () => openWith(f, 'officeeditor') })
   if (ARCHIVE_EXTS.includes(ext) && apps.isAvailable('archive_view'))
     items.push({ label: '压缩包浏览器', icon: 'archive', onClick: () => openWith(f, 'archiveviewer') })
+  if (ext === 'pdf' && apps.isAvailable('pdf_reader'))
+    items.push({ label: 'PDF 阅读器', icon: 'pdfreader', onClick: () => openWith(f, 'pdfreader') })
+  if (['smm', 'xmind'].includes(ext) && apps.isAvailable('mindmap'))
+    items.push({ label: '思维导图', icon: 'mindmap', onClick: () => openWith(f, 'mindmap') })
+  if (ext === 'excalidraw' && apps.isAvailable('whiteboard'))
+    items.push({ label: '白板', icon: 'whiteboard', onClick: () => openWith(f, 'whiteboard') })
+  if (ext === 'drawio' && apps.isAvailable('flowchart'))
+    items.push({ label: '流程图', icon: 'flowchart', onClick: () => openWith(f, 'flowchart') })
   return items
 }
 
@@ -1222,6 +1251,9 @@ function iconOf(f: FileItem) {
     if (['xlsx', 'xls'].includes(e)) return 'fileExcel'
     if (['pptx', 'ppt'].includes(e)) return 'filePpt'
     if (e === 'pdf') return 'filePdf'
+    if (['smm', 'xmind'].includes(e)) return 'fileMindmap'
+    if (e === 'excalidraw') return 'fileWhiteboard'
+    if (e === 'drawio') return 'fileFlowchart'
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(e)) return 'fileImg'
     if (['mp4', 'webm', 'mkv', 'avi', 'mov'].includes(e)) return 'fileVidio'
     if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(e)) return 'fileMusic'
@@ -1236,6 +1268,9 @@ function iconOf(f: FileItem) {
   if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(e)) return 'media'
   if (['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'pdf'].includes(e)) return 'office'
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(e)) return 'archive'
+  if (['smm', 'xmind'].includes(e)) return 'mindmap'
+  if (e === 'excalidraw') return 'whiteboard'
+  if (e === 'drawio') return 'flowchart'
   return 'file'
 }
 // ---- 内部拖拽移动 + 图片缩略图 ----
@@ -1256,19 +1291,24 @@ function thumbUrl(f: FileItem) {
 }
 
 // ---- 新建（Windows 习惯：立即创建默认名并进入重命名；仅本地磁盘/文件夹内） ----
-async function newItem(kind: 'folder' | 'text') {
+type NewKind = 'folder' | 'text' | 'mindmap' | 'whiteboard' | 'flowchart'
+const NEW_TPL: Record<NewKind, { base: string; ext: string; template?: string }> = {
+  folder: { base: '新建文件夹', ext: '' },
+  text: { base: '新建文本文档', ext: '.txt' },
+  mindmap: { base: '新建思维导图', ext: '.smm', template: MINDMAP_TEMPLATE },
+  whiteboard: { base: '新建白板', ext: '.excalidraw', template: WHITEBOARD_TEMPLATE },
+  flowchart: { base: '新建流程图', ext: '.drawio', template: DRAWIO_TEMPLATE }
+}
+async function newItem(kind: NewKind) {
   if (!currentPolicy.value || onSharedDrive.value || readOnly.value) return
-  const base = kind === 'folder' ? '新建文件夹' : '新建文本文档.txt'
+  const t = NEW_TPL[kind]
+  let final = t.base + t.ext
   const names = new Set(items.value.map(x => x.name))
-  let final = base
   let i = 2
-  while (names.has(final)) {
-    final = kind === 'folder' ? `新建文件夹(${i})` : `新建文本文档(${i}).txt`
-    i++
-  }
+  while (names.has(final)) { final = `${t.base}(${i})${t.ext}`; i++ }
   try {
     if (kind === 'folder') await fsApi.mkdir(currentPolicy.value.id, path.value, final)
-    else await fsApi.writeText(currentPolicy.value.id, joinPath(path.value, final), '')
+    else await fsApi.writeText(currentPolicy.value.id, joinPath(path.value, final), t.template || '')
     await load()
     // Windows 行为：创建后名称处于可编辑状态
     renameTarget.value = joinPath(path.value, final)
@@ -1300,11 +1340,14 @@ function startUpload(files: File[]) {
   transfer.panel(true)
   toast.success(`已加入 ${files.length} 个文件到上传队列`)
 }
-// 工具栏「新建」下拉（Windows 资源管理器同款）
+// 工具栏「新建」下拉（Windows 资源管理器同款）；创意文档项按系统功能门控
 function newMenu(e: MouseEvent) {
   ctx.show(e.clientX, e.clientY + 6, [
     { label: '文件夹', icon: 'folder', onClick: () => newItem('folder') },
-    { label: '文本文档', icon: 'notepad', onClick: () => newItem('text') }
+    { label: '文本文档', icon: 'notepad', onClick: () => newItem('text') },
+    ...(apps.isAvailable('mindmap') ? [{ label: '思维导图', icon: 'mindmap', onClick: () => newItem('mindmap') }] : []),
+    ...(apps.isAvailable('whiteboard') ? [{ label: '白板', icon: 'whiteboard', onClick: () => newItem('whiteboard') }] : []),
+    ...(apps.isAvailable('flowchart') ? [{ label: '流程图', icon: 'flowchart', onClick: () => newItem('flowchart') }] : [])
   ])
 }
 function onFilePicked(e: Event) {
@@ -1974,7 +2017,10 @@ function onBlankCtx(e: MouseEvent) {
       {
         label: '新建', icon: 'plus', disabled: readOnly.value, children: [
           { label: '文件夹', icon: 'folder', onClick: () => newItem('folder') },
-          { label: '文本文档', icon: 'notepad', onClick: () => newItem('text') }
+          { label: '文本文档', icon: 'notepad', onClick: () => newItem('text') },
+          ...(apps.isAvailable('mindmap') ? [{ label: '思维导图', icon: 'mindmap', onClick: () => newItem('mindmap') }] : []),
+          ...(apps.isAvailable('whiteboard') ? [{ label: '白板', icon: 'whiteboard', onClick: () => newItem('whiteboard') }] : []),
+          ...(apps.isAvailable('flowchart') ? [{ label: '流程图', icon: 'flowchart', onClick: () => newItem('flowchart') }] : [])
         ]
       },
       {

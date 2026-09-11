@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,6 +28,14 @@ func Register(r *gin.Engine) {
 			return
 		}
 		name := trimSlash(p)
+		// 目录路径（以 / 结尾）优先提供目录内的 index.html（如 /vendor/drawio/），
+		// 对齐 http.FileServer 的目录索引行为；否则回退 SPA 兜底
+		if strings.HasSuffix(name, "/") {
+			if _, err := sub.Open(name + "index.html"); err == nil {
+				serveAsset(c, sub, name+"index.html")
+				return
+			}
+		}
 		if _, err := sub.Open(name); err == nil {
 			serveAsset(c, sub, name)
 			return

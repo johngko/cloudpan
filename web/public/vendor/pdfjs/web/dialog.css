@@ -1,0 +1,269 @@
+/* Copyright 2022 Mozilla Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.dialog {
+  --dialog-bg-color: var(--background-color-canvas, light-dark(white, #1c1b22));
+  --dialog-border-color: var(
+    --background-color-canvas,
+    light-dark(white, #1c1b22)
+  );
+  --dialog-shadow: 0 2px 14px 0 light-dark(rgb(58 57 68 / 0.2), #15141a);
+  --text-secondary-color: light-dark(#5b5b66, #cfcfd8);
+  --separator-color: light-dark(#f0f0f4, #52525e);
+
+  /* A textarea is an interactive control, so it takes the interactive border
+     token (whose light value is the shipped literal) and not --border-color,
+     which is the low-contrast decorative one. */
+  --textarea-border-color: var(--border-color-interactive, #8f8f9d);
+  --textarea-bg-color: light-dark(white, #42414d);
+  --textarea-fg-color: var(--text-secondary-color);
+
+  /* .primaryButton / .secondaryButton button tokens are defined once, at :root
+     in buttons.css (the shared primitive), and inherit into dialogs. */
+
+  --input-text-bg-color: light-dark(white, #42414d);
+  --input-text-fg-color: var(--text-primary-color);
+
+  /* Match Nova popup borders, separators, and shadows. */
+  /*#if MOZCENTRAL && !GECKOVIEW*/
+  @media -moz-pref("pdfjs.enableNova") and -moz-pref("browser.nova.enabled") {
+    --dialog-border-color: var(--border-color-deemphasized);
+    --dialog-shadow: var(--box-shadow-level-3);
+    --separator-color: var(--border-color-deemphasized);
+  }
+  /*#endif*/
+
+  @media screen and (forced-colors: active) {
+    --dialog-bg-color: var(--background-color-canvas, Canvas);
+    /* border-only: --background-color-canvas would resolve to Canvas in FF HCM
+       (= the dialog bg) and the shadow is none here, leaving no boundary; route
+       through --border-color (CanvasText in HCM) to keep a visible border. */
+    --dialog-border-color: var(--border-color, CanvasText);
+    --dialog-shadow: none;
+    --text-secondary-color: CanvasText;
+    --separator-color: CanvasText;
+
+    --textarea-border-color: ButtonBorder;
+    --textarea-bg-color: Field;
+    --textarea-fg-color: ButtonText;
+
+    --input-text-bg-color: Field;
+    --input-text-fg-color: FieldText;
+  }
+
+  font: message-box;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 150%;
+  border-radius: var(--border-radius-medium, 4px);
+  padding: 12px 16px;
+  border: 1px solid var(--dialog-border-color);
+  background: var(--dialog-bg-color);
+  color: var(--text-primary-color);
+  box-shadow: var(--dialog-shadow);
+
+  .mainContainer {
+    *:focus-visible {
+      outline: var(--focus-ring-outline);
+      outline-offset: 2px;
+    }
+
+    .title {
+      display: flex;
+      width: auto;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: flex-start;
+      gap: 12px;
+
+      > span {
+        font-size: 13px;
+        font-style: normal;
+        font-weight: 590;
+        line-height: 150%; /* 19.5px */
+      }
+    }
+
+    .dialogSeparator {
+      width: 100%;
+      height: 0;
+      margin-block: 4px;
+      border-top: 1px solid var(--separator-color);
+      border-bottom: none;
+    }
+
+    .dialogButtonsGroup {
+      display: flex;
+      gap: 12px;
+      align-self: flex-end;
+    }
+
+    /* Native checkbox/radio tinted with the accent at Firefox's control size,
+       matching Firefox's default form controls (the custom appearance is
+       Nova-only in Firefox, so the default look is native + accent-color). */
+    input:is([type="checkbox"], [type="radio"]) {
+      accent-color: var(--color-accent-primary, light-dark(#0060df, #0df));
+      width: var(--checkbox-size, 16px);
+      height: var(--checkbox-size, 16px);
+    }
+
+    .radio {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+
+      > .radioButton {
+        display: flex;
+        gap: 8px;
+        align-self: stretch;
+        align-items: center;
+      }
+
+      > .radioLabel {
+        display: flex;
+        padding-inline-start: 24px;
+        align-items: flex-start;
+        gap: 10px;
+        align-self: stretch;
+
+        > span {
+          flex: 1 0 0;
+          font-size: 11px;
+          color: var(--text-secondary-color);
+        }
+      }
+    }
+
+    button:not(:is(.toggle-button, .closeButton, .clearInputButton)) {
+      border-radius: var(--button-border-radius, 4px);
+      border-width: 1px;
+      border-style: solid;
+      font: menu;
+      font-weight: var(--button-font-weight, 590);
+      font-size: var(--button-font-size, 13px);
+      padding: var(--button-padding, 4px 16px);
+      width: auto;
+      min-height: var(--button-min-height, 32px);
+
+      &:hover {
+        cursor: pointer;
+        filter: var(--hover-filter);
+      }
+
+      > span {
+        color: inherit;
+        font: inherit;
+      }
+
+      /* .primaryButton / .secondaryButton colours and states come from the
+         shared buttons.css primitive; only the dialog-specific base geometry
+         (above) lives here, so it also covers unclassed dialog buttons. */
+      &:disabled {
+        pointer-events: none;
+      }
+    }
+
+    a {
+      color: var(--link-fg-color);
+
+      &:hover {
+        color: var(--link-hover-fg-color);
+      }
+    }
+
+    textarea {
+      font: inherit;
+      padding: 8px;
+      resize: none;
+      margin: 0;
+      box-sizing: border-box;
+      border-radius: var(--border-radius-small, 4px);
+      border: 1px solid var(--textarea-border-color);
+      background: var(--textarea-bg-color);
+      color: var(--textarea-fg-color);
+
+      &:focus {
+        outline-offset: 0;
+        border-color: transparent;
+      }
+
+      &:disabled {
+        pointer-events: none;
+        opacity: 0.4;
+      }
+    }
+
+    input[type="text"] {
+      background-color: var(--input-text-bg-color);
+      color: var(--input-text-fg-color);
+    }
+
+    .messageBar {
+      --message-bar-bg-color: light-dark(#ffebcd, #5a3100);
+      --message-bar-fg-color: light-dark(#15141a, #fbfbfe);
+      --message-bar-border-color: light-dark(
+        rgb(0 0 0 / 0.08),
+        rgb(255 255 255 / 0.08)
+      );
+      --message-bar-icon: url(images/messageBar_warning.svg);
+      --message-bar-icon-color: light-dark(#cd411e, #e49c49);
+
+      @media screen and (forced-colors: active) {
+        --message-bar-bg-color: HighlightText;
+        --message-bar-fg-color: CanvasText;
+        --message-bar-border-color: CanvasText;
+        --message-bar-icon-color: CanvasText;
+      }
+
+      align-self: stretch;
+
+      > div {
+        &::before,
+        > div {
+          margin-block: 4px;
+        }
+
+        > div {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+          flex: 1 0 0;
+
+          .title {
+            font-size: 13px;
+            font-weight: 590;
+          }
+
+          .description {
+            font-size: 13px;
+          }
+        }
+      }
+    }
+
+    .toggler {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      align-self: stretch;
+
+      > .togglerLabel {
+        user-select: none;
+      }
+    }
+  }
+}

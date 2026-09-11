@@ -38,6 +38,9 @@ const WIN12_ICONS: Record<string, string> = {
   fileExcel: 'files/excel.png',
   filePpt: 'files/ppt.png',
   filePdf: 'files/pdf.svg',
+  fileMindmap: 'files/mindmap.svg',
+  fileWhiteboard: 'files/whiteboard.svg',
+  fileFlowchart: 'files/flowchart.svg',
   fileTxt: 'files/txt.png',
   fileImg: 'files/img.png',
   fileMusic: 'files/music.png',
@@ -114,6 +117,16 @@ const apps: Record<string, string> = {
     `<circle cx="12" cy="12" r="5.7" stroke-width="1.8"/><path d="M6.3 12h11.4M12 6.3c1.8 1.6 2.7 3.5 2.7 5.7s-.9 4.1-2.7 5.7c-1.8-1.6-2.7-3.5-2.7-5.7s.9-4.1 2.7-5.7z" stroke-width="1.8"/>`),
   archive: tile('#ffd36e', '#e8890c',
     `<rect x="6.4" y="5.6" width="11.2" height="4.6" rx="1.1"/><path d="M7.4 10.2v6.4a1.4 1.4 0 0 0 1.4 1.4h6.4a1.4 1.4 0 0 0 1.4-1.4v-6.4"/><path d="M10.3 12.8h3.4M12 10.2v2.6" stroke-width="1.7"/>`),
+  mindmap: tile('#c79bff', '#7c3aed',
+    `<rect x="9.6" y="10.4" width="4.8" height="3.2" rx="1.6" fill="#ffffff" stroke="none"/><circle cx="7" cy="8" r="1.6" fill="#ffffff" stroke="none"/><circle cx="17" cy="8" r="1.6" fill="#ffffff" stroke="none"/><circle cx="7" cy="16" r="1.6" fill="#ffffff" stroke="none"/><circle cx="17" cy="16" r="1.6" fill="#ffffff" stroke="none"/><path d="M8.6 8.8L10.8 10.4M15.4 8.8L13.2 10.4M8.6 15.2l2.2-1.6M15.4 15.2l-2.2-1.6" stroke-width="1.6"/>`),
+  whiteboard: tile('#7ee8fa', '#0891b2',
+    `<rect x="5.8" y="6.8" width="12.4" height="9" rx="1.2"/><path d="M8.4 12.6l2.2-2.4 1.7 1.7 2.4-3 2.4 3" stroke-width="1.7"/><path d="M9.4 17.6l2.2-2.4" stroke-width="1.7"/><circle cx="15.8" cy="17.9" r="0.9" fill="#ffffff" stroke="none"/>`),
+  flowchart: tile('#ffb457', '#ea580c',
+    `<rect x="8.4" y="5.8" width="7.2" height="3.2" rx="0.8"/><path d="M12 9v2" stroke-width="1.7"/><path d="M12 11l2.7 2.7L12 16.4l-2.7-2.7L12 11z"/><path d="M12 16.4v1.4" stroke-width="1.7"/><rect x="8.4" y="17.8" width="7.2" height="2.6" rx="0.8"/>`),
+  imageedit: tile('#6ee88f', '#15803d',
+    `<rect x="5.8" y="6.8" width="12.4" height="9" rx="1.2"/><circle cx="9" cy="10" r="1" stroke-width="1.6"/><path d="M6.6 14.6l2.6-2.5 1.9 1.8 1.7-1.6 2.2 2" stroke-width="1.7"/><path d="M8 18.4h8" stroke-width="1.7"/><circle cx="10.4" cy="18.4" r="1.1" fill="#ffffff" stroke="none"/>`),
+  pdfreader: tile('#ff9a8a', '#dc2626',
+    `<path d="M8 6.4h5l3 3v8.2a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7.4a1 1 0 0 1 1-1z"/><path d="M13 6.4v3h3"/><circle cx="10.6" cy="12.6" r="1.9" stroke-width="1.7"/><path d="M12 14l1.6 1.6" stroke-width="1.7"/>`),
 
   // 品牌 logo（开机/登录/菜单栏）：自由形态云朵，非 tile
   cloud: `<defs><linearGradient id="__G__" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#2f86d6"/></linearGradient></defs><path d="M7 18.6a4.4 4.4 0 0 1-.6-8.7 5.7 5.7 0 0 1 11.2 1.2 3.8 3.8 0 0 1-.4 7.5H7z" fill="url(#__G__)"/>`,
@@ -167,7 +180,11 @@ const ui: Record<string, string> = {
   logout: S(`<path d="M14 4.5H6.5A1.5 1.5 0 0 0 5 6v12a1.5 1.5 0 0 0 1.5 1.5H14"/><path d="M10.5 12H20M17 8.5L20.5 12 17 15.5"/>`),
   sun: S(`<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/>`),
   rotate2: S(`<path d="M4 12a8 8 0 1 1 2.5 5.8M4 20v-4h4"/>`),
+  rotate: S(`<path d="M20 12a8 8 0 1 0-2.3 5.6M20 20v-4.5h-4.5"/><path d="M9 12l2.4 2.4L16 9.8" stroke-width="1.8"/>`),
+  rotateR: S(`<path d="M4 12a8 8 0 1 1 2.3 5.6M4 20v-4.5h4.5"/><path d="M15 12l-2.4 2.4L8 9.8" stroke-width="1.8"/>`),
   flip: S(`<path d="M12 3.5v17M8 7.5L4.5 12 8 16.5M16 7.5L19.5 12 16 16.5"/>`),
+  flipH: S(`<path d="M12 4v16" stroke-dasharray="2.4 2.2"/><path d="M9 8.5L5.5 12 9 15.5z" fill="currentColor" stroke="none"/><path d="M15 8.5L18.5 12 15 15.5z"/>`),
+  flipV: S(`<path d="M4 12h16" stroke-dasharray="2.4 2.2"/><path d="M8.5 9L12 5.5 15.5 9z" fill="currentColor" stroke="none"/><path d="M8.5 15L12 18.5 15.5 15z"/>`),
   expand: S(`<path d="M4 9V4.5h5M15 4.5h5V9M20 15v4.5h-5M9 19.5H4V15"/>`)
 }
 
