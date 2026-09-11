@@ -35,6 +35,8 @@
       <div v-if="session.site.registerOpen" class="mac-login-reg">
         <a href="#/register">创建新账号</a>
       </div>
+      <!-- 演示文档入口（管理台站点设置填入演示分享 token 后显示） -->
+      <a v-if="session.site.demoShare" class="mac-login-demo" :href="'#/s/' + session.site.demoShare">体验在线文档</a>
     </div>
     <div v-if="session.site.announcement && stage === 'form'" class="mac-login-notice" v-html="noticeHtml"></div>
     <div class="mac-login-welcome" v-else-if="stage === 'welcome'">
@@ -151,6 +153,20 @@ async function doLogin() {
   transition: color 150ms;
 }
 .mac-login-switch a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.mac-login-demo {
+  display: block;
+  margin-top: 14px;
+  text-align: center;
+  color: #ffffffc8;
+  font-size: 12.5px;
+  text-decoration: none;
+  user-select: none;
+  transition: color 150ms;
+}
+.mac-login-demo:hover {
   color: #fff;
   text-decoration: underline;
 }

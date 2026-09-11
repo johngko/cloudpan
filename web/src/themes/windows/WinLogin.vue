@@ -38,6 +38,10 @@
     <div class="w12-login-reg" v-if="session.site.registerOpen">
       <a href="#/register">注册新账号</a>
     </div>
+    <!-- 演示文档入口（管理台站点设置填入演示分享 token 后显示） -->
+    <div class="w12-login-demo" v-if="session.site.demoShare">
+      <a :href="'#/s/' + session.site.demoShare">体验在线文档</a>
+    </div>
     <div class="w12-login-site">{{ session.site.siteName }} · CloudPan</div>
 
     <div class="w12-login-power">
@@ -142,6 +146,30 @@ function reboot() { location.reload() }
 </script>
 
 <style scoped>
+.w12-login-demo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 128px;
+  text-align: center;
+}
+.w12-login-demo a {
+  display: inline-block;
+  color: #ffffffb8;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  user-select: none;
+  transition: background 150ms, color 150ms;
+  text-decoration: none;
+}
+.w12-login-demo a:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
 .w12-login-switch {
   margin-top: 14px;
   text-align: center;

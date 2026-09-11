@@ -24,11 +24,11 @@ export interface FileItem {
 
 export const authApi = {
   // isGuest：是否游客共享账号（系统托管身份，前端据此隐藏账号自管理入口；后端另有 GuestReadOnly 兜底）
-  login: (username: string, password: string) => post<{ token: string; user: User; isGuest: boolean }>('/auth/login', { username, password }),
+  login: (username: string, password: string) => post<{ token: string; refreshToken: string; user: User; isGuest: boolean }>('/auth/login', { username, password }),
   // 游客登录：登录页「游客登录」入口，无需凭据（后端为共享游客账号签发 24h 令牌）
-  guest: () => post<{ token: string; user: User; isGuest: boolean }>('/auth/guest', {}),
+  guest: () => post<{ token: string; refreshToken: string; user: User; isGuest: boolean }>('/auth/guest', {}),
   register: (username: string, password: string, nickname: string, inviteCode: string) =>
-    post<{ token: string; user: User; isGuest: boolean }>('/auth/register', { username, password, nickname, inviteCode }),
+    post<{ token: string; refreshToken: string; user: User; isGuest: boolean }>('/auth/register', { username, password, nickname, inviteCode }),
   me: () => get<{ user: User; group: UserGroup; isGuest: boolean }>('/auth/me'),
   updateMe: (d: any) => put('/users/me', d),
   changePassword: (old_: string, new_: string) => put('/users/me/password', { old: old_, new: new_ }),
@@ -36,7 +36,7 @@ export const authApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string }>('/site/public')
 }
 
 // 在线 Office：实时协作「正在编辑」状态

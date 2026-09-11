@@ -256,6 +256,10 @@
               <textarea class="input" v-model="settings.announcement" rows="5" style="width: 100%; max-width: 560px; resize: vertical; line-height: 1.6"
                 placeholder="支持 Markdown，例如：&#10;**系统升级通知**&#10;- 今晚 22:00 维护&#10;- 详情见 [公告](https://example.com)"></textarea>
             </div>
+            <div class="ac-set-row" style="flex-direction: column; align-items: flex-start; gap: 6px">
+              <div class="ac-set-lbl"><b>演示文档分享</b><span>填一个分享链接的 token（如 abc123），登录页显示「体验在线文档」入口；分享不存在或过期时自动隐藏。建议分享一个 Markdown 或 Office 演示文件</span></div>
+              <input class="input" v-model="settings.demo_share" style="width: 300px" placeholder="分享 token，如 abc123；留空 = 不显示入口" />
+            </div>
             <div class="ac-set-row">
               <div class="ac-set-lbl"><b>站点主题</b><span>全局生效：游客/普通用户/管理员访问都渲染该主题（非管理员无设置入口）</span></div>
               <select class="input" v-model="settings.site_theme" style="width: 260px">

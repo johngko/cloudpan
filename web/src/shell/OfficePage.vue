@@ -77,7 +77,7 @@
 // - /office?policyId=&path= 或 /office?shareId=&rel=（登录态：自己的盘/共享盘文件）
 // - /s/:token/office?path=&st=（公开分享链接：任何人可打开，编辑权限由分享者设置决定）
 // 编辑器撑满整页，顶栏仅保留文件信息与关闭按钮——与 Cloudreve 的整页编辑器一致
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
@@ -89,6 +89,11 @@ const route = useRoute()
 const q = route.query as Record<string, string>
 const isShare = computed(() => String(route.path).startsWith('/s/'))
 const shareToken = String(route.params.token || '')
+// 编辑器会话状态（editor 实例/心跳/stoken）与 token+路径绑定：SPA 内切到另一个文档链接
+// 时组件不会重新挂载，整页重载避免残留旧文档会话
+watch(() => route.fullPath, (nv, ov) => {
+  if (nv !== ov) location.reload()
+})
 const isLocalAuth = computed(() => !isShare.value && !!q.policyId)
 const canShare = computed(() => isLocalAuth.value && !!getToken())
 const isPdf = computed(() => (q.path || '').toLowerCase().endsWith('.pdf') || (q.rel || '').toLowerCase().endsWith('.pdf'))

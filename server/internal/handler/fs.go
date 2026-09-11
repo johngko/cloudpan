@@ -68,12 +68,22 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 	if theme != "win12" && theme != "macos" && theme != "deepin" {
 		theme = "win12"
 	}
+	// 公开演示文档：站点设置 demo_share 填一个分享 token，登录页显示「体验在线文档」入口；
+	// 分享不存在或已过期时不暴露（避免登录页出现死链）
+	demoShare := ""
+	if tok := strings.TrimSpace(s["demo_share"]); tok != "" {
+		var dshare model.Share
+		if err := model.DB.Where("token = ?", tok).First(&dshare).Error; err == nil && dshare.Available() {
+			demoShare = tok
+		}
+	}
 	dto.OK(c, gin.H{
 		"siteName": s["site_name"], "registerOpen": regOpen, "needInviteCode": invite,
 		"officeConfigured": s["onlyoffice_url"] != "",
 		"announcement":     s["announcement"],
 		"guestLogin":       guestLogin,
 		"theme":            theme,
+		"demoShare":        demoShare,
 	})
 }
 

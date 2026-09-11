@@ -12,11 +12,15 @@
               <span v-if="!info.isDir && editing['']" class="share-editing" :title="'当前还有协作者在线编辑：' + editing['']"><span class="share-editing-dot"></span>正在编辑：{{ editing[''] }}</span>
             </div>
           </div>
-          <button class="btn" v-if="authed" :disabled="saveBusy" @click="openSaveDlg" title="一键保存到自己的网盘">
-            <AppIcon name="cloud" :size="15" /> 保存到网盘
+          <button class="btn" v-if="authed" :disabled="saveBusy" @click="openSaveDlg()"
+            :title="!info.isDir && isTextFile(info.name) ? '保存到自己的网盘，可用记事本打开继续编辑' : '一键保存到自己的网盘'">
+            <AppIcon name="cloud" :size="15" /> {{ !info.isDir && isTextFile(info.name) ? '存到我的记事本' : '保存到网盘' }}
           </button>
           <button class="btn" v-if="!info.isDir && officeReady && OFFICE_DS_EXTS.includes(extOf(info.name))" @click="openOfficeEditor('')" title="ONLYOFFICE 在线编辑器（可编辑保存）">
             <AppIcon name="office" :size="15" /> 在线打开
+          </button>
+          <button class="btn" v-if="!info.isDir && isTextFile(info.name)" @click="openTextViewer('', info.name)" title="在线阅读文本/Markdown">
+            <AppIcon name="edit" :size="15" /> 在线阅读
           </button>
           <button class="btn primary" v-if="info.allowDownload" @click="downloadCurrent">
             <AppIcon name="download" :size="15" /> 下载
@@ -51,12 +55,31 @@
                 <td style="width: 110px; color: var(--text-3); padding: 8px 14px">{{ f.isDir ? '-' : fmt(f.size) }}</td>
                 <td style="width: 90px; padding: 8px 14px; color: var(--text-3)">
                   <button v-if="officeReady && OFFICE_DS_EXTS.includes(f.ext)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">打开</button>
+                  <button v-else-if="isTextFile(f.name)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">阅读</button>
                   <button v-else-if="info.allowDownload" class="tool-btn" style="padding: 3px 8px" @click.stop="downloadItem(f)">下载</button>
                   <button v-else-if="info.previewEnabled && canPreview(f)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">预览</button>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文本/Markdown 在线阅读（.md 渲染、.txt 原文） -->
+    <div class="dialog-mask" v-if="textShow" @click.self="textShow = false">
+      <div class="dialog" style="width: 720px; max-width: 92vw">
+        <h3>{{ textTitle }}</h3>
+        <div style="max-height: 62vh; overflow: auto; background: var(--bg50); border-radius: 8px; padding: 14px 18px">
+          <div v-if="textLoading" style="padding: 34px; text-align: center; color: var(--text-3)">正在加载…</div>
+          <div v-else-if="textIsMD" class="md-view" v-html="textHtml"></div>
+          <pre v-else class="txt-view">{{ textContent }}</pre>
+        </div>
+        <div class="actions">
+          <button v-if="authed && !textLoading" class="btn" @click="openSaveDlg(textSaveRel)" title="保存到自己的网盘，可用记事本打开">
+            <AppIcon name="cloud" :size="14" /> 存到我的记事本
+          </button>
+          <button class="btn primary" @click="textShow = false">关闭</button>
         </div>
       </div>
     </div>
@@ -98,10 +121,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
+import { renderMD } from '../utils/markdown'
 import { resolveTheme, availableThemes } from '../themes/registry'
 import { wallpaperClass } from '../assets/wallpapers'
 import { getToken } from '../api/http'
@@ -134,6 +158,11 @@ async function loadSiteTheme() {
 
 const route = useRoute()
 const token = route.params.token as string
+// 分享链接是独立页面状态（stoken/verified/轮询定时器）：SPA 内从一个分享切到另一个
+// token 时组件不会重新挂载，必须整页重载，否则显示的是旧分享内容
+watch(() => route.params.token, (nt, ot) => {
+  if (nt !== ot) location.reload()
+})
 const info = ref<any>({})
 const items = ref<any[]>([])
 const pwd = ref('')
@@ -161,7 +190,9 @@ const saveBusy = ref(false)
 const saveMsg = ref('')
 const saved = ref('')
 
-async function openSaveDlg() {
+let saveSrcPath = '' // 目录分享下从阅读器发起转存时 = 当前查看文件相对分享根的路径；'' = 整个分享
+async function openSaveDlg(srcPath = '') {
+  saveSrcPath = srcPath
   saveMsg.value = ''
   saveShow.value = true
   if (!savePolicies.value.length) {
@@ -204,7 +235,10 @@ async function doSave() {
   saveBusy.value = true
   saveMsg.value = ''
   try {
-    const r: any = (await save.post(`/s/${token}/save?st=${encodeURIComponent(stoken.value)}`, { policyId: savePolicyId.value, path: saveDir.value })).data
+    const body: any = { policyId: savePolicyId.value, path: saveDir.value }
+    // 防御：srcPath 必须是字符串（避免误把事件对象等传进请求体）
+    if (typeof saveSrcPath === 'string' && saveSrcPath) body.srcPath = saveSrcPath
+    const r: any = (await save.post(`/s/${token}/save?st=${encodeURIComponent(stoken.value)}`, body)).data
     if (r.code !== 0) throw new Error(r.msg)
     const p = savePolicies.value.find(x => x.id === savePolicyId.value)
     saveShow.value = false
@@ -258,14 +292,47 @@ function openOfficeEditor(rel: string) {
   location.hash = `/s/${token}/office?path=${encodeURIComponent(rel)}&st=${encodeURIComponent(stoken.value)}`
 }
 
+// ---- 文本/Markdown 在线阅读（.md 渲染 Markdown、.txt 原文；B2-1 记事本在线分享）----
+const TEXT_EXTS = ['txt', 'md']
+function isTextFile(name: string) { return TEXT_EXTS.includes(extOf(name)) }
+const textShow = ref(false)
+const textTitle = ref('')
+const textContent = ref('')
+const textHtml = ref('')
+const textLoading = ref(false)
+const textIsMD = ref(false)
+const textSaveRel = ref('') // 当前查看文件相对分享根的路径（目录分享「存到我的记事本」只转存该文件）
+async function openTextViewer(rel: string, name: string) {
+  textShow.value = true
+  textTitle.value = name
+  textSaveRel.value = rel
+  textContent.value = ''; textHtml.value = ''
+  textIsMD.value = name.toLowerCase().endsWith('.md')
+  textLoading.value = true
+  try {
+    const r = await fetch(`/api/s/${token}/raw?st=${encodeURIComponent(stoken.value)}&path=${encodeURIComponent(rel)}`)
+    if (!r.ok) throw new Error('读取失败（HTTP ' + r.status + '）')
+    const t = await r.text()
+    textContent.value = t
+    if (textIsMD.value) textHtml.value = renderMD(t)
+  } catch (e: any) {
+    textContent.value = '读取失败：' + (e.message || '未知错误')
+  } finally {
+    textLoading.value = false
+  }
+}
+
 function openItem(f: any) {
+  // relPath 恒为「相对分享根」的路径（后端 RelTo(分享根, 全路径)），直接用于 raw/office/阅读器
   if (f.isDir) {
     currentRel.value = f.relPath
     loadInto(f.relPath)
   } else {
-    const rel = currentRel.value ? currentRel.value + '/' + f.relPath : f.relPath
+    const rel = f.relPath
     if (OFFICE_DS_EXTS.includes(f.ext)) {
       openOfficeEditor(rel)
+    } else if (isTextFile(f.name)) {
+      openTextViewer(rel, f.name)
     } else if (info.value.previewEnabled && canPreview(f)) {
       window.open(`/api/s/${token}/raw?st=${stoken.value}&path=${encodeURIComponent(rel)}`)
     }
@@ -317,8 +384,7 @@ function downloadCurrent() {
   window.open(`/api/s/${token}/download?st=${stoken.value}&path=${encodeURIComponent(p)}`)
 }
 function downloadItem(f: any) {
-  const p = currentRel.value ? currentRel.value + '/' + f.relPath : f.relPath
-  window.open(`/api/s/${token}/download?st=${stoken.value}&path=${encodeURIComponent(p)}`)
+  window.open(`/api/s/${token}/download?st=${stoken.value}&path=${encodeURIComponent(f.relPath)}`)
 }
 
 function canPreview(f: any) {
@@ -354,4 +420,44 @@ function fmt(n: number) {
   width: 7px; height: 7px; border-radius: 50%;
   background: #4caf50; box-shadow: 0 0 5px rgba(76, 175, 80, 0.85);
 }
+/* 文本/Markdown 在线阅读视图 */
+.txt-view {
+  margin: 0; font-size: 13px; line-height: 1.7;
+  font-family: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+  white-space: pre-wrap; word-break: break-all;
+  color: var(--text-1);
+}
+.md-view { font-size: 14px; line-height: 1.75; color: var(--text-1); word-break: break-word }
+.md-view :deep(h1), .md-view :deep(h2), .md-view :deep(h3),
+.md-view :deep(h4), .md-view :deep(h5), .md-view :deep(h6) {
+  margin: 18px 0 10px; line-height: 1.35; font-weight: 650;
+}
+.md-view :deep(h1) { font-size: 21px; padding-bottom: 7px; border-bottom: 1px solid var(--stroke) }
+.md-view :deep(h2) { font-size: 18px; padding-bottom: 5px; border-bottom: 1px solid var(--stroke) }
+.md-view :deep(h3) { font-size: 16px }
+.md-view :deep(p) { margin: 9px 0 }
+.md-view :deep(ul), .md-view :deep(ol) { margin: 9px 0; padding-left: 24px }
+.md-view :deep(li) { margin: 4px 0 }
+.md-view :deep(a) { color: #4c8dff; text-decoration: none }
+.md-view :deep(a:hover) { text-decoration: underline }
+.md-view :deep(code) {
+  font-family: 'Cascadia Code', Consolas, monospace; font-size: 12.5px;
+  background: rgba(127, 127, 127, 0.14); border-radius: 4px; padding: 2px 6px;
+}
+.md-view :deep(pre) {
+  background: rgba(0, 0, 0, 0.16); border-radius: 8px;
+  padding: 12px 14px; overflow: auto; margin: 10px 0;
+}
+.md-view :deep(pre code) { background: none; padding: 0; font-size: 12.5px; line-height: 1.6 }
+.md-view :deep(blockquote) {
+  margin: 10px 0; padding: 4px 14px; border-left: 3px solid var(--stroke);
+  color: var(--text-2);
+}
+.md-view :deep(table) { border-collapse: collapse; margin: 10px 0; font-size: 13px }
+.md-view :deep(th), .md-view :deep(td) { border: 1px solid var(--stroke); padding: 6px 11px }
+.md-view :deep(th) { background: rgba(127, 127, 127, 0.12); font-weight: 600 }
+.md-view :deep(hr) { border: none; border-top: 1px solid var(--stroke); margin: 16px 0 }
+.md-view :deep(img) { max-width: 100%; border-radius: 6px }
+.md-view :deep(details) { margin: 8px 0 }
+.md-view :deep(summary) { cursor: pointer; color: #4c8dff }
 </style>

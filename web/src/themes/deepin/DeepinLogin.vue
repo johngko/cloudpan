@@ -32,6 +32,10 @@
       <div v-if="session.site.registerOpen" class="dde-login-reg">
         <a href="#/register">注册新账号</a>
       </div>
+      <!-- 演示文档入口（管理台站点设置填入演示分享 token 后显示） -->
+      <div v-if="session.site.demoShare" class="dde-login-demo">
+        <a :href="'#/s/' + session.site.demoShare">体验在线文档</a>
+      </div>
       <div v-if="session.site.announcement" class="dde-login-notice" v-html="noticeHtml"></div>
     </div>
     <div v-else-if="stage === 'welcome'" class="dde-login-user">
@@ -143,5 +147,24 @@ async function doLogin() {
 .dde-login-switch a:hover {
   color: #fff;
   text-decoration: underline;
+}
+.dde-login-demo {
+  margin-top: 12px;
+  text-align: center;
+}
+.dde-login-demo a {
+  display: inline-block;
+  color: #ffffffc0;
+  font-size: 12.5px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+  user-select: none;
+  transition: background 150ms, color 150ms;
+}
+.dde-login-demo a:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 </style>

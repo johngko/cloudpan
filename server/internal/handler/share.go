@@ -174,11 +174,26 @@ func (h *ShareHandler) SaveToDrive(c *gin.Context) {
 	}
 	var in struct {
 		PolicyID uint   `json:"policyId" binding:"required"`
-		Path     string `json:"path"` // 目标目录，缺省根目录
+		Path     string `json:"path"`    // 目标目录，缺省根目录
+		SrcPath  string `json:"srcPath"` // 目录分享时可选：仅转存分享根下的这个子路径
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
 		return
+	}
+	// 源路径 = 分享根，或目录分享下指定的子路径（防穿越：Clean 后必须仍在分享根内）
+	srcVP := sh.Path
+	if in.SrcPath != "" {
+		if !sh.IsDir {
+			dto.Fail(c, 400, "单文件分享不支持部分转存")
+			return
+		}
+		joined, cerr := fscore.Clean(sh.Path + "/" + in.SrcPath)
+		if cerr != nil || !strings.HasPrefix(joined, sh.Path+"/") {
+			dto.Fail(c, 400, "转存路径非法")
+			return
+		}
+		srcVP = joined
 	}
 	dp, dd, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
 	if err != nil {
@@ -208,7 +223,7 @@ func (h *ShareHandler) SaveToDrive(c *gin.Context) {
 		dto.Fail(c, 400, err.Error())
 		return
 	}
-	total, err := entryBytes(sdrv, sh.Path)
+	total, err := entryBytes(sdrv, srcVP)
 	if err != nil {
 		dto.Fail(c, 404, "分享内容不存在")
 		return
@@ -216,12 +231,12 @@ func (h *ShareHandler) SaveToDrive(c *gin.Context) {
 	if !checkQuota(c, x, total) {
 		return
 	}
-	if err := h.saveShareCopy(sdrv, dd, sh.Path, dstDir); err != nil {
+	if err := h.saveShareCopy(sdrv, dd, srcVP, dstDir); err != nil {
 		dto.Fail(c, 500, "保存失败："+err.Error())
 		return
 	}
 	addQuota(x.user.ID, total)
-	middleware.Audit(c, "share-save", fmt.Sprintf("转存 %s 到 %s:%s", sh.Path, dp.Name, dstDir))
+	middleware.Audit(c, "share-save", fmt.Sprintf("转存 %s 到 %s:%s", srcVP, dp.Name, dstDir))
 	dto.OK(c, gin.H{"saved": true, "bytes": total})
 }
 

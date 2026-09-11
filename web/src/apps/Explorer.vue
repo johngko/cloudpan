@@ -1123,7 +1123,9 @@ function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 
   const siblings = sortedItems.value
     .filter((x: any) => !x.isDir)
     .map((x: any) => ({ policyId: (x as any).policyId || pid, path: x.path, name: x.name, size: x.size, ext: (x.ext || '').toLowerCase() }))
-  const withList: any = { ...f, ext }
+  // 列表项自身不带 policyId（f 来自 fs/list，仅含 path）；补齐当前盘，
+  // 否则记事本等应用拿到 policyId=undefined 会退化为只读空文档
+  const withList: any = { ...f, ext, policyId: pid }
   // 图片/媒体：传入同类文件列表（图片为全部图片，音视频为全部音视频）
   if (app === 'imageviewer') withList.list = siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(x.ext))
   else if (app === 'mediaviewer') withList.list = siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext))
