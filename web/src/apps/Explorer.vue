@@ -1021,7 +1021,7 @@ function openSharedItem(f: any) {
   const sp = sharedPathParse(f.path)
   if (!sp) return
   const ext = (f.ext || '').toLowerCase()
-  if (['docx', 'xlsx', 'pptx', 'pdf', 'doc', 'xls', 'ppt'].includes(ext)) {
+  if (OFFICE_EXTS.includes(ext)) {
     store.open('officeeditor', {
       shareId: sp.shareId, rel: sp.rel, name: f.name, size: f.size, ext,
       perm: currentShare.value?.perm || 'ro'
@@ -1052,8 +1052,9 @@ async function openItem(f: FileItem) {
     store.open('imageviewer', { ...p, list: siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(x.ext)) }, { title: f.name + ' - 图片查看器', icon: 'image', w: 900, h: 640 })
   } else if (['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
     store.open('mediaviewer', { ...p, list: siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext)) }, { title: f.name + ' - 媒体播放器', icon: 'media', w: 900, h: 620 })
-  } else if (['docx', 'xlsx', 'pptx', 'pdf', 'doc', 'xls', 'ppt'].includes(ext)) {
-    // 始终用内置 Office 编辑器打开：无 ONLYOFFICE 时组件内部自动回退静态预览/PDF 内嵌
+  } else if (OFFICE_EXTS.includes(ext)) {
+    // 始终用 Office 编辑器窗口打开：配置了 Document Server 时进 ONLYOFFICE 在线编辑（Cloudreve 模式），
+    // 未配置时组件内部自动回退静态预览/PDF 内嵌
     store.open('officeeditor', p, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
   } else if (TEXT_EXTS.includes(ext) || !ext) {
     store.open('notepad', p, { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 })
@@ -1062,6 +1063,8 @@ async function openItem(f: FileItem) {
   }
 }
 const TEXT_EXTS = ['txt', 'md', 'json', 'js', 'ts', 'vue', 'go', 'py', 'java', 'c', 'cpp', 'h', 'css', 'html', 'xml', 'yml', 'yaml', 'sh', 'bat', 'ini', 'conf', 'log', 'csv', 'sql', 'php', 'rb', 'rs', 'toml']
+// Office 文档（含 OpenDocument/RTF，与 ONLYOFFICE Document Server 支持范围对齐；csv 默认仍走记事本）
+const OFFICE_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 'ppt', 'odp', 'pdf']
 
 // ---- 打开方式：强制用指定应用打开（覆盖默认路由） ----
 function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor') {
@@ -1093,7 +1096,7 @@ function buildOpenWith(f: FileItem) {
     items.push({ label: '媒体播放器', icon: 'media', onClick: () => openWith(f, 'mediaviewer') })
   if (TEXT_EXTS.includes(ext) || !ext)
     items.push({ label: '记事本', icon: 'notepad', onClick: () => openWith(f, 'notepad') })
-  if (['docx', 'xlsx', 'pptx', 'pdf', 'doc', 'xls', 'ppt'].includes(ext) && session.site.officeConfigured && apps.isAvailable('office'))
+  if (OFFICE_EXTS.includes(ext) && apps.isAvailable('office'))
     items.push({ label: 'Office 编辑器', icon: 'office', onClick: () => openWith(f, 'officeeditor') })
   return items
 }

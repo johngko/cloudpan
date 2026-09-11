@@ -33,6 +33,13 @@
     <!-- PDF 内嵌预览（v-if：非 PDF 模式不得挂载——iframe 加载 docx 等不可渲染类型会触发浏览器下载） -->
     <iframe v-if="mode === 'pdf'" :src="rawSrc" style="flex: 1; border: none; background: #525659"></iframe>
 
+    <!-- 未配置 Document Server 时的提示：说明当前是内置静态预览，如何获得 Cloudreve 式在线编辑 -->
+    <div v-if="mode === 'static' && !session.site.officeConfigured" class="ds-hint">
+      <AppIcon name="info" :size="14" />
+      当前为内置静态预览。在管理控制台 → 站点设置中配置 ONLYOFFICE Document Server 后，
+      将启用与 Cloudreve 一致的在线预览与编辑（真实 Office 编辑器界面）
+    </div>
+
     <!-- 静态预览（docx / xlsx / pptx 离线） -->
     <div v-show="mode === 'static' && !editing" ref="staticHost" class="static-preview">
       <div class="docx-host" ref="docxHost"></div>
@@ -132,6 +139,9 @@ const noPreviewHint = computed(() => {
   }
   if (ext.value === 'pptx') {
     return 'PPT 解析失败（文件可能已损坏或加密），请下载后查看。'
+  }
+  if (['odt', 'ods', 'odp', 'rtf'].includes(ext.value)) {
+    return 'OpenDocument/RTF 格式需在线 Office 服务（Document Server）才能预览，请在管理控制台配置后重试，或下载后用本地 Office 打开。'
   }
   return '此格式无法在线预览。'
 })
@@ -489,8 +499,12 @@ async function initDs() {
 }
 
 onMounted(async () => {
+  // 配置了 Document Server 时，所有 Office 文档一律进 ONLYOFFICE 在线编辑器（Cloudreve 模式：
+  // 预览与编辑同一套真实编辑器 UI，权限决定 view/edit，保存回调自动归档旧版本）；
+  // 未配置时回退内置静态预览，保证开箱可用
   const officeReady = session.site.officeConfigured
-  if (officeReady && ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'csv'].includes(ext.value)) {
+  const DS_EXTS = ['docx', 'doc', 'odt', 'rtf', 'txt', 'xlsx', 'xls', 'ods', 'csv', 'pptx', 'ppt', 'odp']
+  if (officeReady && DS_EXTS.includes(ext.value)) {
     mode.value = 'ds'
     await initDs()
     return
@@ -529,6 +543,11 @@ function download() {
 </script>
 
 <style scoped>
+.ds-hint {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; font-size: 12px; color: #8a6d1a;
+  background: #fdf6e3; border-bottom: 1px solid #f0e2b6; line-height: 1.5;
+}
 .static-preview {
   flex: 1; overflow: auto; background: #e8eaee; padding: 18px;
   display: flex; flex-direction: column; align-items: center;
