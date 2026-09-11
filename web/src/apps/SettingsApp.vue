@@ -183,6 +183,7 @@ import { availableThemes, resolveTheme } from '../themes/registry'
 import { fsApi, shareApi, authApi, userShareApi } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
+import { copyText } from '../utils/clipboard'
 import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
@@ -278,7 +279,9 @@ async function doDavPwd() {
   try { await authApi.setWebdavPassword(davPwd.value); toast.success('WebDAV 密码已设置'); davPwd.value = '' } catch (e: any) { toast.error(e.message) }
 }
 function copyShare(s: any) {
-  navigator.clipboard.writeText(location.origin + location.pathname + '#/s/' + s.token + (s.passwordHash ? '  提取码见分享设置' : ''))
+  // HTTP 环境（非安全上下文）下 navigator.clipboard 不可用，copyText 内部回退 execCommand
+  copyText(location.origin + location.pathname + '#/s/' + s.token + (s.passwordHash ? '  提取码见分享设置' : ''))
+    .then(ok => ok ? toast.success('链接已复制') : toast.error('复制失败，请手动选择链接复制'))
 }
 async function cancelShare(s: any) {
   try { await shareApi.cancel(s.id); loadShares() } catch (e: any) { alert(e.message) }

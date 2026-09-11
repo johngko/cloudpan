@@ -92,6 +92,7 @@ import { visibleApps, canUseOffline } from '../../stores/apps'
 import { useWindows } from '../../stores/windows'
 import { useSession } from '../../stores/session'
 import { fsApi } from '../../api/modules'
+import { copyText } from '../../utils/clipboard'
 import AppIcon from '../../components/AppIcon.vue'
 
 const props = defineProps<{ shown: boolean }>()
@@ -205,7 +206,8 @@ function openSel() {
   store.open('explorer', { policyId: f.policyId, path: f.path }, { title: f.name, icon: 'explorer', w: 1000, h: 640 })
   emit('close')
 }
-function copyPath(p: string) { try { navigator.clipboard.writeText(p) } catch {} }
+// HTTP 环境（非安全上下文）下 navigator.clipboard 不可用，copyText 内部回退 execCommand
+function copyPath(p: string) { copyText(p) }
 
 function fileIcon(f: any): string {
   const e = (f.ext || '').toLowerCase()

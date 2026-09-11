@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { termApi, type SftpEntry } from '../../api/modules'
 import { collectDropFiles } from '../../utils/drop'
+import { copyText } from '../../utils/clipboard'
 
 /**
  * SFTP 文件管理面板：浏览 / 新建 / 重命名 / 删除 / 上传（拖拽+进度）/ 下载
@@ -194,7 +195,8 @@ function ctxAction(a: string) {
   if (a === 'download') download(e)
   if (a === 'rename') startRename(e)
   if (a === 'delete') dialog.value = { kind: 'delete', name: e.name, val: '' }
-  if (a === 'copy') { navigator.clipboard?.writeText(fullPath(e.name)); emit('toast', '路径已复制') }
+  // HTTP 环境（非安全上下文）下 navigator.clipboard 不可用，copyText 内部回退 execCommand
+  if (a === 'copy') copyText(fullPath(e.name)).then(ok => emit('toast', ok ? '路径已复制' : '复制失败，请手动复制'))
 }
 function fullPath(name: string) {
   return path.value === '/' ? '/' + name : path.value + '/' + name

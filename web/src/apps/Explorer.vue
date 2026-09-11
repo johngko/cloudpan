@@ -285,7 +285,7 @@
           <label>下载次数限制（留空不限）</label>
           <input class="input" v-model.number="shareMaxDl" type="number" min="1" placeholder="不限" style="width: 100%" />
         </div>
-        <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all">
+        <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
           {{ shareLink }}
         </div>
         <div class="actions">
@@ -530,6 +530,7 @@ import { useContextMenu } from '../stores/ui'
 import { useUiDialog, useToast } from '../stores/dialog'
 import { userShareApi } from '../api/modules'
 import { collectDropFiles } from '../utils/drop'
+import { copyText } from '../utils/clipboard'
 import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps<{ winId: number; props: any }>()
@@ -1374,7 +1375,8 @@ function downloadSel() {
   a.click()
 }
 function copyPath(p: string) {
-  navigator.clipboard.writeText(p).then(() => toast.success('路径已复制：' + p)).catch(() => toast.error('复制失败'))
+  // HTTP 环境（非安全上下文）下 navigator.clipboard 不可用，copyText 内部回退 execCommand
+  copyText(p).then(ok => ok ? toast.success('路径已复制：' + p) : toast.error('复制失败，请手动选择文本复制'))
 }
 
 // ---- 剪切/复制/粘贴 ----
@@ -1677,9 +1679,15 @@ async function doShare() {
     shareLink.value = location.origin + location.pathname + '#/s/' + s.token
   } catch (e: any) { toast.error(e.message) }
 }
-function copyLink() {
-  navigator.clipboard.writeText(shareLink.value)
-  shareShow.value = false
+async function copyLink() {
+  const ok = await copyText(shareLink.value)
+  if (ok) {
+    toast.success('链接已复制')
+    shareShow.value = false
+  } else {
+    // 失败时不关对话框，提示手动选择链接复制
+    toast.error('复制失败，请选中下方链接后按 Ctrl+C 复制')
+  }
 }
 
 // ---- 属性 ----
@@ -1749,9 +1757,14 @@ async function genDl() {
     dlUrl.value = location.origin + d.url
   } catch (e: any) { toast.error(e.message) }
 }
-function copyDl() {
-  navigator.clipboard.writeText(dlUrl.value)
-  dlShow.value = false
+async function copyDl() {
+  const ok = await copyText(dlUrl.value)
+  if (ok) {
+    toast.success('直链已复制')
+    dlShow.value = false
+  } else {
+    toast.error('复制失败，请选中上方直链后按 Ctrl+C 复制')
+  }
 }
 function testDl() { window.open(dlUrl.value) }
 

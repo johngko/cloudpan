@@ -48,7 +48,7 @@
         <div class="row" style="font-size: 12px; color: var(--text-3, #888)">
           打开分享链接即可在线预览与编辑（完整 ONLYOFFICE 编辑器），编辑保存自动归档版本
         </div>
-        <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all">
+        <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
           {{ shareLink }}
         </div>
         <div v-if="shareMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ shareMsg }}</div>
@@ -73,6 +73,7 @@ import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
 import { get, getToken } from '../api/http'
 import { shareApi, userShareApi, downloadUrl } from '../api/modules'
+import { copyText } from '../utils/clipboard'
 
 const route = useRoute()
 const q = route.query as Record<string, string>
@@ -195,9 +196,14 @@ async function doShare() {
     shareBusy.value = false
   }
 }
-function copyLink() {
-  navigator.clipboard.writeText(shareLink.value)
-  shareShow.value = false
+// HTTP 环境（非安全上下文）下 navigator.clipboard 不可用，copyText 内部回退 execCommand
+async function copyLink() {
+  const ok = await copyText(shareLink.value)
+  if (ok) {
+    shareShow.value = false
+  } else {
+    shareMsg.value = '复制失败，请选中上方链接后按 Ctrl+C 复制'
+  }
 }
 </script>
 
