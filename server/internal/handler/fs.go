@@ -77,6 +77,15 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 			demoShare = tok
 		}
 	}
+	// 壁纸目录（壁纸中心）：站点设置 wallpaper_catalog 为 JSON 数组 [{"name","url"}]，
+	// 解析失败时暴露空数组（不阻断登录页）
+	var wpCatalog []map[string]string
+	if raw := strings.TrimSpace(s["wallpaper_catalog"]); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &wpCatalog)
+	}
+	if wpCatalog == nil {
+		wpCatalog = []map[string]string{}
+	}
 	dto.OK(c, gin.H{
 		"siteName": s["site_name"], "registerOpen": regOpen, "needInviteCode": invite,
 		"officeConfigured": s["onlyoffice_url"] != "",
@@ -84,6 +93,7 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 		"guestLogin":       guestLogin,
 		"theme":            theme,
 		"demoShare":        demoShare,
+		"wallpaperCatalog": wpCatalog,
 	})
 }
 

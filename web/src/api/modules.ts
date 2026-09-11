@@ -36,7 +36,7 @@ export const authApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; wallpaperCatalog: { name: string; url: string }[] }>('/site/public')
 }
 
 // 在线 Office：实时协作「正在编辑」状态
@@ -144,7 +144,12 @@ export const adminApi = {
   shares: (page = 1, size = 50, keyword = '') => get<any>(`/admin/shares?page=${page}&size=${size}&keyword=${encodeURIComponent(keyword)}`),
   shareDelete: (id: number) => del(`/admin/shares/${id}`),
   appToggle: (key: string, enabled: boolean) => post(`/admin/apps/${key}/toggle`, { enabled }),
-  officeTest: () => post<{ ok: boolean; msg: string }>('/admin/office-test')
+  officeTest: () => post<{ ok: boolean; msg: string }>('/admin/office-test'),
+  // 系统更新
+  updateCheck: () => get<any>('/admin/update/check'),
+  updateStart: () => post<any>('/admin/update/start'),
+  updateStatus: () => get<any>('/admin/update/status'),
+  updateHistory: () => get<any[]>('/admin/update/history')
 }
 
 // 分块上传

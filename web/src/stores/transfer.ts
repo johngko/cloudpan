@@ -99,6 +99,10 @@ export const useTransfer = defineStore('transfer', {
       t.pausedFlag = true
       this.tasks = this.tasks.filter(x => x.id !== id)
     },
+    // 任务中心「清除已完成」：移除成功项（done/instant），保留失败项供排查
+    clearFinished() {
+      this.tasks = this.tasks.filter(t => t.status !== 'done' && t.status !== 'instant')
+    },
     async hashFile(t: TransferTask) {
       let buf: ArrayBuffer
       if (t.size === 0) {

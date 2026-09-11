@@ -231,6 +231,14 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 		ag.GET("/settings", ad.SettingsGet)
 		ag.PUT("/settings", ad.SettingsSet)
+
+		// 系统版本更新（检查/下载/自重启/历史）
+		upd := &UpdateHandler{Site: site}
+		ag.GET("/update/check", upd.Check)
+		ag.POST("/update/start", upd.Start)
+		ag.GET("/update/status", upd.Status)
+		ag.GET("/update/history", upd.History)
+
 		ag.POST("/office-test", (&OfficeHandler{Site: site}).Health)
 		ag.GET("/logs", ad.LogList)
 		ag.GET("/logs/export", ad.LogExport)

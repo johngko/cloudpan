@@ -106,6 +106,10 @@ const apps: Record<string, string> = {
     `<path d="M8.3 16.6L12 7.4l3.7 9.2"/><path d="M9.5 13.3h5"/>`),
   speedtest: tile('#22d3ee', '#2563eb',
     `<path d="M6.6 15.6a6.2 6.2 0 1 1 10.8 0"/><path d="M12 14l3.4-4"/><circle cx="12" cy="14" r="1.2" fill="#ffffff" stroke="none"/>`),
+  tasks: tile('#ffb457', '#f0662e',
+    `<path d="M7 7.6l1.2 1.2L10.4 6.4"/><path d="M7 12.6l1.2 1.2L10.4 11.4"/><path d="M7 17.6l1.2 1.2L10.4 16.4" stroke-width="1.8"/><path d="M12.8 8h4M12.8 13h4M12.8 18h4" stroke-width="1.8"/>`),
+  wallpapers: tile('#7ee0c3', '#1e88e5',
+    `<rect x="5.6" y="6.4" width="12.8" height="11.2" rx="1.4"/><circle cx="9.4" cy="9.8" r="1.1" stroke-width="1.7"/><path d="M6.4 15.8l3.6-3.4 2.6 2.4 2.6-2.6 3.4 3.4" stroke-width="1.9"/>`),
   browser: tile('#4aa3ff', '#1d4ed8',
     `<circle cx="12" cy="12" r="5.7" stroke-width="1.8"/><path d="M6.3 12h11.4M12 6.3c1.8 1.6 2.7 3.5 2.7 5.7s-.9 4.1-2.7 5.7c-1.8-1.6-2.7-3.5-2.7-5.7s.9-4.1 2.7-5.7z" stroke-width="1.8"/>`),
 

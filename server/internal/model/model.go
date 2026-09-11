@@ -275,6 +275,19 @@ type Task struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// ---- 系统版本更新记录（管理台「系统更新」）----
+
+type UpdateLog struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	From      string    `gorm:"size:64" json:"from"`
+	To        string    `gorm:"size:64" json:"to"`
+	URL       string    `gorm:"size:512" json:"url"`
+	Bytes     int64     `json:"bytes"`
+	Status    string    `gorm:"size:16" json:"status"` // success | failed
+	Error     string    `gorm:"size:512" json:"error"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 // ---- 站内通知（每用户最多保留 200 条，由 emitter 负责裁剪） ----
 
 type Notification struct {
@@ -343,7 +356,7 @@ func InitDB(dataDir string) {
 	DB = db
 	// quota_mb 列首次新增时，SQLite 会把存量行填 0（=不限量），必须回填 -1（=随组）
 	quotaColNew := !DB.Migrator().HasColumn(&User{}, "quota_mb")
-	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{}); err != nil {
+	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &UpdateLog{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{}); err != nil {
 		log.Fatalf("建表失败: %v", err)
 	}
 	// 存量秒传索引回填副本行（旧版本只有 SourcePath 单源记录）

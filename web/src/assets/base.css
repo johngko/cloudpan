@@ -389,3 +389,12 @@ select.input { cursor: pointer; }
 .wp-ph-sea      { background: url('/wallpapers/deepin/sea.jpg') center / cover no-repeat; }
 .wp-ph-peak     { background: url('/wallpapers/deepin/peak.jpg') center / cover no-repeat; }
 .wp-ph-wave     { background: url('/wallpapers/deepin/wave.jpg') center / cover no-repeat; }
+
+/* 外部 URL 壁纸（壁纸中心：管理员目录/我的壁纸）：背景图走 CSS 变量，由 applyWallpaperEffect 注入 */
+.wp-ext {
+  background-image: var(--wp-ext-url) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-color: #141c2e;
+}

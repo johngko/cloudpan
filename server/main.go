@@ -1,10 +1,14 @@
 package main
 
 import (
+	"errors"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -71,8 +75,22 @@ func main() {
 	handler.RegisterDav(r, site.Fs)
 	web.Register(r)
 
+	// 显式监听器（而非 r.Run）：系统更新自重启（syscall.Exec）继承 FD 表，
+	// 若不先释放端口，新进程绑定同端口会 EADDRINUSE；update 流程持有引用以便关闭
+	ln, err := net.Listen("tcp", ":"+cfg.Port)
+	if err != nil {
+		log.Fatalf("监听 :%s 失败: %v", cfg.Port, err)
+	}
+	handler.SetUpdateListener(ln)
 	log.Printf("CloudPan 启动: http://localhost:%s  数据目录: %s", cfg.Port, cfg.DataDir)
-	if err := r.Run(":" + cfg.Port); err != nil {
+	if err := (&http.Server{Handler: r}).Serve(ln); err != nil {
+		if errors.Is(err, net.ErrClosed) {
+			// 系统更新自重启：更新流程 exec 前会关闭监听器，此时主流程退出，
+			// 睡一段时间给 exec 留出接管时间（exec 成功后本进程已不存在，睡眠无副作用）
+			log.Printf("监听器已关闭（系统更新自重启中），等待 exec 接管…")
+			time.Sleep(10 * time.Second)
+			return
+		}
 		log.Fatalf("启动失败: %v", err)
 	}
 }
