@@ -128,6 +128,11 @@ export const useWindows = defineStore('windows', {
       const w = this.wins.find(x => x.id === id)
       if (w) w.title = title
     },
+    updateProps(id: number, patch: any) {
+      const w = this.wins.find(x => x.id === id)
+      if (!w || !patch) return
+      w.props = { ...(w.props || {}), ...patch }
+    },
     isMaximizedArea(): WinRect {
       const g = shellInsets()
       return { x: g.left, y: g.top, w: window.innerWidth - g.left - g.right, h: window.innerHeight - g.top - g.bottom }

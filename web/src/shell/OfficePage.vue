@@ -212,10 +212,11 @@ onBeforeUnmount(() => {
 function close() {
   try { editor?.destroyEditor?.() } catch {}
   // 从桌面/分享页进入则回退；直接打开 URL 的标签页回落到对应入口页
+  // （桌面直落 #/desktop 而非 #/boot：窗口状态在 Pinia 中保留，无需重播开机流程；未登录时桌面会自行跳登录页）
   if (window.history.length > 2) {
     history.back()
   } else {
-    location.hash = isShare.value ? `#/s/${shareToken}` : '#/boot'
+    location.hash = isShare.value ? `#/s/${shareToken}` : '#/desktop'
   }
 }
 

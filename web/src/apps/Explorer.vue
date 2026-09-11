@@ -677,7 +677,23 @@ const canBack = computed(() => history.value.length > 0)
 onMounted(async () => {
   await loadPolicies()
   await loadStars()
-  if (props.props && props.props.policyId) {
+  // 优先恢复持久化在窗口 store 的标签页状态：整页编辑器（#/office）会卸载桌面外壳，
+  // 关闭返回后本组件重建，本地 tabs 若不持久化就会退回默认「此电脑」视图
+  const saved: any[] = Array.isArray(props.props?.tabs) ? props.props.tabs : []
+  const valid = saved.filter(t => t && (t.policyId == null || policies.value.some(p => p.id === t.policyId)))
+  if (valid.length) {
+    tabs.value = valid.map(t => ({
+      policyId: t.policyId ?? null,
+      path: typeof t.path === 'string' && t.path ? t.path : '/',
+      keyword: t.keyword || '',
+      globalMode: !!t.globalMode,
+      viewMode: t.viewMode === 'list' ? 'list' : 'grid',
+      history: Array.isArray(t.history) ? t.history.filter((x: any) => typeof x === 'string') : [],
+      fwdStack: Array.isArray(t.fwdStack) ? t.fwdStack.filter((x: any) => typeof x === 'string') : []
+    }))
+    activeIdx.value = Math.min(Math.max(0, Number(props.props?.activeIdx) || 0), tabs.value.length - 1)
+    load()
+  } else if (props.props && props.props.policyId) {
     addTab(props.props.policyId, props.props.path || '/')
   } else if (props.props && props.props.path) {
     // { path: 'C:/docs' } 形式
@@ -698,6 +714,13 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   if (editTimer) window.clearInterval(editTimer)
 })
+
+// 标签页状态（打开的盘/路径/视图/搜索词/前进后退栈）持久化到窗口 store，
+// 桌面外壳重建（整页编辑器往返、锁屏解锁、主题切换）后按原状恢复
+watch([() => tabs.value, activeIdx], () => {
+  if (!tabs.value.length) return
+  store.updateProps(props.winId, { tabs: tabs.value.map(t => ({ ...t })), activeIdx: activeIdx.value })
+}, { deep: true })
 
 function onRefreshEvent(e: any) {
   if (!currentPolicy.value) return
