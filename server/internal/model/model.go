@@ -192,6 +192,9 @@ type Share struct {
 	RemainDownloads int   `gorm:"default:-1" json:"remainDownloads"` // -1 = 不限
 	PreviewEnabled bool   `gorm:"default:true" json:"previewEnabled"`
 	AllowDownload  bool   `gorm:"default:true" json:"allowDownload"`
+	// AllowEdit 分享访客可否在线编辑（ONLYOFFICE 编辑器 edit 权限）；默认开，
+	// 与 Cloudreve 分享模式一致：任何人打开分享链接都能在线编辑，保存走创建者目录并归档旧版本
+	AllowEdit      bool   `gorm:"default:true" json:"allowEdit"`
 	Views          int64  `gorm:"default:0" json:"views"`
 	Downloads      int64  `gorm:"default:0" json:"downloads"`
 	CreatedAt      time.Time `json:"createdAt"`

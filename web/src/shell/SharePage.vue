@@ -14,6 +14,9 @@
           <button class="btn" v-if="authed" :disabled="saveBusy" @click="openSaveDlg" title="一键保存到自己的网盘">
             <AppIcon name="cloud" :size="15" /> 保存到网盘
           </button>
+          <button class="btn" v-if="!info.isDir && officeReady && OFFICE_DS_EXTS.includes(extOf(info.name))" @click="openOfficeEditor('')" title="ONLYOFFICE 在线编辑器（可编辑保存）">
+            <AppIcon name="office" :size="15" /> 在线打开
+          </button>
           <button class="btn primary" v-if="info.allowDownload" @click="downloadCurrent">
             <AppIcon name="download" :size="15" /> 下载
           </button>
@@ -44,7 +47,8 @@
                 <td style="padding: 8px 6px">{{ f.name }}</td>
                 <td style="width: 110px; color: var(--text-3); padding: 8px 14px">{{ f.isDir ? '-' : fmt(f.size) }}</td>
                 <td style="width: 90px; padding: 8px 14px; color: var(--text-3)">
-                  <button v-if="info.allowDownload" class="tool-btn" style="padding: 3px 8px" @click.stop="downloadItem(f)">下载</button>
+                  <button v-if="officeReady && OFFICE_DS_EXTS.includes(f.ext)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">打开</button>
+                  <button v-else-if="info.allowDownload" class="tool-btn" style="padding: 3px 8px" @click.stop="downloadItem(f)">下载</button>
                   <button v-else-if="info.previewEnabled && canPreview(f)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">预览</button>
                 </td>
               </tr>
@@ -107,9 +111,14 @@ const wpClass = computed(() => {
   return wallpaperClass(t.wallpapers.some(w => w.key === key) ? key! : t.defaultWallpaper)
 })
 
+// 站点是否配置了 ONLYOFFICE Document Server（公开接口 /site/public 提供）：
+// 配置后分享页 Office 文件直接进整页在线编辑器（Cloudreve 分享模式）
+const officeReady = ref(false)
+
 async function loadSiteTheme() {
   try {
     const r: any = (await api.get('/site/public')).data
+    officeReady.value = !!r.data?.officeConfigured
     const th = r.data?.theme
     if (th === 'win12' || th === 'macos' || th === 'deepin') {
       siteTheme.value = th
@@ -234,12 +243,24 @@ async function loadList() {
   } catch (e: any) { errMsg.value = e.message }
 }
 
+// Office 文档进整页在线编辑器（Cloudreve 分享模式：任何人打开分享链接都能在线编辑）；
+// 单文件分享的 rel 为空（分享文件本身）
+const OFFICE_DS_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 'ppt', 'odp']
+function openOfficeEditor(rel: string) {
+  location.hash = `/s/${token}/office?path=${encodeURIComponent(rel)}&st=${encodeURIComponent(stoken.value)}`
+}
+
 function openItem(f: any) {
   if (f.isDir) {
     currentRel.value = f.relPath
     loadInto(f.relPath)
-  } else if (info.value.previewEnabled && canPreview(f)) {
-    window.open(`/api/s/${token}/raw?st=${stoken.value}&path=${encodeURIComponent(currentRel.value ? currentRel.value + '/' + f.relPath : f.relPath)}`)
+  } else {
+    const rel = currentRel.value ? currentRel.value + '/' + f.relPath : f.relPath
+    if (OFFICE_DS_EXTS.includes(f.ext)) {
+      openOfficeEditor(rel)
+    } else if (info.value.previewEnabled && canPreview(f)) {
+      window.open(`/api/s/${token}/raw?st=${stoken.value}&path=${encodeURIComponent(rel)}`)
+    }
   }
 }
 
@@ -264,6 +285,10 @@ function downloadItem(f: any) {
 
 function canPreview(f: any) {
   return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'mp4', 'webm', 'mp3', 'wav', 'ogg', 'flac', 'pdf'].includes(f.ext)
+}
+function extOf(name: string) {
+  const i = (name || '').lastIndexOf('.')
+  return i >= 0 ? name.substring(i + 1).toLowerCase() : ''
 }
 function iconOf(f: any) { return f.isDir ? 'folder' : iconForExt(f.ext) }
 function iconForExt(ext: string) {

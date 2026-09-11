@@ -36,6 +36,14 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		sg.GET("/raw", sh.Raw)
 	}
 
+	// 公开分享链接的在线 Office 编辑器配置（匿名，Cloudreve 分享模式：任何人打开分享链接可进 ONLYOFFICE 编辑器）。
+	// 双重功能门控（share+office 均启用才放行，防止单开关被绕）；独立限流防爆刷签发
+	officePubLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+	api.GET("/s/:token/office",
+		middleware.AppGate("share"), middleware.AppGate("office"),
+		middleware.RateLimit(officePubLimiter),
+		(&OfficeHandler{Site: site, Secret: cfg.Secret}).ConfigShare)
+
 	// 需登录（GuestReadOnly：游客共享账号只读兜底，见 middleware/guest.go）
 	ug := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
 	{

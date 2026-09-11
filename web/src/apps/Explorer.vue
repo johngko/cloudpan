@@ -276,6 +276,10 @@
         <div class="row" style="display: flex; gap: 18px">
           <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareAllowDl" />允许下载</label>
           <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="sharePreview" />允许预览</label>
+          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareEdit" />允许在线编辑</label>
+        </div>
+        <div class="row" style="font-size: 12px; color: var(--text-3)">
+          允许在线编辑：任何人打开分享链接即可进入 ONLYOFFICE 完整编辑器在线修改，保存自动归档旧版本（需已配置 Document Server）
         </div>
         <div class="row">
           <label>下载次数限制（留空不限）</label>
@@ -512,6 +516,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useWindows } from '../stores/windows'
 import { useSession } from '../stores/session'
 import { useAppState } from '../stores/appstate'
@@ -531,6 +536,7 @@ const props = defineProps<{ winId: number; props: any }>()
 const store = useWindows()
 const session = useSession()
 const apps = useAppState()
+const router = useRouter()
 // 离线下载/终端等无权限功能：入口整体隐藏（不显示禁用态），与「无权限功能完全隐藏」原则一致
 const canOffline = computed(() => canUseOffline())
 const canTerminal = computed(() => apps.isAvailable('terminal'))
@@ -1022,10 +1028,15 @@ function openSharedItem(f: any) {
   if (!sp) return
   const ext = (f.ext || '').toLowerCase()
   if (OFFICE_EXTS.includes(ext)) {
-    store.open('officeeditor', {
-      shareId: sp.shareId, rel: sp.rel, name: f.name, size: f.size, ext,
-      perm: currentShare.value?.perm || 'ro'
-    }, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
+    // 配置了 Document Server：整页编辑器（Cloudreve 模式，完整功能区）；PDF 走内嵌查看；未配置回退桌面窗口
+    if (session.site.officeConfigured && ext !== 'pdf') {
+      router.push(`/office?shareId=${sp.shareId}&rel=${encodeURIComponent(sp.rel)}`)
+    } else {
+      store.open('officeeditor', {
+        shareId: sp.shareId, rel: sp.rel, name: f.name, size: f.size, ext,
+        perm: currentShare.value?.perm || 'ro'
+      }, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
+    }
     return
   }
   const previewExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a', 'pdf']
@@ -1053,9 +1064,13 @@ async function openItem(f: FileItem) {
   } else if (['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
     store.open('mediaviewer', { ...p, list: siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext)) }, { title: f.name + ' - 媒体播放器', icon: 'media', w: 900, h: 620 })
   } else if (OFFICE_EXTS.includes(ext)) {
-    // 始终用 Office 编辑器窗口打开：配置了 Document Server 时进 ONLYOFFICE 在线编辑（Cloudreve 模式），
-    // 未配置时组件内部自动回退静态预览/PDF 内嵌
-    store.open('officeeditor', p, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
+    // 配置了 Document Server：整页 ONLYOFFICE 编辑器（Cloudreve 模式：撑满整页 + 完整功能区，
+    // 自己账号打开与分享链接打开同一形态）；PDF 走内嵌查看；未配置回退桌面窗口静态预览
+    if (session.site.officeConfigured && ext !== 'pdf') {
+      router.push(`/office?policyId=${pid}&path=${encodeURIComponent(f.path)}`)
+    } else {
+      store.open('officeeditor', p, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
+    }
   } else if (TEXT_EXTS.includes(ext) || !ext) {
     store.open('notepad', p, { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 })
   } else {
@@ -1620,6 +1635,7 @@ const shareExpire = ref(0)
 const shareMaxDl = ref<number>(0)
 const shareAllowDl = ref(true)
 const sharePreview = ref(true)
+const shareEdit = ref(true)
 const shareLink = ref('')
 function shareSel() {
   if (selPaths.value.length !== 1) return
@@ -1628,6 +1644,8 @@ function shareSel() {
   sharePwd.value = ''; shareExpire.value = 0; shareMaxDl.value = 0; shareLink.value = ''
   shareShow.value = true
 }
+// 分享对话框打开时重置在线编辑开关为默认值（允许）
+watch(shareShow, v => { if (v) shareEdit.value = true })
 async function doShare() {
   if (!currentPolicy.value || !shareTarget.value) return
   try {
@@ -1635,7 +1653,7 @@ async function doShare() {
       policyId: currentPolicy.value.id, path: shareTarget.value.path,
       password: sharePwd.value || undefined, expireDays: shareExpire.value,
       remainDownloads: (Number.isFinite(shareMaxDl.value) && shareMaxDl.value > 0) ? Math.floor(shareMaxDl.value) : 0,
-      allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value
+      allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value, allowEdit: shareEdit.value
     })
     shareLink.value = location.origin + location.pathname + '#/s/' + s.token
   } catch (e: any) { toast.error(e.message) }

@@ -31,20 +31,24 @@ import (
 // OfficeHandler ONLYOFFICE Document Server 集成
 type OfficeHandler struct {
 	Site *SiteHandler
+	// Secret 站点 HMAC 密钥：匿名分享编辑器端点校验提取码 stoken 用（带提取码的分享）
+	Secret []byte
 	// LoadShare 共享可见性加载器（由 router 注入 UserShareHandler.loadShareByID）；
 	// 仅 Config（登录态）需要；File/Callback 走无用户上下文的 token 自授权解析
 	LoadShare func(c *gin.Context, id uint) (*model.UserShare, fscore.Driver, bool)
 }
 
 // officeTarget DS 拉取/回调目标：
-// kind=local  → PolicyID+UID+Path（UID=文件属主，本地策略按属主隔离目录解析）
+// kind=local → PolicyID+UID+Path（UID=文件属主，本地策略按属主隔离目录解析）
 // kind=shared → ShareID+Rel（共享内容属创建者，回调保存走创建者隔离目录）
+// kind=pub → ShareToken+Rel（公开分享链接；token 本身即授权，保存走分享者隔离目录）
 type officeTarget struct {
 	Kind     string `json:"k"`
 	PolicyID uint   `json:"p"`
 	UID      uint   `json:"u"`
 	Path     string `json:"path"`
 	ShareID  uint   `json:"s"`
+	ShareToken string `json:"t"`
 	Rel      string `json:"r"`
 	// Edit=false（view 签发）的 token 只允许拉取文件，回调保存一律拒绝——
 	// 否则只读组用户/只读共享查看者可持合法 token 伪造回调覆盖他人文件
@@ -85,7 +89,7 @@ func (h *OfficeHandler) verifyToken(tok string) (*officeTarget, error) {
 	if err := json.Unmarshal(raw, &t); err != nil {
 		return nil, errors.New("token 载荷非法")
 	}
-	if t.Kind != "local" && t.Kind != "shared" {
+	if t.Kind != "local" && t.Kind != "shared" && t.Kind != "pub" {
 		return nil, errors.New("token 类型非法")
 	}
 	if time.Now().Unix() > t.Exp {
@@ -114,6 +118,96 @@ func (h *OfficeHandler) resolveShared(t *officeTarget) (*model.UserShare, *model
 		return nil, nil, nil, "", err
 	}
 	return &sh, &p, d, full, nil
+}
+
+// loadPublicShare 公开分享加载（匿名上下文：分享 token 本身即凭据），
+// 语义与 ShareHandler.loadShare 一致（过期/次数用完/分享者禁用均不可用）
+func loadPublicShare(token string) (*model.Share, error) {
+	var sh model.Share
+	if err := model.DB.Where("token = ?", token).First(&sh).Error; err != nil {
+		return nil, errors.New("分享不存在或已取消")
+	}
+	if sh.RemainDownloads == 0 {
+		return nil, errors.New("下载次数已用完")
+	}
+	if !sh.Available() {
+		return nil, errors.New("分享已过期")
+	}
+	var owner model.User
+	if err := model.DB.First(&owner, sh.UserID).Error; err != nil || owner.Disabled {
+		return nil, errors.New("分享者账号不可用")
+	}
+	return &sh, nil
+}
+
+// resolvePub 从 token 解析公开分享文件（无用户上下文：token 本身即授权，
+// 路径锚定分享根内；保存走分享者隔离目录并归档旧版本）
+func (h *OfficeHandler) resolvePub(t *officeTarget) (*model.Share, *model.Policy, fscore.Driver, string, error) {
+	sh, err := loadPublicShare(t.ShareToken)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	var p model.Policy
+	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+		return nil, nil, nil, "", errors.New("存储已失效")
+	}
+	full, ok := shareAnchor(t.Rel, sh.Path)
+	if !ok {
+		return nil, nil, nil, "", errors.New("路径越界")
+	}
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID))
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	return sh, &p, d, full, nil
+}
+
+// officeDocType 扩展名 → ONLYOFFICE 文档类型
+func officeDocType(ext string) string {
+	switch ext {
+	case "xlsx", "xls", "csv", "ods":
+		return "cell"
+	case "pptx", "ppt", "odp":
+		return "slide"
+	}
+	return "word"
+}
+
+// buildOfficeConfig 组装 DocsAPI 编辑器配置；DS 启用 JWT 时签名并附加 token。
+// customization 不带 compactHeader——编辑器展示完整功能区（公式/数据/协作等），
+// 与 Cloudreve 的整页编辑器一致
+func (h *OfficeHandler) buildOfficeConfig(publicBase, jwtSecret, docKey, title, fileType, docType, mode, fileToken string, user map[string]interface{}) map[string]interface{} {
+	docURL := fmt.Sprintf("%s/api/office/file?token=%s", publicBase, fileToken)
+	callbackURL := fmt.Sprintf("%s/api/office/callback?token=%s", publicBase, fileToken)
+	cfgMap := map[string]interface{}{
+		"documentType": docType,
+		"type":         "desktop",
+		"document": map[string]interface{}{
+			"fileType": fileType,
+			"key":      docKey,
+			"title":    title,
+			"url":      docURL,
+			"permissions": map[string]interface{}{
+				"edit": mode == "edit", "download": true, "print": true, "comment": true,
+			},
+		},
+		"editorConfig": map[string]interface{}{
+			"callbackUrl": callbackURL,
+			"lang":        "zh",
+			"mode":        mode,
+			"user":        user,
+			"customization": map[string]interface{}{
+				"autosave": true, "forcesave": true,
+			},
+		},
+	}
+	if jwtSecret != "" {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(cfgMap))
+		if signed, err := token.SignedString([]byte(jwtSecret)); err == nil {
+			cfgMap["token"] = signed
+		}
+	}
+	return cfgMap
 }
 
 // publicBase Document Server 回拉文件/回调用的基础地址，优先级：
@@ -242,56 +336,77 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 	} else {
 		fileToken = h.signFileToken(officeTarget{Kind: "local", PolicyID: policyID, UID: u.ID, Path: vp, Edit: editFlag})
 	}
-	publicBase := h.publicBase(c)
-
-	docURL := fmt.Sprintf("%s/api/office/file?token=%s", publicBase, fileToken)
-	callbackURL := fmt.Sprintf("%s/api/office/callback?token=%s", publicBase, fileToken)
-
 	// document.key 内容变化后必须变化：以 mtime 参与哈希（含来源标识防跨盘碰撞）
 	keySum := sha256.Sum256([]byte(fmt.Sprintf("%d|%d|%s|%d", shareID, policyID, vp, e.ModTime)))
 	docKey := base64.RawURLEncoding.EncodeToString(keySum[:])[:20]
 
-	docType := "word"
-	switch ext {
-	case "xlsx", "xls", "csv", "ods":
-		docType = "cell"
-	case "pptx", "ppt", "odp":
-		docType = "slide"
-	}
+	cfgMap := h.buildOfficeConfig(h.publicBase(c), jwtSecret, docKey, e.Name, ext, officeDocType(ext), mode, fileToken,
+		map[string]interface{}{"id": fmt.Sprintf("u-%d", u.ID), "name": u.Nickname})
+	dto.OK(c, gin.H{"documentServer": dsURL, "config": cfgMap})
+}
 
-	cfgMap := map[string]interface{}{
-		"documentType": docType,
-		"type":         "desktop",
-		"document": map[string]interface{}{
-			"fileType": ext,
-			"key":      docKey,
-			"title":    e.Name,
-			"url":      docURL,
-			"permissions": map[string]interface{}{
-				"edit": mode == "edit", "download": true, "print": true, "comment": true,
-			},
-		},
-		"editorConfig": map[string]interface{}{
-			"callbackUrl": callbackURL,
-			"lang":        "zh",
-			"mode":        mode,
-			"user":        map[string]interface{}{"id": fmt.Sprintf("u-%d", u.ID), "name": u.Nickname},
-			"customization": map[string]interface{}{
-				"autosave": true, "forcesave": true, "compactHeader": true,
-			},
-		},
+// ConfigShare 公开分享链接的编辑器配置（匿名访问，Cloudreve 分享模式）：
+// GET /api/s/:token/office?path=rel&st=
+// 任何人持分享链接即可打开 ONLYOFFICE 完整编辑器；编辑权限由分享创建者的
+// 允许在线编辑开关决定（默认允许），保存走分享者隔离目录并归档旧版本。
+// 带提取码的分享须先 verify 拿 stoken。
+func (h *OfficeHandler) ConfigShare(c *gin.Context) {
+	settings := GetSiteSettings()
+	dsURL := strings.TrimRight(settings["onlyoffice_url"], "/")
+	jwtSecret := settings["onlyoffice_jwt"]
+	if dsURL == "" {
+		dto.Fail(c, 400, "站点未开启在线 Office（管理员未配置 Document Server）")
+		return
 	}
+	sh, err := loadPublicShare(c.Param("token"))
+	if err != nil {
+		dto.Fail(c, 404, err.Error())
+		return
+	}
+	if sh.PasswordHash != "" && !checkShareStoken(h.Secret, sh.Token, c.Query("st")) {
+		dto.Fail(c, 401, "请先输入提取码")
+		return
+	}
+	var p model.Policy
+	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+		dto.Fail(c, 404, "存储已失效")
+		return
+	}
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID))
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	// 路径锚定分享根内（单文件分享 rel 为空即分享文件本身）
+	vp, ok := shareAnchor(c.Query("path"), sh.Path)
+	if !ok {
+		dto.Fail(c, 403, "路径非法")
+		return
+	}
+	e, err := d.Stat(vp)
+	if err != nil {
+		dto.Fail(c, 404, "文件不存在")
+		return
+	}
+	if e.IsDir {
+		dto.Fail(c, 400, "不能打开目录")
+		return
+	}
+	mode := c.DefaultQuery("mode", "edit")
+	if mode != "edit" && mode != "view" {
+		mode = "edit"
+	}
+	if !sh.AllowEdit {
+		mode = "view" // 分享创建者关闭了在线编辑
+	}
+	ext := strings.TrimPrefix(strings.ToLower(path.Ext(vp)), ".")
+	fileToken := h.signFileToken(officeTarget{Kind: "pub", ShareToken: sh.Token, Rel: strings.TrimPrefix(c.Query("path"), "/"), Edit: mode == "edit"})
+	// document.key 含分享 token 防跨盘/跨分享碰撞
+	keySum := sha256.Sum256([]byte(fmt.Sprintf("pub|%s|%s|%d", sh.Token, vp, e.ModTime)))
+	docKey := base64.RawURLEncoding.EncodeToString(keySum[:])[:20]
 
-	// 仅当 Document Server 启用了 JWT 时才签名并携带 token；未配置密钥（如 Cloudreve 部署）则不签名
-	if jwtSecret != "" {
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(cfgMap))
-		signed, err := token.SignedString([]byte(jwtSecret))
-		if err != nil {
-			dto.Fail(c, 500, "配置签名失败")
-			return
-		}
-		cfgMap["token"] = signed
-	}
+	cfgMap := h.buildOfficeConfig(h.publicBase(c), jwtSecret, docKey, e.Name, ext, officeDocType(ext), mode, fileToken,
+		map[string]interface{}{"id": "guest", "name": "访客"})
 	dto.OK(c, gin.H{"documentServer": dsURL, "config": cfgMap})
 }
 
@@ -306,6 +421,13 @@ func (h *OfficeHandler) File(c *gin.Context) {
 	var vp string
 	if t.Kind == "shared" {
 		_, _, dd, full, err := h.resolveShared(t)
+		if err != nil {
+			dto.FailHTTP(c, 404, err.Error())
+			return
+		}
+		d, vp = dd, full
+	} else if t.Kind == "pub" {
+		_, _, dd, full, err := h.resolvePub(t)
 		if err != nil {
 			dto.FailHTTP(c, 404, err.Error())
 			return
@@ -365,6 +487,13 @@ func (h *OfficeHandler) Callback(c *gin.Context) {
 				h.saveCallbackBody(cb.URL, full, d, func(phys string) {
 					fscore.SaveVersion(p.ID, sh.OwnerID, full, phys)
 				}, fmt.Sprintf("share:%d %s", t.ShareID, full))
+			}
+		} else if t.Kind == "pub" {
+			sh, p, d, full, err := h.resolvePub(t)
+			if err == nil {
+				h.saveCallbackBody(cb.URL, full, d, func(phys string) {
+					fscore.SaveVersion(p.ID, sh.UserID, full, phys)
+				}, fmt.Sprintf("pubshare:%s %s", t.ShareToken, full))
 			}
 		} else {
 			var p model.Policy

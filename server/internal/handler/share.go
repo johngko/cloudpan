@@ -35,6 +35,7 @@ type shareCreateIn struct {
 	RemainDownloads int    `json:"remainDownloads"`
 	AllowDownload   *bool  `json:"allowDownload"`
 	PreviewEnabled  *bool  `json:"previewEnabled"`
+	AllowEdit       *bool  `json:"allowEdit"` // 分享访客可否在线编辑（缺省 = 允许）
 }
 
 func (h *ShareHandler) Create(c *gin.Context) {
@@ -72,6 +73,11 @@ func (h *ShareHandler) Create(c *gin.Context) {
 	if in.PreviewEnabled != nil {
 		preview = *in.PreviewEnabled
 	}
+	// 在线编辑默认允许（Cloudreve 分享模式：任何人打开分享链接都能在线编辑）
+	allowEdit := true
+	if in.AllowEdit != nil {
+		allowEdit = *in.AllowEdit
+	}
 	var expires *time.Time
 	if in.ExpireDays > 0 {
 		t := time.Now().AddDate(0, 0, in.ExpireDays)
@@ -80,7 +86,7 @@ func (h *ShareHandler) Create(c *gin.Context) {
 	sh := model.Share{
 		UserID: x.user.ID, PolicyID: p.ID, Path: vp, Name: e.Name, IsDir: e.IsDir,
 		Token: genID16() + genID16(), RemainDownloads: in.RemainDownloads,
-		AllowDownload: allowDl, PreviewEnabled: preview, ExpiresAt: expires,
+		AllowDownload: allowDl, PreviewEnabled: preview, AllowEdit: allowEdit, ExpiresAt: expires,
 	}
 	if in.Password != "" {
 		sh.PasswordHash = hashPassword(in.Password)
@@ -88,6 +94,11 @@ func (h *ShareHandler) Create(c *gin.Context) {
 	if err := model.DB.Create(&sh).Error; err != nil {
 		dto.Fail(c, 500, "创建分享失败")
 		return
+	}
+	if !allowEdit {
+		// GORM default:true 标签会跳过零值（false）不写入 INSERT 列，数据库默认值 true 生效——
+		// 显式关闭在线编辑时必须回写，否则「不允许编辑」的分享实际可被编辑
+		model.DB.Model(&sh).UpdateColumn("allow_edit", false)
 	}
 	middleware.Audit(c, "share", p.Name+":"+vp)
 	dto.OK(c, sh)
@@ -243,6 +254,11 @@ func (h *ShareHandler) makeStoken(token string) string {
 }
 
 func (h *ShareHandler) checkStoken(token, st string) bool {
+	return checkShareStoken(h.Secret, token, st)
+}
+
+// checkShareStoken 提取码会话票据校验（包级：OfficeHandler 的匿名分享编辑器端点复用）
+func checkShareStoken(secret []byte, token, st string) bool {
 	var exp int64
 	var sig string
 	if _, err := fmt.Sscanf(st, "%d.%s", &exp, &sig); err != nil {
@@ -251,7 +267,7 @@ func (h *ShareHandler) checkStoken(token, st string) bool {
 	if time.Now().Unix() > exp {
 		return false
 	}
-	mac := hmac.New(sha256.New, h.Secret)
+	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(fmt.Sprintf("share|%s|%d", token, exp)))
 	return hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(sig))
 }
@@ -277,6 +293,7 @@ func (h *ShareHandler) Info(c *gin.Context) {
 	dto.OK(c, gin.H{
 		"name": sh.Name, "isDir": sh.IsDir, "size": size, "hasPassword": sh.PasswordHash != "",
 		"allowDownload": sh.AllowDownload, "previewEnabled": sh.PreviewEnabled,
+		"allowEdit": sh.AllowEdit,
 		"expiresAt": sh.ExpiresAt, "owner": owner.Nickname, "createdAt": sh.CreatedAt,
 		"views": sh.Views + 1, "downloads": sh.Downloads,
 	})

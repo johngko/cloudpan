@@ -77,7 +77,7 @@ export const fsApi = {
 }
 
 export const shareApi = {
-  create: (d: { policyId: number; path: string; password?: string; expireDays?: number; remainDownloads?: number; allowDownload?: boolean; previewEnabled?: boolean }) => post<any>('/shares', d),
+  create: (d: { policyId: number; path: string; password?: string; expireDays?: number; remainDownloads?: number; allowDownload?: boolean; previewEnabled?: boolean; allowEdit?: boolean }) => post<any>('/shares', d),
   mine: () => get<any[]>('/shares'),
   cancel: (id: number) => del(`/shares/${id}`),
   // 转存：把公开分享内容一键保存到自己账号（登录态；带提取码需 st）
