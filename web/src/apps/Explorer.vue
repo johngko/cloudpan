@@ -1091,8 +1091,27 @@ function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 
     .map((x: any) => ({ policyId: (x as any).policyId || pid, path: x.path, name: x.name, size: x.size, ext: (x.ext || '').toLowerCase() }))
   const withList: any = { ...f, ext }
   // 图片/媒体：传入同类文件列表（图片为全部图片，音视频为全部音视频）
-  if (app === 'imageviewer') withList.list = siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(x.ext))
+  if (app === 'imageviewer') withList.list = siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(x.ext))
   else if (app === 'mediaviewer') withList.list = siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext))
+  else if (app === 'officeeditor') {
+    // 列表项自身不带 policyId/shareId（双击走 openItem 会用当前盘回退，这里直接展开 f 会丢字段
+    // → 编辑器 rawUrl(policyId=undefined) 报错「无法在线预览」），统一补齐
+    if (onSharedDrive.value) {
+      const sp = sharedPathParse(f.path)
+      if (sp) { withList.shareId = sp.shareId; withList.rel = sp.rel; withList.perm = currentShare.value?.perm || 'ro' }
+    } else if (!withList.policyId) {
+      withList.policyId = pid
+    }
+    // 配置了 Document Server：与双击一致进整页 ONLYOFFICE 编辑器（Cloudreve 模式）；
+    // 桌面窗口静态兜底仅在未配置 DS 时使用
+    if (session.site.officeConfigured && ext !== 'pdf') {
+      if (onSharedDrive.value) {
+        const sp = sharedPathParse(f.path)
+        if (sp) { router.push(`/office?shareId=${sp.shareId}&rel=${encodeURIComponent(sp.rel)}`); return }
+      }
+      if (pid) { router.push(`/office?policyId=${pid}&path=${encodeURIComponent(f.path)}`); return }
+    }
+  }
   const p = withList
   const map: Record<string, { title: string; icon: string; w: number; h: number }> = {
     imageviewer: { title: f.name + ' - 图片查看器', icon: 'image', w: 880, h: 620 },

@@ -82,10 +82,10 @@
     <!-- 无法预览 -->
     <div v-if="mode === 'none'" class="empty-hint" style="pointer-events: auto">
       <AppIcon name="office" :size="52" />
-      <div style="max-width: 380px; text-align: center; line-height: 1.8">
+      <div style="max-width: 380px; text-align: center; line-height: 1.8; white-space: pre-line">
         {{ noPreviewHint }}
       </div>
-      <button class="btn primary" @click="download">下载文件</button>
+      <button v-if="!noFile" class="btn primary" @click="download">下载文件</button>
     </div>
   </div>
 </template>
@@ -133,7 +133,11 @@ const cacheBust = ref(0)
 const rawSrc = computed(() => (isShared.value
   ? userShareApi.rawUrl(props.props.shareId, props.props.rel)
   : rawUrl(props.props.policyId, props.props.path)) + '&b=' + cacheBust.value)
+const noFile = computed(() => !props.props?.path && !props.props?.shareId)
 const noPreviewHint = computed(() => {
+  if (noFile.value) {
+    return '未打开任何文档。\n在文件资源管理器中双击 Office 文件即可打开编辑（或右键「打开方式 → Office 编辑器」）。'
+  }
   if (ext.value === 'ppt') {
     return '旧版 .ppt 格式暂不支持在线预览，请下载后用本地 PowerPoint 打开。'
   }
