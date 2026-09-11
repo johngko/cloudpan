@@ -34,7 +34,7 @@
       <p>欢迎，{{ displayName }}</p>
     </div>
 
-    <div class="w12-login-notice" v-if="session.site.announcement">{{ session.site.announcement }}</div>
+    <div class="w12-login-notice" v-if="session.site.announcement" v-html="noticeHtml"></div>
     <div class="w12-login-reg" v-if="session.site.registerOpen">
       <a href="#/register">注册新账号</a>
     </div>
@@ -57,9 +57,12 @@ import { useRouter } from 'vue-router'
 import { useSession } from '../../stores/session'
 import { wallpaperClass } from '../../assets/wallpapers'
 import { setToken } from '../../api/http'
+import { renderMD } from '../../utils/markdown'
 
 const router = useRouter()
 const session = useSession()
+// 公告支持 Markdown（管理台站点设置编写，DOMPurify 消毒后渲染）
+const noticeHtml = computed(() => renderMD(session.site.announcement || ''))
 // 登录模式：guest=游客登录（默认）/ account=账号密码。站点关闭游客登录后强制账号模式
 const mode = ref<'guest' | 'account'>('guest')
 const username = ref('')
@@ -106,7 +109,7 @@ async function doGuestLogin() {
   errMsg.value = ''
   try {
     const res = await import('../../api/modules').then(m => m.authApi.guest())
-    setToken(res.token)
+    setToken(res.token, res.refreshToken)
     await session.loadMe()
     enterDesktop()
   } catch (e: any) {
@@ -123,7 +126,7 @@ async function doLogin() {
   errMsg.value = ''
   try {
     const res = await import('../../api/modules').then(m => m.authApi.login(username.value, password.value))
-    setToken(res.token)
+    setToken(res.token, res.refreshToken)
     await session.loadMe()
     enterDesktop()
   } catch (e: any) {

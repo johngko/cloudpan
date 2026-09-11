@@ -32,6 +32,7 @@
       <div v-if="session.site.registerOpen" class="dde-login-reg">
         <a href="#/register">注册新账号</a>
       </div>
+      <div v-if="session.site.announcement" class="dde-login-notice" v-html="noticeHtml"></div>
     </div>
     <div v-else-if="stage === 'welcome'" class="dde-login-user">
       <div class="avatar">{{ initial }}</div>
@@ -55,9 +56,12 @@ import { useSession } from '../../stores/session'
 import { wallpaperClass } from '../../assets/wallpapers'
 import { setToken } from '../../api/http'
 import AppIcon from '../../components/AppIcon.vue'
+import { renderMD } from '../../utils/markdown'
 
 const router = useRouter()
 const session = useSession()
+// 公告支持 Markdown（管理台站点设置编写，DOMPurify 消毒后渲染）
+const noticeHtml = computed(() => renderMD(session.site.announcement || ''))
 // 登录模式：guest=游客登录（默认）/ account=账号密码。站点关闭游客登录后强制账号模式
 const mode = ref<'guest' | 'account'>('guest')
 const username = ref('')
@@ -91,7 +95,7 @@ async function doGuestLogin() {
   errMsg.value = ''
   try {
     const res = await import('../../api/modules').then(m => m.authApi.guest())
-    setToken(res.token)
+    setToken(res.token, res.refreshToken)
     await session.loadMe()
     stage.value = 'welcome'
     setTimeout(() => router.replace('/desktop'), 900)
@@ -110,7 +114,7 @@ async function doLogin() {
   loading.value = true
   try {
     const res = await import('../../api/modules').then(m => m.authApi.login(username.value, password.value))
-    setToken(res.token)
+    setToken(res.token, res.refreshToken)
     await session.loadMe()
     stage.value = 'welcome'
     setTimeout(() => router.replace('/desktop'), 900)

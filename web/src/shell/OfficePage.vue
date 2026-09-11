@@ -5,6 +5,9 @@
       <AppIcon :name="isPdf ? 'file' : 'office'" :size="20" />
       <span class="office-title">{{ title || '在线 Office' }}</span>
       <span v-if="mode === 'view'" class="office-badge">只读</span>
+      <span v-if="others.length" class="office-badge collab" :title="'当前还有其他协作者打开着这篇文档：' + others.join('、')">
+        <span class="collab-dot"></span>正在编辑：{{ others.join('、') }}
+      </span>
       <div style="flex: 1"></div>
       <button v-if="canShare" class="office-btn" @click="openShareDlg">
         <AppIcon name="share2" :size="15" /> 分享
@@ -12,6 +15,13 @@
       <button class="office-btn" title="关闭" @click="close">
         <AppIcon name="close" :size="16" />
       </button>
+    </div>
+
+    <!-- 文档已被他人更新提示（mtime 变化 → docKey 变化，刷新才会同步到最新版本） -->
+    <div v-if="docUpdated" class="office-stale">
+      <AppIcon name="info" :size="14" />
+      <span>文档已被他人更新（保存后内容已变化）。当前编辑器仍基于打开时的版本，刷新以加载最新内容。</span>
+      <button class="office-btn" @click="() => location.reload()">刷新文档</button>
     </div>
 
     <!-- 编辑器主体：ONLYOFFICE DocsAPI 撑满整页 -->
@@ -89,6 +99,48 @@ const loading = ref(true)
 const errorMsg = ref('')
 let editor: any = null
 
+// ---- 实时协作「正在编辑」：20s 心跳注册，返回协作者列表 + 文件 mtime ----
+// 同 docKey 的编辑器由 ONLYOFFICE DS 原生合并协作；这里只负责「还有谁开着」提示。
+// mtime 变化（他人保存后 docKey 已变）→ 提示刷新才会同步最新内容。
+const others = ref<string[]>([])
+const docUpdated = ref(false)
+const sessID = Math.random().toString(36).slice(2, 12)
+let firstMod: number | null = null
+let collabTimer: number | undefined
+
+async function pollStatus() {
+  try {
+    let d: any
+    if (isShare.value) {
+      const pub = axios.create({ baseURL: '/api' })
+      const r: any = (await pub.get(`/s/${shareToken}/office/status`, {
+        params: { path: q.path || '', st: q.st || '', sess: sessID }
+      })).data
+      if (r.code !== 0) return
+      d = r.data
+    } else {
+      const qs = q.shareId
+        ? `shareId=${q.shareId}&rel=${encodeURIComponent(q.rel || '')}`
+        : `policyId=${q.policyId}&path=${encodeURIComponent(q.path || '')}`
+      d = await get<any>(`/office/status?${qs}&sess=${sessID}&mode=${q.mode || 'edit'}`)
+    }
+    const eds: any[] = d.editors || []
+    const names = eds.filter(e => !e.me).map(e => e.name)
+    if (names.join('\u0001') !== others.value.join('\u0001')) others.value = names
+    if (firstMod === null) firstMod = d.modTime
+    else if (d.modTime !== firstMod && !docUpdated.value) {
+      docUpdated.value = true
+      // mtime 已变 → 文件列表里的修改时间缓存过期，触发刷新
+      window.dispatchEvent(new CustomEvent('cp-refresh-explorer'))
+    }
+  } catch { /* 心跳失败静默（功能停用/文件被删等） */ }
+}
+
+function startCollab() {
+  pollStatus()
+  collabTimer = window.setInterval(pollStatus, 20000)
+}
+
 async function loadScript(src: string): Promise<void> {
   if ((window as any).DocsAPI) return
   await new Promise<void>((resolve, reject) => {
@@ -136,6 +188,7 @@ async function init(d: any) {
 }
 
 onMounted(async () => {
+  startCollab()
   try {
     await init(await loadConfig())
   } catch (e: any) {
@@ -147,6 +200,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (collabTimer) window.clearInterval(collabTimer)
   try { editor?.destroyEditor?.() } catch {}
 })
 
@@ -223,6 +277,20 @@ async function copyLink() {
 .office-badge {
   font-size: 11px; padding: 2px 8px; border-radius: 10px;
   background: rgba(255, 193, 7, 0.16); color: #ffd54f;
+}
+.office-badge.collab {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(76, 175, 80, 0.14); color: #81c784;
+  max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.collab-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: #4caf50; box-shadow: 0 0 6px #4caf50;
+}
+.office-stale {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; background: #fff8e1; color: #8d6e00;
+  font-size: 12.5px; border-bottom: 1px solid #ffe082;
 }
 .office-btn {
   display: inline-flex; align-items: center; gap: 6px;

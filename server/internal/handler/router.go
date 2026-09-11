@@ -19,9 +19,12 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 	regLimiter := middleware.NewIPRateLimiter(5, 2)    // 5 次/小时，突发 2
 	// 游客登录是匿名默认入口，限流比账号登录宽松但仍防爆刷
 	guestLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+	// 刷新令牌续期：401 静默续期入口，独立限流防刷
+	refreshLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
 	api.POST("/auth/login", middleware.RateLimit(loginLimiter), auth.Login)
 	api.POST("/auth/register", middleware.RateLimit(regLimiter), auth.Register)
 	api.POST("/auth/guest", middleware.RateLimit(guestLimiter), auth.GuestLogin)
+	api.POST("/auth/refresh", middleware.RateLimit(refreshLimiter), auth.Refresh)
 
 	// 公开分享（受「公开分享」功能门控）
 	sh := &ShareHandler{Site: site, Secret: cfg.Secret}
@@ -39,10 +42,16 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 	// 公开分享链接的在线 Office 编辑器配置（匿名，Cloudreve 分享模式：任何人打开分享链接可进 ONLYOFFICE 编辑器）。
 	// 双重功能门控（share+office 均启用才放行，防止单开关被绕）；独立限流防爆刷签发
 	officePubLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+	officePub := &OfficeHandler{Site: site, Secret: cfg.Secret}
 	api.GET("/s/:token/office",
 		middleware.AppGate("share"), middleware.AppGate("office"),
 		middleware.RateLimit(officePubLimiter),
-		(&OfficeHandler{Site: site, Secret: cfg.Secret}).ConfigShare)
+		officePub.ConfigShare)
+	// 分享链接的「正在编辑」协作状态（匿名，与编辑器配置同门控同限流）
+	api.GET("/s/:token/office/status",
+		middleware.AppGate("share"), middleware.AppGate("office"),
+		middleware.RateLimit(officePubLimiter),
+		officePub.StatusShare)
 
 	// 需登录（GuestReadOnly：游客共享账号只读兜底，见 middleware/guest.go）
 	ug := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
@@ -111,6 +120,9 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		// ONLYOFFICE（受「在线 Office」功能门控）
 		office := &OfficeHandler{Site: site}
 		ug.GET("/office/config", middleware.AppGate("office"), office.Config)
+		// 实时协作「正在编辑」状态：编辑器心跳 + 文件列表批量只读查询
+		ug.GET("/office/status", middleware.AppGate("office"), office.Status)
+		ug.POST("/office/status-batch", middleware.AppGate("office"), office.StatusBatch)
 
 		// 云盘授权（管理员专属：涉及云盘凭据绑定/token 交换，普通用户无权限操作存储策略）
 		ca := &CloudAuth{Site: site}

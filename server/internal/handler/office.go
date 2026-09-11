@@ -14,8 +14,10 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -59,6 +61,95 @@ type officeTarget struct {
 func parseUintQuery(c *gin.Context, key string) uint {
 	v, _ := strconv.ParseUint(c.Query(key), 10, 32)
 	return uint(v)
+}
+
+// ---- 实时协作会话注册表（「正在编辑」提示）----
+//
+// docKey 是确定性的（同文件同 mtime → 同 docKey），ONLYOFFICE DS 会把同 docKey 的多个
+// 编辑器天然合并为协作编辑；注册表只回答「此刻还有谁开着这篇文档」。前端编辑器顶栏/
+// 分享页持随机会话 ID 周期性调 status 注册+心跳，文件列表/查看场景用 batch 只读查询。
+// 内存态：重启后列表自然清空，属提示性信息，不影响编辑正确性。
+
+type editSessionEntry struct {
+	Name string
+	Mode string
+	Last time.Time
+}
+
+var editSessions = struct {
+	sync.Mutex
+	m map[string]map[string]*editSessionEntry // docKey -> sessID -> entry
+}{m: map[string]map[string]*editSessionEntry{}}
+
+// 超过 3 次心跳（20s 间隔）未更新视为已离开编辑器
+const editSessionTTL = 90 * time.Second
+
+// docKeyFor 计算文档的 document.key：同一文件的任何视图（属主自己打开 / 共享盘打开 /
+// 公开分享链接打开）必须得到同一 docKey，DS 才会把它们合并进同一个协作会话——
+// 故 key 一律以「属主 policy + 属主路径 + mtime」规范化，与打开入口无关。
+func docKeyFor(policyID uint, vp string, mod int64) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d|%s|%d", policyID, vp, mod)))
+	return base64.RawURLEncoding.EncodeToString(sum[:])[:20]
+}
+
+func pruneEditSessionsLocked(now time.Time) {
+	for k, m := range editSessions.m {
+		for id, e := range m {
+			if now.Sub(e.Last) > editSessionTTL {
+				delete(m, id)
+			}
+		}
+		if len(m) == 0 {
+			delete(editSessions.m, k)
+		}
+	}
+}
+
+func snapshotEditors(m map[string]*editSessionEntry, meSess string) []map[string]interface{} {
+	ids := make([]string, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]map[string]interface{}, 0, len(m))
+	for _, id := range ids {
+		en := m[id]
+		out = append(out, map[string]interface{}{"name": en.Name, "mode": en.Mode, "me": id == meSess})
+	}
+	return out
+}
+
+// touchEditSession (docKey, sess) 心跳注册，返回当前编辑者列表（含 me 标记）
+func touchEditSession(docKey, sess, name, mode string) []map[string]interface{} {
+	editSessions.Lock()
+	defer editSessions.Unlock()
+	pruneEditSessionsLocked(time.Now())
+	m := editSessions.m[docKey]
+	if m == nil {
+		m = map[string]*editSessionEntry{}
+		editSessions.m[docKey] = m
+	}
+	e := m[sess]
+	if e == nil {
+		e = &editSessionEntry{}
+		m[sess] = e
+	}
+	e.Name = name
+	e.Mode = mode
+	e.Last = time.Now()
+	return snapshotEditors(m, sess)
+}
+
+// listEditSessions 只读查询（文件列表徽章用，不注册调用者）
+func listEditSessions(docKey string) []map[string]interface{} {
+	editSessions.Lock()
+	defer editSessions.Unlock()
+	pruneEditSessionsLocked(time.Now())
+	m := editSessions.m[docKey]
+	if len(m) == 0 {
+		return []map[string]interface{}{}
+	}
+	return snapshotEditors(m, "")
 }
 
 // signFileToken 生成供 DS 使用的短期签名 token：b64url(JSON).hex(hmac(JSON))
@@ -284,6 +375,7 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 	}
 	var d fscore.Driver
 	var vp string
+	var keyPolicy uint // docKey 规范化的属主 policy（共享视图用创建者 policy，保证跨视图同 key）
 	editable := u.Role == "admin"
 	if shareID != 0 {
 		if h.LoadShare == nil {
@@ -300,7 +392,7 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 			return
 		}
 		editable = sh.Perm == "rw" // 共享可写性只看共享授权（admin 也不能借 ro 共享写别人盘）
-		d, vp = dd, full
+		d, vp, keyPolicy = dd, full, sh.PolicyID
 	} else {
 		v, err := fscore.Clean(c.Query("path"))
 		if err != nil {
@@ -314,7 +406,7 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 		}
 		// 只读用户组（非 admin）只能 view，与 fs.go requireWritable 语义一致
 		editable = u.Role == "admin" || x.group == nil || !x.group.ReadOnly
-		d, vp = dd, v
+		d, vp, keyPolicy = dd, v, policyID
 	}
 	if !editable {
 		mode = "view"
@@ -336,9 +428,8 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 	} else {
 		fileToken = h.signFileToken(officeTarget{Kind: "local", PolicyID: policyID, UID: u.ID, Path: vp, Edit: editFlag})
 	}
-	// document.key 内容变化后必须变化：以 mtime 参与哈希（含来源标识防跨盘碰撞）
-	keySum := sha256.Sum256([]byte(fmt.Sprintf("%d|%d|%s|%d", shareID, policyID, vp, e.ModTime)))
-	docKey := base64.RawURLEncoding.EncodeToString(keySum[:])[:20]
+	// document.key：属主 policy+路径+mtime 规范化（跨视图同 key → DS 原生合并协作）
+	docKey := docKeyFor(keyPolicy, vp, e.ModTime)
 
 	cfgMap := h.buildOfficeConfig(h.publicBase(c), jwtSecret, docKey, e.Name, ext, officeDocType(ext), mode, fileToken,
 		map[string]interface{}{"id": fmt.Sprintf("u-%d", u.ID), "name": u.Nickname})
@@ -401,13 +492,203 @@ func (h *OfficeHandler) ConfigShare(c *gin.Context) {
 	}
 	ext := strings.TrimPrefix(strings.ToLower(path.Ext(vp)), ".")
 	fileToken := h.signFileToken(officeTarget{Kind: "pub", ShareToken: sh.Token, Rel: strings.TrimPrefix(c.Query("path"), "/"), Edit: mode == "edit"})
-	// document.key 含分享 token 防跨盘/跨分享碰撞
-	keySum := sha256.Sum256([]byte(fmt.Sprintf("pub|%s|%s|%d", sh.Token, vp, e.ModTime)))
-	docKey := base64.RawURLEncoding.EncodeToString(keySum[:])[:20]
+	// document.key：属主 policy+路径+mtime 规范化（与属主自己打开同一文件同 key → 协作合并）
+	docKey := docKeyFor(p.ID, vp, e.ModTime)
 
 	cfgMap := h.buildOfficeConfig(h.publicBase(c), jwtSecret, docKey, e.Name, ext, officeDocType(ext), mode, fileToken,
 		map[string]interface{}{"id": "guest", "name": "访客"})
 	dto.OK(c, gin.H{"documentServer": dsURL, "config": cfgMap})
+}
+
+// Status 查询并心跳某文档的协作编辑状态（登录态）：
+// GET /api/office/status?policyId=&path= 或 ?shareId=&rel=，另带
+// sess（前端随机会话 ID，20s 心跳一次）、name、mode。
+// 返回该 docKey 的编辑者列表与文件 mtime——mtime 变化即「文档已被他人更新」，
+// 前端据此提示并刷新列表（docKey 随之改变，刷新编辑器才会重新同步最新内容）。
+func (h *OfficeHandler) Status(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	x := ctxOf(c)
+	sess := c.Query("sess")
+	if sess == "" {
+		sess = "anon"
+	}
+	mode := c.DefaultQuery("mode", "edit")
+	name := c.Query("name")
+	if name == "" {
+		name = u.Nickname
+	}
+	shareID := parseUintQuery(c, "shareId")
+	policyID := parseUintQuery(c, "policyId")
+	if shareID == 0 && policyID == 0 {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	var docKey string
+	var modTime int64
+	if shareID != 0 {
+		if h.LoadShare == nil {
+			dto.Fail(c, 500, "共享服务不可用")
+			return
+		}
+		sh, dd, ok := h.LoadShare(c, shareID)
+		if !ok {
+			return
+		}
+		full, ok := userShareFull(sh, c.Query("rel"))
+		if !ok {
+			dto.Fail(c, 403, "路径越界")
+			return
+		}
+		e, err := dd.Stat(full)
+		if err != nil {
+			dto.Fail(c, 404, "文件不存在")
+			return
+		}
+		if e.IsDir {
+			dto.Fail(c, 400, "不能打开目录")
+			return
+		}
+		docKey = docKeyFor(sh.PolicyID, full, e.ModTime)
+		modTime = e.ModTime
+	} else {
+		v, err := fscore.Clean(c.Query("path"))
+		if err != nil {
+			dto.Fail(c, 400, "参数错误")
+			return
+		}
+		_, dd, err := h.Site.Fs.Resolve(u, x.group, policyID)
+		if err != nil {
+			dto.Fail(c, 403, err.Error())
+			return
+		}
+		e, err := dd.Stat(v)
+		if err != nil {
+			dto.Fail(c, 404, "文件不存在")
+			return
+		}
+		if e.IsDir {
+			dto.Fail(c, 400, "不能打开目录")
+			return
+		}
+		docKey = docKeyFor(policyID, v, e.ModTime)
+		modTime = e.ModTime
+	}
+	dto.OK(c, gin.H{"docKey": docKey, "modTime": modTime, "editors": touchEditSession(docKey, sess, name, mode)})
+}
+
+// StatusShare 公开分享链接的协作编辑状态（匿名，Cloudreve 分享模式）：
+// GET /api/s/:token/office/status?path=&st=（带提取码的分享须先 verify 拿 st）
+func (h *OfficeHandler) StatusShare(c *gin.Context) {
+	sess := c.Query("sess")
+	if sess == "" {
+		sess = "anon"
+	}
+	mode := "edit"
+	sh, err := loadPublicShare(c.Param("token"))
+	if err != nil {
+		dto.Fail(c, 404, err.Error())
+		return
+	}
+	if sh.PasswordHash != "" && !checkShareStoken(h.Secret, sh.Token, c.Query("st")) {
+		dto.Fail(c, 401, "请先输入提取码")
+		return
+	}
+	if !sh.AllowEdit {
+		mode = "view"
+	}
+	var p model.Policy
+	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+		dto.Fail(c, 404, "存储已失效")
+		return
+	}
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID))
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	vp, ok := shareAnchor(c.Query("path"), sh.Path)
+	if !ok {
+		dto.Fail(c, 403, "路径非法")
+		return
+	}
+	e, err := d.Stat(vp)
+	if err != nil {
+		dto.Fail(c, 404, "文件不存在")
+		return
+	}
+	if e.IsDir {
+		dto.Fail(c, 400, "不能打开目录")
+		return
+	}
+	docKey := docKeyFor(p.ID, vp, e.ModTime)
+	dto.OK(c, gin.H{"docKey": docKey, "modTime": e.ModTime, "editors": touchEditSession(docKey, sess, "访客", mode)})
+}
+
+// StatusBatch 批量只读查询多个文档的协作编辑状态（登录态，文件列表「正在编辑」徽章用）：
+// POST /api/office/status-batch  body: [{"key":"...","policyId":1,"path":"/a.docx"}...]
+// 返回 {key: {"editors":[{name,mode}],"modTime":...}}；解析失败的项跳过。
+// 只读——不把列表查看者登记为编辑者，避免「打开目录就显示有人编辑」。
+func (h *OfficeHandler) StatusBatch(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	x := ctxOf(c)
+	var items []struct {
+		Key      string `json:"key"`
+		PolicyID uint   `json:"policyId"`
+		ShareID  uint   `json:"shareId"`
+		Path     string `json:"path"`
+		Rel      string `json:"rel"`
+	}
+	if err := c.ShouldBindJSON(&items); err != nil || len(items) == 0 {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	if len(items) > 200 {
+		items = items[:200]
+	}
+	out := map[string]map[string]interface{}{}
+	for i := range items {
+		it := &items[i]
+		var docKey string
+		var modTime int64
+		if it.ShareID != 0 {
+			if h.LoadShare == nil {
+				continue
+			}
+			sh, dd, ok := h.LoadShare(c, it.ShareID)
+			if !ok {
+				continue
+			}
+			full, ok := userShareFull(sh, it.Rel)
+			if !ok {
+				continue
+			}
+			e, err := dd.Stat(full)
+			if err != nil || e.IsDir {
+				continue
+			}
+			docKey = docKeyFor(sh.PolicyID, full, e.ModTime)
+			modTime = e.ModTime
+		} else if it.PolicyID != 0 {
+			v, err := fscore.Clean(it.Path)
+			if err != nil {
+				continue
+			}
+			_, dd, err := h.Site.Fs.Resolve(u, x.group, it.PolicyID)
+			if err != nil {
+				continue
+			}
+			e, err := dd.Stat(v)
+			if err != nil || e.IsDir {
+				continue
+			}
+			docKey = docKeyFor(it.PolicyID, v, e.ModTime)
+			modTime = e.ModTime
+		} else {
+			continue
+		}
+		out[it.Key] = map[string]interface{}{"editors": listEditSessions(docKey), "modTime": modTime}
+	}
+	dto.OK(c, out)
 }
 
 // File DS 服务端拉取文件

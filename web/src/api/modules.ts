@@ -39,6 +39,15 @@ export const siteApi = {
   publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string }>('/site/public')
 }
 
+// 在线 Office：实时协作「正在编辑」状态
+export const officeApi = {
+  // 编辑器心跳（登录态；公开分享端点 /s/:token/office/status 为匿名同款）
+  status: (qs: string) => get<any>(`/office/status?${qs}`),
+  // 文件列表批量只读查询：不把查看者登记为编辑者
+  statusBatch: (items: { key: string; policyId?: number; path?: string; shareId?: number; rel?: string }[]) =>
+    post<Record<string, { editors: { name: string; mode: string }[]; modTime: number }>>('/office/status-batch', items)
+}
+
 export const notifyApi = {
   list: (limit = 50) => get<any[]>(`/notify?limit=${limit}`),
   unread: () => get<{ count: number }>('/notify/unread'),

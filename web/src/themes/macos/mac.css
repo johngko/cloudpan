@@ -264,6 +264,20 @@
 .mac-login-err { color: #ffb3ab; font-size: 12px; text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
 .mac-login-reg { font-size: 12px; }
 .mac-login-reg a { color: #fff; opacity: 0.85; }
+/* 公告（Markdown）：登录页底部毛玻璃卡片 */
+.mac-login-notice {
+  position: absolute; bottom: 76px; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(460px, 86vw); padding: 12px 18px;
+  background: rgba(22, 22, 26, 0.55); backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px;
+  font-size: 12.5px; line-height: 1.7; color: rgba(255, 255, 255, 0.88); text-align: left;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+.mac-login-notice p { margin: 2px 0; }
+.mac-login-notice h1, .mac-login-notice h2, .mac-login-notice h3 { font-size: 13.5px; margin: 4px 0 2px; color: #fff; }
+.mac-login-notice ul, .mac-login-notice ol { padding-left: 18px; margin: 2px 0; }
+.mac-login-notice a { color: #8ab4f8; }
+.mac-login-notice img { max-width: 100%; max-height: 140px; border-radius: 8px; margin-top: 6px; }
 .mac-login-welcome {
   position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; gap: 12px;

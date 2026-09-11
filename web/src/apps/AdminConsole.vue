@@ -251,9 +251,10 @@
               <div class="ac-set-lbl"><b>站点名称</b><span>显示在登录页与开始菜单</span></div>
               <input class="input" v-model="settings.site_name" style="width: 260px" />
             </div>
-            <div class="ac-set-row">
-              <div class="ac-set-lbl"><b>公告</b><span>登录页展示的公告文字</span></div>
-              <input class="input" v-model="settings.announcement" style="width: 260px" />
+            <div class="ac-set-row" style="flex-direction: column; align-items: flex-start; gap: 6px">
+              <div class="ac-set-lbl"><b>公告</b><span>登录页展示，支持 Markdown（标题/加粗/链接/列表/图片等），留空则不显示</span></div>
+              <textarea class="input" v-model="settings.announcement" rows="5" style="width: 100%; max-width: 560px; resize: vertical; line-height: 1.6"
+                placeholder="支持 Markdown，例如：&#10;**系统升级通知**&#10;- 今晚 22:00 维护&#10;- 详情见 [公告](https://example.com)"></textarea>
             </div>
             <div class="ac-set-row">
               <div class="ac-set-lbl"><b>站点主题</b><span>全局生效：游客/普通用户/管理员访问都渲染该主题（非管理员无设置入口）</span></div>

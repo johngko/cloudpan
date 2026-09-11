@@ -178,7 +178,7 @@
               <img v-if="isThumb(f)" :src="thumbUrl(f)" class="f-thumb" draggable="false" />
               <AppIcon v-else :name="iconOf(f)" :size="46" />
             </div>
-            <div class="f-name">{{ f.name }}</div>
+            <div class="f-name"><span v-if="editing[f.path]" class="editing-dot" :title="'正在编辑：' + editing[f.path]"></span>{{ f.name }}</div>
           </div>
         </div>
         <div v-else class="file-list">
@@ -198,6 +198,7 @@
                 <td style="width: 34px; text-align: center"><input type="checkbox" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="toggleCheck(f)" /></td>
                 <td><div style="display: flex; align-items: center; gap: 10px">
                   <AppIcon :name="iconOf(f)" :size="19" /><span>{{ f.name }}</span>
+                  <span v-if="editing[f.path]" class="editing-badge" :title="'正在编辑：' + editing[f.path]"><span class="editing-dot"></span>编辑中</span>
                   <AppIcon v-if="f.starred" name="starFill" :size="13" />
                 </div></td>
                 <td style="color: var(--text-3)">{{ fmtTime(f.modTime) }}</td>
@@ -523,7 +524,7 @@ import { useAppState } from '../stores/appstate'
 import { canUseOffline } from '../stores/apps'
 import { useClipboard } from '../stores/ui'
 import { useTransfer } from '../stores/transfer'
-import { fsApi, shareApi, type Policy, type FileItem } from '../api/modules'
+import { fsApi, shareApi, officeApi, type Policy, type FileItem } from '../api/modules'
 import { rawUrl, downloadUrl } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useContextMenu } from '../stores/ui'
@@ -679,10 +680,12 @@ onMounted(async () => {
   }
   window.addEventListener('cp-refresh-explorer', onRefreshEvent)
   window.addEventListener('keydown', onKey)
+  startEditPoll()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('cp-refresh-explorer', onRefreshEvent)
   window.removeEventListener('keydown', onKey)
+  if (editTimer) window.clearInterval(editTimer)
 })
 
 function onRefreshEvent(e: any) {
@@ -1081,6 +1084,36 @@ async function openItem(f: FileItem) {
 const TEXT_EXTS = ['txt', 'md', 'json', 'js', 'ts', 'vue', 'go', 'py', 'java', 'c', 'cpp', 'h', 'css', 'html', 'xml', 'yml', 'yaml', 'sh', 'bat', 'ini', 'conf', 'log', 'csv', 'sql', 'php', 'rb', 'rs', 'toml']
 // Office 文档（含 OpenDocument/RTF，与 ONLYOFFICE Document Server 支持范围对齐；csv 默认仍走记事本）
 const OFFICE_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 'ppt', 'odp', 'pdf']
+
+// ---- 实时协作「正在编辑」徽章：30s 批量只读查询当前目录 Office 文件的协作状态 ----
+// 只读查询不把自己登记为编辑者；编辑者由整页编辑器的 20s 心跳维护（90s 无心跳视为离开）
+const editing = ref<Record<string, string>>({}) // path -> "张三、李四"
+let editTimer: number | undefined
+const EDIT_EXTS = OFFICE_EXTS.filter(x => x !== 'pdf') // pdf 不进 DS 协作
+async function pollEditing() {
+  if (!apps.isAvailable('office')) { editing.value = {}; return }
+  const files = sortedItems.value.filter(f => !f.isDir && EDIT_EXTS.includes(f.ext || ''))
+  if (!files.length) { editing.value = {}; return }
+  try {
+    const items = files.map(f => {
+      const sp = onSharedDrive.value ? sharedPathParse(f.path) : null
+      return sp
+        ? { key: f.path, shareId: sp.shareId, rel: sp.rel }
+        : { key: f.path, policyId: currentPolicy.value?.id, path: f.path }
+    })
+    const r = await officeApi.statusBatch(items)
+    const out: Record<string, string> = {}
+    for (const f of files) {
+      const names = r[f.path]?.editors?.map(e => e.name).filter(Boolean)
+      if (names?.length) out[f.path] = names.join('、')
+    }
+    editing.value = out
+  } catch { editing.value = {} }
+}
+function startEditPoll() {
+  pollEditing()
+  editTimer = window.setInterval(pollEditing, 30000)
+}
 
 // ---- 打开方式：强制用指定应用打开（覆盖默认路由） ----
 function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor') {
@@ -2098,6 +2131,17 @@ function fmtTime(ms: number) {
   position: absolute; top: 6px; left: 8px; z-index: 2;
   background: linear-gradient(135deg, var(--theme-1), var(--theme-2));
   color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px;
+}
+/* 实时协作「正在编辑」徽章（绿点 + 悬停提示协作者名单） */
+.editing-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #4caf50; box-shadow: 0 0 5px rgba(76, 175, 80, 0.85);
+  vertical-align: middle;
+}
+.f-name .editing-dot { margin-right: 5px; }
+.editing-badge {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 11px; color: #4caf50;
 }
 /* Win11 叠加复选框：悬停或选中时显示 */
 .f-check {

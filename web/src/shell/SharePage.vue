@@ -9,6 +9,7 @@
             <div style="font-size: 12px; color: var(--text-3); margin-top: 3px">
               {{ info.owner }} 分享{{ !info.isDir && info.size ? ' · ' + fmt(info.size) : '' }}{{ info.expiresAt ? ' · ' + new Date(info.expiresAt).toLocaleDateString() + ' 到期' : '' }}
               · {{ info.views || 0 }} 次浏览 · {{ info.downloads || 0 }} 次下载
+              <span v-if="!info.isDir && editing['']" class="share-editing" :title="'当前还有协作者在线编辑：' + editing['']"><span class="share-editing-dot"></span>正在编辑：{{ editing[''] }}</span>
             </div>
           </div>
           <button class="btn" v-if="authed" :disabled="saveBusy" @click="openSaveDlg" title="一键保存到自己的网盘">
@@ -44,7 +45,9 @@
               <tr v-for="f in items" :key="f.relPath" style="cursor: pointer"
                 @click="openItem(f)" @dblclick="openItem(f)">
                 <td style="width: 40px; padding: 8px 14px"><AppIcon :name="iconOf(f)" :size="20" /></td>
-                <td style="padding: 8px 6px">{{ f.name }}</td>
+                <td style="padding: 8px 6px">{{ f.name }}
+                  <span v-if="editing[f.relPath]" class="share-editing" :title="'正在编辑：' + editing[f.relPath]"><span class="share-editing-dot"></span>编辑中</span>
+                </td>
                 <td style="width: 110px; color: var(--text-3); padding: 8px 14px">{{ f.isDir ? '-' : fmt(f.size) }}</td>
                 <td style="width: 90px; padding: 8px 14px; color: var(--text-3)">
                   <button v-if="officeReady && OFFICE_DS_EXTS.includes(f.ext)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">打开</button>
@@ -95,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
@@ -217,10 +220,14 @@ onMounted(async () => {
     const r: any = (await api.get(`/s/${token}/info`)).data
     if (r.code !== 0) throw new Error(r.msg)
     info.value = r.data
-    if (!r.data.hasPassword) { verified.value = true; await loadList() }
+    if (!r.data.hasPassword) { verified.value = true; await loadList(); startEditPoll() }
   } catch (e: any) {
     errMsg.value = e.message || '分享不存在或已过期'
   }
+})
+
+onBeforeUnmount(() => {
+  if (editTimer) window.clearInterval(editTimer)
 })
 
 async function verify() {
@@ -231,6 +238,7 @@ async function verify() {
     stoken.value = r.data.stoken
     verified.value = true
     await loadList()
+    startEditPoll()
   } catch (e: any) { errMsg.value = e.message }
 }
 
@@ -274,6 +282,36 @@ async function loadInto(rel: string) {
   } catch (e: any) { errMsg.value = e.message }
 }
 
+// ---- 实时协作「正在编辑」：25s 轮询（匿名端点；目录分享最多查前 10 个 Office 文件）----
+const editing = ref<Record<string, string>>({}) // relPath(''=分享文件本身) -> "访客、访客"
+const sessID = Math.random().toString(36).slice(2, 12)
+let editTimer: number | undefined
+async function pollEditing() {
+  if (!officeReady.value || !verified.value) { editing.value = {}; return }
+  const files = info.value.isDir
+    ? items.value.filter((f: any) => !f.isDir && OFFICE_DS_EXTS.includes(f.ext)).slice(0, 10)
+    : (OFFICE_DS_EXTS.includes(extOf(info.value.name || '')) ? [{ relPath: '' }] : [])
+  if (!files.length) { editing.value = {}; return }
+  const out: Record<string, string> = {}
+  await Promise.all(files.map(async (f: any) => {
+    try {
+      const r: any = (await api.get(`/s/${token}/office/status`, {
+        params: { path: f.relPath || '', st: stoken.value, sess: sessID }
+      })).data
+      if (r.code === 0) {
+        const names = (r.data.editors || []).filter((e: any) => !e.me).map((e: any) => e.name)
+        if (names.length) out[f.relPath || ''] = names.join('、')
+      }
+    } catch { /* 忽略 */ }
+  }))
+  editing.value = out
+}
+function startEditPoll() {
+  if (editTimer) window.clearInterval(editTimer)
+  pollEditing()
+  editTimer = window.setInterval(pollEditing, 25000)
+}
+
 function downloadCurrent() {
   const p = currentRel.value || ''
   window.open(`/api/s/${token}/download?st=${stoken.value}&path=${encodeURIComponent(p)}`)
@@ -305,3 +343,15 @@ function fmt(n: number) {
   return n + ' B'
 }
 </script>
+
+<style scoped>
+/* 实时协作「正在编辑」徽章 */
+.share-editing {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: #4caf50; margin-left: 8px; white-space: nowrap;
+}
+.share-editing-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4caf50; box-shadow: 0 0 5px rgba(76, 175, 80, 0.85);
+}
+</style>

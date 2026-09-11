@@ -57,7 +57,7 @@ async function doReg() {
   errMsg.value = ''
   try {
     const d = await authApi.register(reg.username, reg.password, reg.nickname, reg.inviteCode)
-    setToken(d.token)
+    setToken(d.token, d.refreshToken)
     await session.loadMe()
     location.hash = '#/desktop'
   } catch (e: any) {

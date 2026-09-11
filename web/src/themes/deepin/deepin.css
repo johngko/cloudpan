@@ -283,6 +283,18 @@
 .dde-login-err { color: #ffb3ab; font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .dde-login-reg { font-size: 12px; color: rgba(255,255,255,0.85); }
 .dde-login-reg a { color: #fff; }
+/* 公告（Markdown）：登录区下方毛玻璃卡片 */
+.dde-login-notice {
+  margin-top: 14px; width: 260px; max-width: 100%; padding: 10px 14px;
+  background: rgba(20, 22, 30, 0.5); backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px;
+  font-size: 12px; line-height: 1.7; color: rgba(255, 255, 255, 0.86); text-align: left;
+}
+.dde-login-notice p { margin: 2px 0; }
+.dde-login-notice h1, .dde-login-notice h2, .dde-login-notice h3 { font-size: 13px; margin: 4px 0 2px; color: #fff; }
+.dde-login-notice ul, .dde-login-notice ol { padding-left: 18px; margin: 2px 0; }
+.dde-login-notice a { color: #8ab4f8; }
+.dde-login-notice img { max-width: 100%; max-height: 120px; border-radius: 8px; margin-top: 6px; }
 
 /* 右下角圆形毛玻璃控制钮（真实 DDE 30px 圆钮） */
 .dde-ctrls-br {
