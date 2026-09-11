@@ -112,6 +112,8 @@ const apps: Record<string, string> = {
     `<rect x="5.6" y="6.4" width="12.8" height="11.2" rx="1.4"/><circle cx="9.4" cy="9.8" r="1.1" stroke-width="1.7"/><path d="M6.4 15.8l3.6-3.4 2.6 2.4 2.6-2.6 3.4 3.4" stroke-width="1.9"/>`),
   browser: tile('#4aa3ff', '#1d4ed8',
     `<circle cx="12" cy="12" r="5.7" stroke-width="1.8"/><path d="M6.3 12h11.4M12 6.3c1.8 1.6 2.7 3.5 2.7 5.7s-.9 4.1-2.7 5.7c-1.8-1.6-2.7-3.5-2.7-5.7s.9-4.1 2.7-5.7z" stroke-width="1.8"/>`),
+  archive: tile('#ffd36e', '#e8890c',
+    `<rect x="6.4" y="5.6" width="11.2" height="4.6" rx="1.1"/><path d="M7.4 10.2v6.4a1.4 1.4 0 0 0 1.4 1.4h6.4a1.4 1.4 0 0 0 1.4-1.4v-6.4"/><path d="M10.3 12.8h3.4M12 10.2v2.6" stroke-width="1.7"/>`),
 
   // 品牌 logo（开机/登录/菜单栏）：自由形态云朵，非 tile
   cloud: `<defs><linearGradient id="__G__" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#2f86d6"/></linearGradient></defs><path d="M7 18.6a4.4 4.4 0 0 1-.6-8.7 5.7 5.7 0 0 1 11.2 1.2 3.8 3.8 0 0 1-.4 7.5H7z" fill="url(#__G__)"/>`,

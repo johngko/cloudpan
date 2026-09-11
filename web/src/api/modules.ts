@@ -72,7 +72,16 @@ export const fsApi = {
   dlink: (policyId: number, path: string, expireHours: number) => get<{ url: string; expireAt: number; permanent: boolean; name: string; size: number }>(`/fs/dlink?policyId=${policyId}&path=${encodeURIComponent(path)}&expireHours=${expireHours}`),
   readText: (policyId: number, path: string) => get<{ content: string }>(`/fs/text?policyId=${policyId}&path=${encodeURIComponent(path)}`),
   writeText: (policyId: number, path: string, content: string) => post('/fs/text', { policyId, path, content }),
-  archive: (policyId: number, paths: string[], name: string, extract = false) => post('/fs/archive', { policyId, paths, name, extract }),
+  archive: (policyId: number, paths: string[], name: string, extract = false, opts: { password?: string; encoding?: string; mask?: string; dst?: string } = {}) =>
+    post('/fs/archive', { policyId, paths, name, extract, password: opts.password || '', encoding: opts.encoding || '', mask: opts.mask || '', dst: opts.dst || '' }),
+  // 压缩包在线浏览：列出归档内容（扁平条目）
+  archiveList: (policyId: number, path: string, encoding = '', password = '') =>
+    get<{ meta: { format: string; compress: string }; entries: { name: string; size: number; mtime: number; isDir: boolean }[] }>(
+      `/fs/archive/list?policyId=${policyId}&path=${encodeURIComponent(path)}&encoding=${encodeURIComponent(encoding)}&password=${encodeURIComponent(password)}`),
+  // 压缩包内单条目直链（?t= 令牌，供 img/iframe/下载）
+  archiveRawUrl: (policyId: number, path: string, entry: string, encoding = '', password = '') =>
+    `/api/fs/archive/raw?policyId=${policyId}&path=${encodeURIComponent(path)}&entry=${encodeURIComponent(entry)}&encoding=${encodeURIComponent(encoding)}&password=${encodeURIComponent(password)}&t=${getToken()}`,
+  tasks: () => get<any[]>('/tasks'),
   starList: () => get<any[]>('/stars'),
   starAdd: (policyId: number, path: string, name: string) => post('/stars', { policyId, path, name }),
   starRemove: (policyId: number, path: string) => del('/stars', { policyId, path }),

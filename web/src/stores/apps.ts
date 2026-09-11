@@ -29,6 +29,7 @@ export const APPS: AppDef[] = [
   { id: 'imageviewer', name: '图片查看器', icon: 'image', w: 880, h: 620 },
   { id: 'mediaviewer', name: '媒体播放器', icon: 'media', w: 880, h: 580 },
   { id: 'officeeditor', name: 'Office 编辑器', icon: 'office', w: 1100, h: 720, feature: 'office' },
+  { id: 'archiveviewer', name: '压缩包浏览器', icon: 'archive', w: 1000, h: 620, feature: 'archive_view' },
   { id: 'mediacenter', name: '媒体中心', icon: 'media', w: 1080, h: 680, desktop: true, installable: true },
   // 统一任务中心：聚合「上传/秒传任务（本机 transfer 队列）」与「离线下载（服务端任务队列）」
   { id: 'tasks', name: '任务中心', icon: 'tasks', w: 780, h: 580, desktop: true, pinned: true },

@@ -6,7 +6,7 @@
       <b>任务中心</b>
       <span class="tc-sub">进行中 {{ runningCount }} · 已完成 {{ finishedCount }}</span>
       <div style="flex: 1"></div>
-      <button class="tool-btn" :disabled="refreshing" @click="loadOffline" title="刷新离线任务">
+      <button class="tool-btn" :disabled="refreshing" @click="() => { loadOffline(); loadFileTasks() }" title="刷新任务">
         <AppIcon name="refresh" :size="15" />
       </button>
       <button class="tool-btn" :disabled="!tc.tasks.some(t => t.status === 'done' || t.status === 'instant')"
@@ -79,6 +79,32 @@
           </div>
         </div>
       </div>
+
+      <!-- 文件任务：压缩 / 解压（服务端任务队列，与离线下载共用 5s 轮询） -->
+      <div class="tc-sec">
+        <div class="tc-sec-title">
+          <AppIcon name="archive" :size="15" /> 文件任务（压缩 / 解压）
+          <span class="tc-sec-count">{{ fileTasks.length }}</span>
+        </div>
+        <div v-if="!fileTasks.length" class="tc-empty">暂无文件任务（在资源管理器或压缩包浏览器中压缩/解压后会出现在这里）</div>
+        <div v-for="t in fileTasks" :key="'ft' + t.id" class="tc-row">
+          <AppIcon :name="t.status === 'error' ? 'file' : 'archive'" :size="20" />
+          <div class="tc-main">
+            <div class="tc-name" :title="t.name">{{ t.name }}</div>
+            <div class="tc-bar">
+              <div class="tc-bar-fill" :class="{ err: t.status === 'error', ok: t.status === 'finished' }"
+                :style="{ width: (t.status === 'finished' ? 100 : t.progress) + '%' }"></div>
+            </div>
+            <div class="tc-subline" v-if="t.sub">{{ t.sub }}</div>
+          </div>
+          <div class="tc-st" :class="tCls(t.status)">{{ ftStatusText(t) }}</div>
+          <div class="tc-ops">
+            <button v-if="t.status === 'queued' || t.status === 'processing'" class="tool-btn" title="取消" @click="cancelFileTask(t.id)">
+              <AppIcon name="close" :size="14" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -96,10 +122,12 @@ const offlineAllowed = computed(() => canUseOffline())
 
 const runningCount = computed(() =>
   tc.tasks.filter(t => t.status === 'uploading' || t.status === 'hashing').length +
-  offline.value.filter(t => t.status === 'queued' || t.status === 'processing').length)
+  offline.value.filter(t => t.status === 'queued' || t.status === 'processing').length +
+  fileTasks.value.filter(t => t.status === 'queued' || t.status === 'processing').length)
 const finishedCount = computed(() =>
   tc.tasks.filter(t => t.status === 'done' || t.status === 'instant').length +
-  offline.value.filter(t => t.status === 'finished').length)
+  offline.value.filter(t => t.status === 'finished').length +
+  fileTasks.value.filter(t => t.status === 'finished').length)
 
 function fmtSize(n: number) {
   if (n > 1 << 30) return (n / (1 << 30)).toFixed(2) + ' GB'
@@ -197,10 +225,48 @@ async function cancelOffline(id: number) {
   try { await del(`/offline/${id}`); await loadOffline() } catch (e: any) { offMsg.value = e?.message || '取消失败' }
 }
 
+// ---- 文件任务：压缩 / 解压（GET /tasks 全类型，这里只取 compress/decompress；取消复用 /offline/:id）----
+interface FileTask { id: number; type: string; status: string; progress: number; error: string; name: string; sub: string }
+const fileTasks = ref<FileTask[]>([])
+async function loadFileTasks() {
+  try {
+    const d = await get<any[]>('/tasks')
+    fileTasks.value = (d || [])
+      .filter(t => t.type === 'compress' || t.type === 'decompress')
+      .map(t => {
+        let p: any = {}
+        try { p = JSON.parse(t.props || '{}') } catch { /* ignore */ }
+        const isZip = t.type === 'compress'
+        const nm = isZip
+          ? (p.name || '压缩任务')
+          : (p.path ? p.path.split('/').filter(Boolean).pop() + ' → 解压' : '解压任务')
+        const sub = isZip
+          ? `压缩 ${p.paths?.length || 0} 项 → ${p.name || ''}`
+          : (p.path || '') + (p.dst ? ' → ' + p.dst : '')
+        return { id: t.id, type: t.type, status: t.status, progress: t.progress ?? 0, error: t.error || '', name: nm, sub }
+      })
+  } catch { /* 轮询失败静默，下轮重试 */ }
+}
+function ftStatusText(t: FileTask) {
+  switch (t.status) {
+    case 'queued': return '排队中'
+    case 'processing': return t.type === 'compress' ? '压缩中' : '解压中'
+    case 'finished': return '已完成'
+    case 'error': return t.error ? '失败：' + t.error.slice(0, 24) : '失败'
+    case 'canceled': return '已取消'
+    default: return t.status
+  }
+}
+async function cancelFileTask(id: number) {
+  try { await del(`/offline/${id}`); await loadFileTasks() } catch (e: any) { toastFile(e?.message || '取消失败') }
+}
+function toastFile(msg: string) { /* 文件任务取消失败提示（复用离线区错误位避免跨区干扰） */ offMsg.value = msg }
+
 onMounted(() => {
   loadOffline()
+  loadFileTasks()
   loadPolicies()
-  timer = window.setInterval(loadOffline, 5000)
+  timer = window.setInterval(() => { loadOffline(); loadFileTasks() }, 5000)
 })
 onBeforeUnmount(() => {
   if (timer) window.clearInterval(timer)

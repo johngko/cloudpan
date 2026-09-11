@@ -79,6 +79,9 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/fs/raw", site.Raw)
 		ug.GET("/fs/download", site.Download)
 		ug.POST("/fs/archive", site.Archive)
+		// 压缩包在线浏览（受「压缩包浏览器」功能门控）
+		ug.GET("/fs/archive/list", middleware.AppGate("archive_view"), site.ArchiveList)
+		ug.GET("/fs/archive/raw", middleware.AppGate("archive_view"), site.ArchiveRaw)
 
 		// 文件版本管理（受「版本管理」功能门控）
 		ug.GET("/fileversions", middleware.AppGate("version"), site.FileVersions)
@@ -137,6 +140,8 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.POST("/offline", middleware.AppGateAny("offline_http", "bt"), off.Create)
 		ug.GET("/offline", off.List)
 		ug.DELETE("/offline/:id", off.Cancel)
+		// 任务中心统一轮询（offline/bt/compress/decompress 全类型）
+		ug.GET("/tasks", off.TaskList)
 
 		// 站内通知（每用户隔离，受「站内通知」功能门控）
 		notify := &NotifyHandler{}

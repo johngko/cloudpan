@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif" // 注册解码器
@@ -1429,12 +1430,16 @@ func (h *SiteHandler) Archive(c *gin.Context) {
 		Paths    []string `json:"paths"`
 		Name     string   `json:"name"`
 		Extract  bool     `json:"extract"`
+		Password string   `json:"password"` // 7z/rar 解压密码
+		Encoding string   `json:"encoding"` // zip 文件名编码（gbk 等）
+		Mask     string   `json:"mask"`     // 只解压指定条目：尾 / = 目录子树；否则 = 单文件平铺
+		Dst      string   `json:"dst"`      // 目标目录（空 = 归档同目录同名文件夹）
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	_, _, ok := h.resolveByID(in.PolicyID, c)
+	_, d, ok := h.resolveByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -1448,12 +1453,36 @@ func (h *SiteHandler) Archive(c *gin.Context) {
 			dto.Fail(c, 400, "一次只能解压一个文件")
 			return
 		}
-		if archiveSuffixOf(in.Paths[0]) == "" {
-			dto.Fail(c, 400, "不支持的归档格式（支持 zip / tar / tar.gz / tar.bz2）")
+		if fscore.ArchiveKindOf(in.Paths[0]) == "" {
+			dto.Fail(c, 400, "不支持的归档格式（支持 zip / 7z / rar / tar / tar.gz / tar.bz2 / tar.xz）")
 			return
+		}
+		dst := ""
+		if in.Dst != "" {
+			cleaned, err := fscore.Clean(in.Dst)
+			if err != nil {
+				dto.Fail(c, 400, "目标目录非法")
+				return
+			}
+			st, err := d.Stat(cleaned)
+			if err != nil || !st.IsDir {
+				dto.Fail(c, 400, "目标目录不存在")
+				return
+			}
+			dst = cleaned
+		}
+		mask := ""
+		if in.Mask != "" {
+			m := filepath.ToSlash(in.Mask)
+			if err := fscore.ArchiveCheckPath(m); err != nil {
+				dto.Fail(c, 400, "目标条目非法")
+				return
+			}
+			mask = m
 		}
 		props, _ := json.Marshal(map[string]interface{}{
 			"policyId": in.PolicyID, "path": in.Paths[0], "name": baseOf(in.Paths[0]),
+			"password": in.Password, "encoding": in.Encoding, "mask": mask, "dst": dst,
 		})
 		t := &model.Task{UserID: x.user.ID, Type: "decompress", Props: string(props)}
 		if err := pool.submit(t); err != nil {
@@ -1484,6 +1513,76 @@ func (h *SiteHandler) Archive(c *gin.Context) {
 	}
 	middleware.Audit(c, "archive", fmt.Sprintf("异步压缩 %d 项 → %s", len(in.Paths), name))
 	dto.OK(c, t)
+}
+
+// ---- 压缩包在线浏览（功能门控：archive_view） ----
+
+// previewInlineExts 归档内可直接内嵌预览的扩展名（图片/文档/媒体）
+var previewInlineExts = map[string]bool{
+	"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true, "bmp": true, "ico": true,
+	"pdf": true, "txt": true, "md": true, "json": true, "log": true, "csv": true,
+	"mp4": true, "webm": true, "mov": true, "mp3": true, "wav": true, "ogg": true, "flac": true, "m4a": true,
+}
+
+// ArchiveList GET /fs/archive/list?policyId=&path=&encoding=&password= 列出归档内容（扁平条目表）
+func (h *SiteHandler) ArchiveList(c *gin.Context) {
+	_, d, ok := h.resolve(c)
+	if !ok {
+		return
+	}
+	vp, err := fscore.Clean(c.Query("path"))
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	st, err := d.Stat(vp)
+	if err != nil || st.IsDir {
+		dto.Fail(c, 404, "文件不存在")
+		return
+	}
+	meta, entries, err := h.Fs.ListArchive(d, vp, c.Query("encoding"), c.Query("password"))
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	middleware.Audit(c, "archive-list", "在线浏览 "+vp)
+	dto.OK(c, gin.H{"meta": meta, "entries": entries})
+}
+
+// ArchiveRaw GET /fs/archive/raw?policyId=&path=&entry=&encoding=&password=&t=
+// 流式返回归档内单个文件（预览/单文件下载；支持 ?t= 令牌直链供 img/iframe 使用）
+func (h *SiteHandler) ArchiveRaw(c *gin.Context) {
+	_, d, ok := h.resolve(c)
+	if !ok {
+		return
+	}
+	x := ctxOf(c)
+	vp, err := fscore.Clean(c.Query("path"))
+	if err != nil {
+		dto.FailHTTP(c, 400, err.Error())
+		return
+	}
+	entry := c.Query("entry")
+	rc, name, size, err := h.Fs.OpenArchiveEntry(d, vp, entry, c.Query("encoding"), c.Query("password"))
+	if err != nil {
+		code := 400
+		if errors.Is(err, os.ErrNotExist) {
+			code = 404
+		}
+		dto.FailHTTP(c, code, err.Error())
+		return
+	}
+	defer rc.Close()
+	ext := strings.ToLower(strings.TrimPrefix(path.Ext(name), "."))
+	disp := "attachment"
+	if previewInlineExts[ext] && !forceAttachmentExts[ext] {
+		disp = "inline"
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, disp, urlEscape(name)))
+	c.Header("Content-Length", fmt.Sprintf("%d", size))
+	c.Header("Cache-Control", "no-cache")
+	rc = wrapThrottle(rc, x.group.DownloadSpeedKB)
+	io.Copy(c.Writer, rc)
 }
 
 func (h *SiteHandler) RecycleList(c *gin.Context) {

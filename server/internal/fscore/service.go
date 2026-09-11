@@ -3,7 +3,6 @@ package fscore
 import (
 	"archive/tar"
 	"archive/zip"
-	"compress/bzip2"
 	"compress/gzip"
 	crand "crypto/rand"
 	"crypto/sha256"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/text/encoding"
 
 	"cloudpan/internal/model"
 )
@@ -737,7 +738,22 @@ func copyArchiveInput(rc io.Reader, tmp *os.File) error {
 	return nil
 }
 
-func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, precheck func(totalUncompressed int64) error) (int64, error) {
+// ExtractZip 解压 zip。参数：
+//   - encodingName 文件名编码（GBK 等，见 ZipEncodings；空 = 不转码）
+//   - mask 只解压指定条目：尾 "/" = 目录子树（保留层级）；否则 = 单文件平铺到目标目录
+//   - dst 目标根目录（空 = 归档同目录下的同名文件夹，原有行为）
+//
+// 返回解压写入的总字节数（未压缩大小，供配额记账）；precheck 在写任何文件前
+// 以该总数做配额预检（返回 error 则整体中止、不落盘）。
+func (s *Service) ExtractZip(d Driver, zipVP, encodingName, mask, dst string, onFile ZipEntryProgress, precheck func(totalUncompressed int64) error) (int64, error) {
+	var enc encoding.Encoding
+	if encodingName != "" {
+		var ok bool
+		enc, ok = ZipEncodings[strings.ToLower(encodingName)]
+		if !ok {
+			return 0, fmt.Errorf("不支持的文件名编码 %s", encodingName)
+		}
+	}
 	rc, err := d.Open(zipVP)
 	if err != nil {
 		return 0, err
@@ -770,15 +786,16 @@ func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, pr
 	if len(zr.File) > extractMaxEntries {
 		return 0, errors.New("归档条目数超过 10 万，已拒绝解压")
 	}
-	parent := zipVP[:strings.LastIndex(zipVP, "/")]
-	if parent == "" {
-		parent = "/"
+	rootVP := dst
+	if rootVP == "" {
+		rootVP, err = extractRootOf(zipVP)
+		if err != nil {
+			return 0, err
+		}
 	}
-	rootName := zipVP[strings.LastIndex(zipVP, "/")+1:]
-	rootName = strings.TrimSuffix(rootName, ".zip")
-	rootVP, err := Join(parent, rootName)
-	if err != nil {
-		return 0, err
+	flatMask := ""
+	if mask != "" && !strings.HasSuffix(mask, "/") {
+		flatMask = mask
 	}
 	// zip 内路径安全校验：逐段拒绝 .. 与绝对路径（允许 "a..b.txt" 这类合法文件名）
 	for _, f := range zr.File {
@@ -791,15 +808,31 @@ func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, pr
 				return 0, errors.New("zip 内包含非法路径")
 			}
 		}
+		if f.Flags&0x1 != 0 { // 通用标志位 bit0 = 条目加密（Go 标准库无法解密，整体拒绝）
+			return 0, errors.New("加密 zip 暂不支持在线解压")
+		}
 	}
-	// 进度分母 = 非目录条目数；同时累计未压缩总字节（配额预检 + 记账）
+	// 进度分母 = 实际要解压的非目录条目数；同时累计未压缩总字节（配额预检 + 记账）
 	totalFiles := 0
 	var totalUncompressed int64
 	for _, f := range zr.File {
-		if !f.FileInfo().IsDir() {
-			totalFiles++
-			totalUncompressed += int64(f.UncompressedSize64)
+		isDir := strings.HasSuffix(f.Name, "/") || f.FileInfo().IsDir()
+		if isDir {
+			continue
 		}
+		name := decodeZipName(normalizeArchiveName(f.Name), f.NonUTF8, enc)
+		if flatMask != "" {
+			if name != flatMask {
+				continue
+			}
+		} else if !matchMask(name, mask) {
+			continue
+		}
+		totalFiles++
+		totalUncompressed += int64(f.UncompressedSize64)
+	}
+	if mask != "" && totalFiles == 0 {
+		return 0, errors.New("归档中未找到指定条目")
 	}
 	if totalUncompressed > extractTotalCap {
 		return 0, fmt.Errorf("解压后总大小 %dMB 超过 20GB 上限，已拒绝", totalUncompressed>>20)
@@ -812,13 +845,29 @@ func (s *Service) ExtractZip(d Driver, zipVP string, onFile ZipEntryProgress, pr
 	_ = d.Mkdir(rootVP)
 	doneFiles := 0
 	for _, f := range zr.File {
-		name := filepath.ToSlash(f.Name)
+		isDir := strings.HasSuffix(f.Name, "/") || f.FileInfo().IsDir()
+		name := decodeZipName(normalizeArchiveName(f.Name), f.NonUTF8, enc)
+		if name == "" {
+			continue
+		}
 		// 嵌套路径不能用 Join（它拒绝含 / 的名称），直接拼接后 Clean 校验
-		vp, err := Clean(rootVP + "/" + name)
+		var vp string
+		if flatMask != "" {
+			// 单文件平铺：目录条目跳过，目标文件直接落目标目录
+			if isDir || name != flatMask {
+				continue
+			}
+			vp, err = Clean(rootVP + "/" + path.Base(flatMask))
+		} else {
+			if !matchMask(name, mask) {
+				continue
+			}
+			vp, err = Clean(rootVP + "/" + name)
+		}
 		if err != nil {
 			continue
 		}
-		if f.FileInfo().IsDir() {
+		if isDir {
 			_ = d.Mkdir(vp)
 			continue
 		}
@@ -967,7 +1016,11 @@ func tarCheckPath(name string) error {
 
 // ExtractTar 解压 tar/tar.gz/tar.bz2 到 zipVP 同目录下同名文件夹；返回写入总字节数。
 // tar 无中央目录，无法预先得知总大小，故不做 precheck（记账在解压完成后）。
-func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (int64, error) {
+// ExtractTar 解压 tar 族（plain/gzip/bzip2/xz）。
+// mask：尾 "/" = 目录子树（保留层级）；否则 = 单文件平铺到目标目录。
+// dst：目标根目录（空 = 归档同目录下的同名文件夹，原有行为）。
+// tar 无中央目录，无法预先得知总大小，故不做 precheck（记账在解压完成后）。
+func (s *Service) ExtractTar(d Driver, arcVP, mask, dst string, onFile ZipEntryProgress) (int64, error) {
 	rc, err := d.Open(arcVP)
 	if err != nil {
 		return 0, err
@@ -992,44 +1045,25 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 		return 0, err
 	}
 	defer zf.Close()
-	// 按魔数识别压缩格式
-	head := make([]byte, 6)
-	if _, err := io.ReadFull(zf, head); err != nil && err != io.ErrUnexpectedEOF {
+	tr, _, err := openTarReader(zf)
+	if err != nil {
 		return 0, errors.New("不是有效的 tar 文件")
 	}
-	if _, err := zf.Seek(0, io.SeekStart); err != nil {
-		return 0, err
-	}
-	var reader io.Reader = zf
-	switch {
-	case len(head) >= 2 && head[0] == 0x1f && head[1] == 0x8b:
-		gz, err := gzip.NewReader(zf)
+	rootVP := dst
+	if rootVP == "" {
+		rootVP, err = extractRootOf(arcVP)
 		if err != nil {
-			return 0, errors.New("不是有效的 tar.gz 文件")
+			return 0, err
 		}
-		defer gz.Close()
-		reader = gz
-	case len(head) >= 3 && head[0] == 'B' && head[1] == 'Z' && head[2] == 'h':
-		reader = bzip2.NewReader(zf)
-	case len(head) >= 6 && head[0] == 0xfd && head[1] == '7' && head[2] == 'z' && head[3] == 'X' && head[4] == 'Z' && head[5] == 0:
-		return 0, errors.New("暂不支持 xz 压缩的 tar（.tar.xz）")
 	}
-	tr := tar.NewReader(reader)
-	parent := arcVP[:strings.LastIndex(arcVP, "/")]
-	if parent == "" {
-		parent = "/"
-	}
-	rootName := path.Base(arcVP)
-	for _, suf := range []string{".tar.gz", ".tar.bz2", ".tgz", ".tbz2", ".tar"} {
-		rootName = strings.TrimSuffix(rootName, suf)
-	}
-	rootVP, err := Join(parent, rootName)
-	if err != nil {
-		return 0, err
+	flatMask := ""
+	if mask != "" && !strings.HasSuffix(mask, "/") {
+		flatMask = mask
 	}
 	_ = d.Mkdir(rootVP)
 	var written int64
 	n := 0
+	matched := false
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -1038,20 +1072,33 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 		if err != nil {
 			return 0, err
 		}
-		name := filepath.ToSlash(strings.TrimSuffix(hdr.Name, "/"))
+		name := normalizeArchiveName(hdr.Name)
 		if name == "" {
 			continue
 		}
 		if err := tarCheckPath(name); err != nil {
 			return 0, err
 		}
-		vp, err := Clean(rootVP + "/" + name)
+		var vp string
+		if flatMask != "" {
+			// 单文件平铺：只取该文件，直接落目标目录
+			if hdr.Typeflag != tar.TypeReg || name != flatMask {
+				continue
+			}
+			vp, err = Clean(rootVP + "/" + path.Base(flatMask))
+		} else {
+			if !matchMask(name, mask) {
+				continue
+			}
+			vp, err = Clean(rootVP + "/" + name)
+		}
 		if err != nil {
 			continue
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			_ = d.Mkdir(vp)
+			matched = true
 		case tar.TypeReg:
 			if n >= extractMaxEntries {
 				return 0, errors.New("归档条目数超过 10 万，已拒绝解压")
@@ -1064,6 +1111,7 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 			}
 			written += hdr.Size
 			n++
+			matched = true
 			if onFile != nil {
 				// 总数未知：done 递增、total 传 0（前端进度按「处理中」显示）
 				if cerr := onFile(n, 0); cerr != nil {
@@ -1074,6 +1122,9 @@ func (s *Service) ExtractTar(d Driver, arcVP string, onFile ZipEntryProgress) (i
 			// 符号链接/硬链接/设备等一律跳过（避免链接逃逸与设备文件风险）
 			continue
 		}
+	}
+	if mask != "" && !matched {
+		return 0, errors.New("归档中未找到指定条目")
 	}
 	return written, nil
 }

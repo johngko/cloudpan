@@ -19,6 +19,7 @@ var Manifest = []Def{
 	{Key: "bt", Name: "BT / 磁力", Icon: "cloud", Desc: "BT 种子与磁力链接离线下载", Version: "1.0", DefaultEnabled: true},
 	{Key: "webdav", Name: "WebDAV", Icon: "drive", Desc: "挂载到 Windows 资源管理器", Version: "1.0", DefaultEnabled: true},
 	{Key: "office", Name: "在线 Office", Icon: "office", Desc: "ONLYOFFICE 文档在线编辑", Version: "1.0", DefaultEnabled: true},
+	{Key: "archive_view", Name: "压缩包浏览器", Icon: "archive", Desc: "zip/7z/tar 族在线浏览与解压（支持密码/GBK）", Version: "1.0", DefaultEnabled: true},
 	{Key: "thumbnail", Name: "图片缩略图", Icon: "image", Desc: "服务端生成图片缩略图缓存", Version: "1.0", DefaultEnabled: true},
 	{Key: "version", Name: "版本管理", Icon: "refresh", Desc: "文件覆盖时保留历史版本", Version: "1.0", DefaultEnabled: true},
 	{Key: "notify", Name: "站内通知", Icon: "bell", Desc: "任务与配额事件通知中心", Version: "1.0", DefaultEnabled: true},

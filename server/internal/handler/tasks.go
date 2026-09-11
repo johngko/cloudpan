@@ -546,11 +546,16 @@ func (p *TaskPool) runCompress(t *model.Task) error {
 	return nil
 }
 
-// runDecompress 异步解压：把网盘里的 zip 解压到其所在目录，按条目数报进度
+// runDecompress 异步解压：zip/7z/rar/tar 族 → 默认落归档同目录同名文件夹（或 props.Dst 指定目录），
+// 支持密码（7z/rar）、zip 文件名编码（GBK 等）、mask 部分解压，按条目数报进度
 func (p *TaskPool) runDecompress(t *model.Task) error {
 	var props struct {
 		PolicyID uint   `json:"policyId"`
 		Path     string `json:"path"`
+		Password string `json:"password"`
+		Encoding string `json:"encoding"`
+		Mask     string `json:"mask"`
+		Dst      string `json:"dst"`
 	}
 	if err := json.Unmarshal([]byte(t.Props), &props); err != nil {
 		return err
@@ -565,6 +570,25 @@ func (p *TaskPool) runDecompress(t *model.Task) error {
 	}
 	if props.Path == "" {
 		return fmt.Errorf("没有要解压的文件")
+	}
+	// 目标目录/条目二次校验（handler 已校验，任务重启恢复路径也必须安全）
+	if props.Dst != "" {
+		dst, err := fscore.Clean(props.Dst)
+		if err != nil {
+			return fmt.Errorf("目标目录非法")
+		}
+		st, err := d.Stat(dst)
+		if err != nil || !st.IsDir {
+			return fmt.Errorf("目标目录不存在")
+		}
+		props.Dst = dst
+	}
+	if props.Mask != "" {
+		m := filepath.ToSlash(props.Mask)
+		if err := fscore.ArchiveCheckPath(m); err != nil {
+			return fmt.Errorf("目标条目非法")
+		}
+		props.Mask = m
 	}
 	var lastPct int
 	onFile := func(done, total int) error {
@@ -596,15 +620,18 @@ func (p *TaskPool) runDecompress(t *model.Task) error {
 		return nil
 	}
 	// 解压写入的字节计入用户配额（与删除/清空回收站的冲销配对，避免账目漂移）
-	// zip 有中央目录可先预检；tar 无目录表，解压后再记账
+	// zip 有中央目录可先预检；tar/7z/rar 无中央目录，解压后再记账
 	var written int64
 	var err2 error
-	low := strings.ToLower(props.Path)
-	if strings.HasSuffix(low, ".tar") || strings.HasSuffix(low, ".tar.gz") ||
-		strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.bz2") || strings.HasSuffix(low, ".tbz2") {
-		written, err2 = p.Svc.ExtractTar(d, props.Path, onFile)
-	} else {
-		written, err2 = p.Svc.ExtractZip(d, props.Path, onFile, precheck)
+	switch fscore.ArchiveKindOf(props.Path) {
+	case "tar":
+		written, err2 = p.Svc.ExtractTar(d, props.Path, props.Mask, props.Dst, onFile)
+	case "7z", "rar":
+		written, err2 = p.Svc.Extract7zOrRar(d, props.Path, props.Mask, props.Dst, props.Password, onFile)
+	case "zip":
+		written, err2 = p.Svc.ExtractZip(d, props.Path, props.Encoding, props.Mask, props.Dst, onFile, precheck)
+	default:
+		return fmt.Errorf("不支持的归档格式")
 	}
 	if err2 != nil {
 		return err2
@@ -641,7 +668,7 @@ func archiveFormatOf(name string) (kind, compress, canonical string) {
 // archiveSuffixOf 返回归档文件的完整后缀（用于冲突改名时保留扩展名）
 func archiveSuffixOf(name string) string {
 	low := strings.ToLower(name)
-	for _, s := range []string{".tar.gz", ".tar.bz2", ".tar", ".zip"} {
+	for _, s := range []string{".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz", ".tar", ".zip", ".7z", ".rar"} {
 		if strings.HasSuffix(low, s) {
 			return s
 		}
@@ -747,6 +774,14 @@ func (h *OfflineHandler) List(c *gin.Context) {
 	x := ctxOf(c)
 	var items []model.Task
 	model.DB.Where("user_id = ? AND type IN ?", x.user.ID, []string{"offline", "bt"}).Order("id DESC").Limit(50).Find(&items)
+	dto.OK(c, items)
+}
+
+// TaskList 列当前用户全部任务（offline/bt/compress/decompress），任务中心统一轮询用
+func (h *OfflineHandler) TaskList(c *gin.Context) {
+	x := ctxOf(c)
+	var items []model.Task
+	model.DB.Where("user_id = ?", x.user.ID).Order("id DESC").Limit(50).Find(&items)
 	dto.OK(c, items)
 }
 

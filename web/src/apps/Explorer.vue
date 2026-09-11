@@ -1111,6 +1111,8 @@ async function openItem(f: FileItem) {
     }
   } else if (TEXT_EXTS.includes(ext) || !ext) {
     store.open('notepad', p, { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 })
+  } else if (ARCHIVE_EXTS.includes(ext) && apps.isAvailable('archive_view')) {
+    store.open('archiveviewer', p, { title: f.name + ' - 压缩包浏览器', icon: 'archive', w: 1000, h: 620 })
   } else {
     window.open(downloadUrl(pid, [f.path]))
   }
@@ -1118,6 +1120,9 @@ async function openItem(f: FileItem) {
 const TEXT_EXTS = ['txt', 'md', 'json', 'js', 'ts', 'vue', 'go', 'py', 'java', 'c', 'cpp', 'h', 'css', 'html', 'xml', 'yml', 'yaml', 'sh', 'bat', 'ini', 'conf', 'log', 'csv', 'sql', 'php', 'rb', 'rs', 'toml']
 // Office 文档（含 OpenDocument/RTF，与 ONLYOFFICE Document Server 支持范围对齐；csv 默认仍走记事本）
 const OFFICE_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 'ppt', 'odp', 'pdf']
+// 压缩包（压缩包浏览器在线查看/解压；功能未开启时回落下载）。
+// 单独 .gz/.bz2/.xz（非 tar 族）无目录表不可浏览，仍走下载/解压
+const ARCHIVE_EXTS = ['zip', '7z', 'rar', 'tar', 'tgz', 'tbz2', 'txz']
 
 // ---- 实时协作「正在编辑」徽章：30s 批量只读查询当前目录 Office 文件的协作状态 ----
 // 只读查询不把自己登记为编辑者；编辑者由整页编辑器的 20s 心跳维护（90s 无心跳视为离开）
@@ -1150,7 +1155,7 @@ function startEditPoll() {
 }
 
 // ---- 打开方式：强制用指定应用打开（覆盖默认路由） ----
-function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor') {
+function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor' | 'archiveviewer') {
   const pid = (f as any).policyId || currentPolicy.value?.id || 0
   if (!pid) return
   const ext = (f.ext || '').toLowerCase()
@@ -1187,7 +1192,8 @@ function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 
     imageviewer: { title: f.name + ' - 图片查看器', icon: 'image', w: 880, h: 620 },
     mediaviewer: { title: f.name + ' - 媒体播放器', icon: 'media', w: 880, h: 580 },
     notepad: { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 },
-    officeeditor: { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 }
+    officeeditor: { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 },
+    archiveviewer: { title: f.name + ' - 压缩包浏览器', icon: 'archive', w: 1000, h: 620 }
   }
   store.open(app, p, { title: map[app].title, icon: map[app].icon, w: map[app].w, h: map[app].h })
 }
@@ -1202,6 +1208,8 @@ function buildOpenWith(f: FileItem) {
     items.push({ label: '记事本', icon: 'notepad', onClick: () => openWith(f, 'notepad') })
   if (OFFICE_EXTS.includes(ext) && apps.isAvailable('office'))
     items.push({ label: 'Office 编辑器', icon: 'office', onClick: () => openWith(f, 'officeeditor') })
+  if (ARCHIVE_EXTS.includes(ext) && apps.isAvailable('archive_view'))
+    items.push({ label: '压缩包浏览器', icon: 'archive', onClick: () => openWith(f, 'archiveviewer') })
   return items
 }
 
