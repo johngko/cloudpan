@@ -262,8 +262,8 @@
       <div class="dialog">
         <h3>分享「{{ shareTarget?.name }}」</h3>
         <div class="row">
-          <label>提取码（留空则公开）</label>
-          <input class="input" v-model="sharePwd" placeholder="4-6 位" style="width: 100%" />
+          <label>提取码{{ shareEnc ? '（必填，兼作解密密钥）' : '（留空则公开）' }}</label>
+          <input class="input" v-model="sharePwd" :placeholder="shareEnc ? '至少 4 位' : '4-6 位'" style="width: 100%" />
         </div>
         <div class="row">
           <label>有效期</label>
@@ -277,21 +277,31 @@
         <div class="row" style="display: flex; gap: 18px">
           <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareAllowDl" />允许下载</label>
           <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="sharePreview" />允许预览</label>
-          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareEdit" />允许在线编辑</label>
+          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareEdit" :disabled="shareEnc" />允许在线编辑</label>
+        </div>
+        <div class="row">
+          <label style="display: flex; align-items: center; gap: 6px">
+            <input type="checkbox" v-model="shareEnc" :disabled="encBusy" />端到端加密（E2E）
+          </label>
         </div>
         <div class="row" style="font-size: 12px; color: var(--text-3)">
-          允许在线编辑：任何人打开分享链接即可进入 ONLYOFFICE 完整编辑器在线修改，保存自动归档旧版本（需已配置 Document Server）
+          {{ shareEnc
+            ? '端到端加密：文件在本浏览器内用提取码加密后再上传，服务端与管理员均无法查看内容；接收方需提取码才能解密（不支持在线编辑/转存）'
+            : '允许在线编辑：任何人打开分享链接即可进入 ONLYOFFICE 完整编辑器在线修改，保存自动归档旧版本（需已配置 Document Server）' }}
         </div>
         <div class="row">
           <label>下载次数限制（留空不限）</label>
           <input class="input" v-model.number="shareMaxDl" type="number" min="1" placeholder="不限" style="width: 100%" />
         </div>
+        <div v-if="encBusy" class="row" style="font-size: 12.5px; color: var(--text-2)">
+          <AppIcon name="refresh" :size="13" style="vertical-align: -2px" /> {{ encProgress || '正在准备…' }}
+        </div>
         <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
           {{ shareLink }}
         </div>
         <div class="actions">
-          <button class="btn" @click="shareShow = false">关闭</button>
-          <button v-if="!shareLink" class="btn primary" @click="doShare">创建链接</button>
+          <button class="btn" :disabled="encBusy" @click="shareShow = false">关闭</button>
+          <button v-if="!shareLink" class="btn primary" :disabled="encBusy" @click="doShare">{{ encBusy ? '加密上传中…' : '创建链接' }}</button>
           <button v-else class="btn primary" @click="copyLink">复制链接</button>
         </div>
       </div>
@@ -531,6 +541,7 @@ import { useContextMenu } from '../stores/ui'
 import { useUiDialog, useToast } from '../stores/dialog'
 import { userShareApi } from '../api/modules'
 import { collectDropFiles } from '../utils/drop'
+import { createEncryptedShare } from '../utils/shareEncrypt'
 import { copyText } from '../utils/clipboard'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -1693,26 +1704,53 @@ const shareAllowDl = ref(true)
 const sharePreview = ref(true)
 const shareEdit = ref(true)
 const shareLink = ref('')
+const shareEnc = ref(false)
+const encBusy = ref(false)
+const encProgress = ref('')
 function shareSel() {
   if (selPaths.value.length !== 1) return
   if (onSharedDrive.value) { toast.error('共享盘内不能创建分享链接'); return }
   shareTarget.value = items.value.find(i => i.path === selPaths.value[0]) || null
   sharePwd.value = ''; shareExpire.value = 0; shareMaxDl.value = 0; shareLink.value = ''
+  shareEnc.value = false; encBusy.value = false; encProgress.value = ''
   shareShow.value = true
 }
 // 分享对话框打开时重置在线编辑开关为默认值（允许）
 watch(shareShow, v => { if (v) shareEdit.value = true })
 async function doShare() {
   if (!currentPolicy.value || !shareTarget.value) return
+  const t = shareTarget.value
   try {
+    if (shareEnc.value) {
+      // 端到端加密：本地逐文件加密后上传密文（进度显示在对话框）
+      encBusy.value = true
+      encProgress.value = '正在收集文件…'
+      try {
+        const r = await createEncryptedShare(
+          { policyId: currentPolicy.value.id, path: t.path, isDir: !!t.isDir, password: sharePwd.value },
+          { expireDays: shareExpire.value, allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value },
+          p => { encProgress.value = p.done >= p.total ? '加密完成，正在收尾…' : `正在加密 ${p.done + 1}/${p.total}：${p.name}` }
+        )
+        shareLink.value = location.origin + location.pathname + '#/s/' + r.token
+        toast.success(`加密分享已创建（${r.count} 个文件已加密上传）`)
+      } finally {
+        encBusy.value = false
+        encProgress.value = ''
+      }
+      return
+    }
     const s = await shareApi.create({
-      policyId: currentPolicy.value.id, path: shareTarget.value.path,
+      policyId: currentPolicy.value.id, path: t.path,
       password: sharePwd.value || undefined, expireDays: shareExpire.value,
       remainDownloads: (Number.isFinite(shareMaxDl.value) && shareMaxDl.value > 0) ? Math.floor(shareMaxDl.value) : 0,
       allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value, allowEdit: shareEdit.value
     })
     shareLink.value = location.origin + location.pathname + '#/s/' + s.token
-  } catch (e: any) { toast.error(e.message) }
+  } catch (e: any) {
+    toast.error(e.message)
+    encBusy.value = false
+    encProgress.value = ''
+  }
 }
 async function copyLink() {
   const ok = await copyText(shareLink.value)

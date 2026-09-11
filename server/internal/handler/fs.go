@@ -88,7 +88,8 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 	}
 	dto.OK(c, gin.H{
 		"siteName": s["site_name"], "registerOpen": regOpen, "needInviteCode": invite,
-		"officeConfigured": s["onlyoffice_url"] != "",
+		"officeConfigured": activeDS() != nil, // 多 DS 列表优先，回退单 DS 设置
+		"standaloneApps":   s["standalone_apps"] != "false", // 独立应用模式（#/app/:app）开关，默认开
 		"announcement":     s["announcement"],
 		"guestLogin":       guestLogin,
 		"theme":            theme,

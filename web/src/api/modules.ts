@@ -36,7 +36,7 @@ export const authApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; wallpaperCatalog: { name: string; url: string }[] }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[] }>('/site/public')
 }
 
 // 在线 Office：实时协作「正在编辑」状态
@@ -144,7 +144,10 @@ export const adminApi = {
   shares: (page = 1, size = 50, keyword = '') => get<any>(`/admin/shares?page=${page}&size=${size}&keyword=${encodeURIComponent(keyword)}`),
   shareDelete: (id: number) => del(`/admin/shares/${id}`),
   appToggle: (key: string, enabled: boolean) => post(`/admin/apps/${key}/toggle`, { enabled }),
-  officeTest: () => post<{ ok: boolean; msg: string }>('/admin/office-test'),
+  officeTest: (url?: string) => post<{ ok: boolean; msg: string }>(url ? `/admin/office-test?url=${encodeURIComponent(url)}` : '/admin/office-test'),
+  // 多 Document Server（健康检查 + 故障切换）
+  officeDses: () => get<any>('/admin/office-dses'),
+  officeDsesSave: (list: { name: string; url: string; jwt: string; priority: number }[]) => post<any>('/admin/office-dses', list),
   // 系统更新
   updateCheck: () => get<any>('/admin/update/check'),
   updateStart: () => post<any>('/admin/update/start'),

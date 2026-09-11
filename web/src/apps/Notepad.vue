@@ -20,8 +20,8 @@
         <h3>分享「{{ fileName }}」</h3>
         <div v-if="!shareLink">
           <div class="row">
-            <label>提取码（留空则公开）</label>
-            <input class="input" v-model="sharePwd" placeholder="4-6 位" style="width: 100%" />
+            <label>提取码{{ shareEnc ? '（必填，兼作解密密钥）' : '（留空则公开）' }}</label>
+            <input class="input" v-model="sharePwd" :placeholder="shareEnc ? '至少 4 位' : '4-6 位'" style="width: 100%" />
           </div>
           <div class="row">
             <label>有效期</label>
@@ -32,13 +32,20 @@
               <option :value="30">30 天</option>
             </select>
           </div>
+          <div class="row">
+            <label style="display: flex; align-items: center; gap: 6px">
+              <input type="checkbox" v-model="shareEnc" :disabled="shareBusy" />端到端加密（E2E）
+            </label>
+          </div>
           <div class="row" style="font-size: 12px; color: var(--text-3)">
-            对方打开链接即可在线阅读（无需登录）；.md 文件将渲染为 Markdown
+            {{ shareEnc
+              ? '端到端加密：内容在本浏览器内用提取码加密后再上传，服务端无法查看；对方需提取码解密后才能阅读'
+              : '对方打开链接即可在线阅读（无需登录）；.md 文件将渲染为 Markdown' }}
           </div>
           <div v-if="shareMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ shareMsg }}</div>
           <div class="actions">
-            <button class="btn" @click="shareShow = false">取消</button>
-            <button class="btn primary" :disabled="shareBusy" @click="doShare">{{ shareBusy ? '创建中…' : '创建链接' }}</button>
+            <button class="btn" :disabled="shareBusy" @click="shareShow = false">取消</button>
+            <button class="btn primary" :disabled="shareBusy" @click="doShare">{{ shareBusy ? (shareEnc ? '加密上传中…' : '创建中…') : '创建链接' }}</button>
           </div>
         </div>
         <div v-else>
@@ -62,6 +69,7 @@ import { fsApi, shareApi } from '../api/modules'
 import { useWindows } from '../stores/windows'
 import { useToast } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
+import { createEncryptedShare } from '../utils/shareEncrypt'
 
 const props = defineProps<{ winId: number; props: any }>()
 const store = useWindows()
@@ -82,13 +90,24 @@ const shareExpire = ref(0)
 const shareLink = ref('')
 const shareBusy = ref(false)
 const shareMsg = ref('')
+const shareEnc = ref(false)
 function openShare() {
-  sharePwd.value = ''; shareExpire.value = 0; shareLink.value = ''; shareMsg.value = ''
+  sharePwd.value = ''; shareExpire.value = 0; shareLink.value = ''; shareMsg.value = ''; shareEnc.value = false
   shareShow.value = true
 }
 async function doShare() {
   shareBusy.value = true; shareMsg.value = ''
   try {
+    if (shareEnc.value) {
+      const r = await createEncryptedShare(
+        { policyId: policyId.value, path: path.value, isDir: false, password: sharePwd.value },
+        { expireDays: shareExpire.value, allowDownload: true, previewEnabled: true },
+        () => { shareMsg.value = '' }
+      )
+      shareLink.value = location.origin + location.pathname + '#/s/' + r.token
+      toast.success('加密分享已创建')
+      return
+    }
     const s = await shareApi.create({
       policyId: policyId.value, path: path.value,
       password: sharePwd.value || undefined, expireDays: shareExpire.value,

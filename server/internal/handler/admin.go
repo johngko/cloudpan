@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/csv"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -581,7 +582,13 @@ func (h *AdminHandler) ShareAudit(c *gin.Context) {
 }
 
 func (h *AdminHandler) ShareDelete(c *gin.Context) {
+	var sh model.Share
+	// 先取 token 以清理加密分享的密文目录（sharedata/<token>/）
+	_ = model.DB.First(&sh, c.Param("id")).Error
 	model.DB.Delete(&model.Share{}, c.Param("id"))
+	if sh.Token != "" {
+		_ = os.RemoveAll(filepath.Join(h.Site.Cfg.Sub("sharedata"), filepath.Base(sh.Token)))
+	}
 	middleware.Audit(c, "admin", "管理员取消分享 #" + c.Param("id"))
 	dto.OK(c, nil)
 }

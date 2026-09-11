@@ -327,10 +327,14 @@ func publicBaseOf(site *SiteHandler, c *gin.Context) string {
 
 func (h *OfficeHandler) publicBase(c *gin.Context) string { return publicBaseOf(h.Site, c) }
 
-// Health 管理员探测 Document Server 连通性（/healthcheck）
+// Health 管理员探测 Document Server 连通性（/healthcheck）；?url= 可指定探测任意地址（DS 列表编辑器「测试」按钮）
 func (h *OfficeHandler) Health(c *gin.Context) {
-	settings := GetSiteSettings()
-	dsURL := strings.TrimRight(settings["onlyoffice_url"], "/")
+	dsURL := strings.TrimRight(strings.TrimSpace(c.Query("url")), "/")
+	if dsURL == "" {
+		if ds := activeDS(); ds != nil {
+			dsURL = ds.URL
+		}
+	}
 	if dsURL == "" {
 		dto.Fail(c, 400, "未配置 Document Server 地址")
 		return
@@ -356,13 +360,12 @@ func (h *OfficeHandler) Health(c *gin.Context) {
 func (h *OfficeHandler) Config(c *gin.Context) {
 	u := middleware.CurrentUser(c)
 	x := ctxOf(c)
-	settings := GetSiteSettings()
-	dsURL := strings.TrimRight(settings["onlyoffice_url"], "/")
-	jwtSecret := settings["onlyoffice_jwt"]
-	if dsURL == "" {
+	ds := activeDS() // 多 DS：健康 + 优先级选择（回退单 DS 设置）
+	if ds == nil {
 		dto.Fail(c, 400, "ONLYOFFICE 未配置：请在管理控制台-站点设置中填写 Document Server 地址；留空 JWT 表示 Document Server 未启用 JWT")
 		return
 	}
+	dsURL, jwtSecret := ds.URL, ds.JWT
 	mode := c.DefaultQuery("mode", "edit")
 	if mode != "edit" && mode != "view" {
 		mode = "edit"
@@ -442,16 +445,20 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 // 允许在线编辑开关决定（默认允许），保存走分享者隔离目录并归档旧版本。
 // 带提取码的分享须先 verify 拿 stoken。
 func (h *OfficeHandler) ConfigShare(c *gin.Context) {
-	settings := GetSiteSettings()
-	dsURL := strings.TrimRight(settings["onlyoffice_url"], "/")
-	jwtSecret := settings["onlyoffice_jwt"]
-	if dsURL == "" {
+	ds := activeDS() // 多 DS：健康 + 优先级选择（回退单 DS 设置）
+	if ds == nil {
 		dto.Fail(c, 400, "站点未开启在线 Office（管理员未配置 Document Server）")
 		return
 	}
+	dsURL, jwtSecret := ds.URL, ds.JWT
 	sh, err := loadPublicShare(c.Param("token"))
 	if err != nil {
 		dto.Fail(c, 404, err.Error())
+		return
+	}
+	// 加密分享：Document Server 拿到的只会是密文，在线编辑无意义（前端已隐藏入口，此处纵深防御）
+	if sh.Encrypted {
+		dto.Fail(c, 403, "加密分享不支持在线编辑，请下载后本地打开")
 		return
 	}
 	if sh.PasswordHash != "" && !checkShareStoken(h.Secret, sh.Token, c.Query("st")) {
@@ -799,14 +806,16 @@ func (h *OfficeHandler) saveCallbackBody(cbURL, vp string, d fscore.Driver, arch
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return
 	}
-	allowed := ""
-	if v := GetSiteSettings()["onlyoffice_url"]; v != "" {
-		if du, perr := url.Parse(v); perr == nil && du.Host != "" {
-			allowed = du.Host
-		}
+	// 多 DS：放行所有已配置 DS 的主机（故障切换后保存可能来自另一台）
+	allowed := map[string]struct{}{}
+	for _, host := range dsHosts() {
+		allowed[host] = struct{}{}
 	}
-	if allowed == "" || u.Host != allowed {
-		return // 与配置的 ONLYOFFICE 服务不同源，拒绝拉取
+	if len(allowed) == 0 {
+		return
+	}
+	if _, ok := allowed[u.Host]; !ok {
+		return // 与任何已配置的 ONLYOFFICE 服务不同源，拒绝拉取
 	}
 	client := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := client.Get(cbURL)

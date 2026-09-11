@@ -284,6 +284,10 @@
               <div class="ac-set-lbl"><b>游客登录</b><span>登录页提供「游客登录」，以共享游客账号（访客组，只读）进入；关闭后登录页不显示该入口</span></div>
               <label class="ac-switch"><input type="checkbox" :checked="settings.guest_login !== 'false'" @change="settings.guest_login = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
             </div>
+            <div class="ac-set-row">
+              <div class="ac-set-lbl"><b>独立应用模式</b><span>允许通过 #/app/&lt;应用ID&gt; 链接直接全屏打开单个应用（如 #/app/calculator），未登录时显示极简登录；关闭后访问显示拦截页</span></div>
+              <label class="ac-switch"><input type="checkbox" :checked="settings.standalone_apps !== 'false'" @change="settings.standalone_apps = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
+            </div>
             <div class="ac-set-sep"></div>
             <div class="ac-set-title">ONLYOFFICE 在线编辑</div>
             <div class="ac-set-row">
@@ -302,6 +306,28 @@
               <div class="ac-set-lbl"><b>连接测试</b><span>服务端探测 {{ settings.onlyoffice_url || '（未填地址）' }}/healthcheck；Document Server 必须能访问本系统地址（站点设置「公开地址」），否则编辑器无法回拉文件</span></div>
               <button class="tool-btn" :disabled="officeTesting" @click="testOffice">{{ officeTesting ? '探测中…' : '测试连接' }}</button>
               <span v-if="officeTestMsg" style="font-size: 12px; margin-left: 10px" :style="{ color: officeTestOk ? 'var(--accent)' : '#e5534b' }">{{ officeTestMsg }}</span>
+            </div>
+            <div class="ac-set-sep"></div>
+            <div class="ac-set-title">多 Document Server（健康检查 + 故障切换）</div>
+            <div class="ac-set-row" style="font-size: 12px; color: var(--text-3)">
+              列表非空时优先于上方单 DS 配置；编辑器自动选择「健康且优先级最高」的 DS，全部故障时回退第一台。每 60 秒自动探测 /healthcheck。
+            </div>
+            <div v-for="(d, i) in dsList" :key="i" class="ac-set-row" style="display: flex; gap: 8px; align-items: center">
+              <input class="input" v-model="d.name" placeholder="名称" style="width: 110px" />
+              <input class="input" v-model="d.url" placeholder="http://host:port" style="flex: 1" />
+              <input class="input" v-model="d.jwt" placeholder="JWT（可空）" style="width: 130px" />
+              <input class="input" v-model.number="d.priority" type="number" title="优先级（越小越优先）" style="width: 70px" />
+              <span style="font-size: 11.5px; white-space: nowrap" :style="{ color: d._healthy ? '#4caf50' : d._checked ? '#e5534b' : 'var(--text-3)' }">
+                {{ d._healthy ? '● 健康' : d._checked ? '● 离线' : '○ 未检测' }}
+                <b v-if="d._active" style="margin-left: 4px">（使用中）</b>
+              </span>
+              <button class="tool-btn" title="测试该地址" @click="testDsRow(d)">测试</button>
+              <button class="tool-btn" title="移除" @click="dsList.splice(i, 1)">✕</button>
+            </div>
+            <div class="ac-set-row">
+              <button class="btn" @click="dsList.push({ name: '', url: '', jwt: '', priority: dsList.length + 1 })">＋ 添加 DS</button>
+              <button class="btn primary" :disabled="dsSaving" @click="saveDsList">{{ dsSaving ? '保存中…' : '保存 DS 列表' }}</button>
+              <button class="btn" @click="loadDsList">刷新状态</button>
             </div>
             <div class="ac-set-sep"></div>
             <div class="ac-set-title">WebDAV</div>
@@ -938,6 +964,7 @@ function switchTab(id: string) {
   tab.value = id
   if (id === 'tasks') loadTasks()
   if (id === 'notify') loadNotif()
+  if (id === 'settings') loadDsList()
   if (id === 'update') {
     loadUpdStatus(); loadUpdHistory()
     loadUpdStatus().then(() => { if (['downloading', 'replacing'].includes(updStatus.value.status)) startUpdPoll() })
@@ -1148,6 +1175,35 @@ async function testOffice() {
 async function adminDelShare(s: any) {
   if (!(await uiDlg.confirm('取消分享', `取消分享「${s.name}」？外链将立即失效。`, { danger: true, okText: '取消分享' }))) return
   try { await adminApi.shareDelete(s.id); loadAll() } catch (e: any) { toast.error(e.message) }
+}
+
+// ---- 多 Document Server（健康检查 + 故障切换）----
+const dsList = ref<any[]>([])
+const dsSaving = ref(false)
+async function loadDsList() {
+  try {
+    const d = await adminApi.officeDses()
+    dsList.value = (d.list || []).map((x: any) => ({ name: x.name, url: x.url, jwt: x.jwt, priority: x.priority, _healthy: !!x.healthy, _checked: true, _active: !!x.active }))
+  } catch { dsList.value = [] }
+}
+async function saveDsList() {
+  const list = dsList.value
+    .filter((d: any) => (d.url || '').trim())
+    .map((d: any) => ({ name: d.name || '', url: d.url.trim().replace(/\/+$/, ''), jwt: d.jwt || '', priority: Number(d.priority) || 0 }))
+  dsSaving.value = true
+  try {
+    await adminApi.officeDsesSave(list)
+    toast.success('DS 列表已保存（已立即探测一次）')
+    await loadDsList()
+  } catch (e: any) { toast.error(e.message) }
+  finally { dsSaving.value = false }
+}
+async function testDsRow(d: any) {
+  if (!d.url) { toast.error('请先填写地址'); return }
+  try {
+    const r = await adminApi.officeTest(d.url.trim().replace(/\/+$/, ''))
+    toast[r.ok ? 'success' : 'error'](r.msg)
+  } catch (e: any) { toast.error(e.message) }
 }
 </script>
 

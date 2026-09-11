@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -14,18 +15,49 @@ import (
 	"cloudpan/internal/model"
 )
 
-// dsOrigin 读取站点配置的 ONLYOFFICE 文档服务器 origin（scheme://host），未配置返回空。
+// dsOrigins 读取站点配置的 ONLYOFFICE 文档服务器 origin 列表（scheme://host，可多台）。
+// 多 DS 列表（onlyoffice_dses）优先，回退单 DS 设置（onlyoffice_url）。
 // 站点设置变更最多 10 秒后生效（下方 TTL 缓存）。
-func dsOrigin() string {
-	var row model.SiteSetting
-	if err := model.DB.Where("key = ?", "onlyoffice_url").First(&row).Error; err != nil || row.Value == "" {
-		return ""
+func dsOrigins() []string {
+	var rows []model.SiteSetting
+	model.DB.Where("key IN ?", []string{"onlyoffice_dses", "onlyoffice_url"}).Find(&rows)
+	vals := map[string]string{}
+	for _, r := range rows {
+		vals[r.Key] = r.Value
 	}
-	u, err := url.Parse(row.Value)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-		return ""
+	var out []string
+	add := func(u string) {
+		u = strings.TrimRight(strings.TrimSpace(u), "/")
+		if u == "" {
+			return
+		}
+		pu, err := url.Parse(u)
+		if err != nil || pu.Host == "" || (pu.Scheme != "http" && pu.Scheme != "https") {
+			return
+		}
+		origin := pu.Scheme + "://" + pu.Host
+		for _, x := range out {
+			if x == origin {
+				return
+			}
+		}
+		out = append(out, origin)
 	}
-	return u.Scheme + "://" + u.Host
+	if raw := strings.TrimSpace(vals["onlyoffice_dses"]); raw != "" && raw != "[]" {
+		var list []struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal([]byte(raw), &list); err == nil {
+			for _, d := range list {
+				add(d.URL)
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+	add(vals["onlyoffice_url"])
+	return out
 }
 
 // buildCSP 按当前 ONLYOFFICE 来源生成 CSP。
@@ -34,7 +66,8 @@ func dsOrigin() string {
 //    原写法等于允许任意第三方站点注入脚本/建立连接，是存储型 XSS 的放大器；
 //  - ONLYOFFICE 文档服务器是动态配置的第三方来源，DocsAPI 需要从其加载脚本、
 //    建 iframe、发起 API 连接，按配置值精确放行该 origin 即可。
-func buildCSP(origin string) string {
+func buildCSP(origins []string) string {
+	joined := strings.Join(origins, " ")
 	csp := "default-src 'self'; " +
 		"script-src 'self' 'unsafe-inline'; " +
 		"style-src 'self' 'unsafe-inline'; " +
@@ -47,13 +80,13 @@ func buildCSP(origin string) string {
 		"object-src 'none'; " +
 		"base-uri 'self'; " +
 		"form-action 'self'"
-	if origin != "" {
-		csp = strings.ReplaceAll(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' "+origin)
-		csp = strings.ReplaceAll(csp, "connect-src 'self'", "connect-src 'self' "+origin)
-		csp = strings.ReplaceAll(csp, "frame-src 'self'", "frame-src 'self' "+origin)
-		csp = strings.ReplaceAll(csp, "img-src 'self' data: blob:", "img-src 'self' data: blob: "+origin)
-		csp = strings.ReplaceAll(csp, "media-src 'self' blob:", "media-src 'self' blob: "+origin)
-		csp = strings.ReplaceAll(csp, "font-src 'self' data:", "font-src 'self' data: "+origin)
+	if joined != "" {
+		csp = strings.ReplaceAll(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' "+joined)
+		csp = strings.ReplaceAll(csp, "connect-src 'self'", "connect-src 'self' "+joined)
+		csp = strings.ReplaceAll(csp, "frame-src 'self'", "frame-src 'self' "+joined)
+		csp = strings.ReplaceAll(csp, "img-src 'self' data: blob:", "img-src 'self' data: blob: "+joined)
+		csp = strings.ReplaceAll(csp, "media-src 'self' blob:", "media-src 'self' blob: "+joined)
+		csp = strings.ReplaceAll(csp, "font-src 'self' data:", "font-src 'self' data: "+joined)
 	}
 	return csp
 }
@@ -68,7 +101,7 @@ func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mu.Lock()
 		if time.Since(cachedAt) > 10*time.Second {
-			cached = buildCSP(dsOrigin())
+			cached = buildCSP(dsOrigins())
 			cachedAt = time.Now()
 		}
 		csp := cached

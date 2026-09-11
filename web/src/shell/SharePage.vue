@@ -12,11 +12,11 @@
               <span v-if="!info.isDir && editing['']" class="share-editing" :title="'当前还有协作者在线编辑：' + editing['']"><span class="share-editing-dot"></span>正在编辑：{{ editing[''] }}</span>
             </div>
           </div>
-          <button class="btn" v-if="authed" :disabled="saveBusy" @click="openSaveDlg()"
+          <button class="btn" v-if="authed && !info.encrypted" :disabled="saveBusy" @click="openSaveDlg()"
             :title="!info.isDir && isTextFile(info.name) ? '保存到自己的网盘，可用记事本打开继续编辑' : '一键保存到自己的网盘'">
             <AppIcon name="cloud" :size="15" /> {{ !info.isDir && isTextFile(info.name) ? '存到我的记事本' : '保存到网盘' }}
           </button>
-          <button class="btn" v-if="!info.isDir && officeReady && OFFICE_DS_EXTS.includes(extOf(info.name))" @click="openOfficeEditor('')" title="ONLYOFFICE 在线编辑器（可编辑保存）">
+          <button class="btn" v-if="!info.isDir && !info.encrypted && officeReady && OFFICE_DS_EXTS.includes(extOf(info.name))" @click="openOfficeEditor('')" title="ONLYOFFICE 在线编辑器（可编辑保存）">
             <AppIcon name="office" :size="15" /> 在线打开
           </button>
           <button class="btn" v-if="!info.isDir && isTextFile(info.name)" @click="openTextViewer('', info.name)" title="在线阅读文本/Markdown">
@@ -34,7 +34,7 @@
 
         <div v-if="!verified && info.hasPassword" style="padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 14px">
           <AppIcon name="lock" :size="40" />
-          <div style="color: var(--text-2)">此分享已被加密，请输入提取码</div>
+          <div style="color: var(--text-2)">{{ info.encrypted ? '此分享已端到端加密，请输入提取码（解密密钥）' : '此分享已被加密，请输入提取码' }}</div>
           <div style="display: flex; gap: 8px">
             <input class="input" placeholder="提取码" v-model="pwd" style="width: 200px" @keyup.enter="verify" />
             <button class="btn primary" @click="verify">提取文件</button>
@@ -54,7 +54,7 @@
                 </td>
                 <td style="width: 110px; color: var(--text-3); padding: 8px 14px">{{ f.isDir ? '-' : fmt(f.size) }}</td>
                 <td style="width: 90px; padding: 8px 14px; color: var(--text-3)">
-                  <button v-if="officeReady && OFFICE_DS_EXTS.includes(f.ext)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">打开</button>
+                  <button v-if="!info.encrypted && officeReady && OFFICE_DS_EXTS.includes(f.ext)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">打开</button>
                   <button v-else-if="isTextFile(f.name)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">阅读</button>
                   <button v-else-if="info.allowDownload" class="tool-btn" style="padding: 3px 8px" @click.stop="downloadItem(f)">下载</button>
                   <button v-else-if="info.previewEnabled && canPreview(f)" class="tool-btn" style="padding: 3px 8px" @click.stop="openItem(f)">预览</button>
@@ -72,11 +72,12 @@
         <h3>{{ textTitle }}</h3>
         <div style="max-height: 62vh; overflow: auto; background: var(--bg50); border-radius: 8px; padding: 14px 18px">
           <div v-if="textLoading" style="padding: 34px; text-align: center; color: var(--text-3)">正在加载…</div>
+          <div v-else-if="textContent.startsWith('读取失败：')" style="color: #ff8a80; font-size: 13px">{{ textContent }}</div>
           <div v-else-if="textIsMD" class="md-view" v-html="textHtml"></div>
           <pre v-else class="txt-view">{{ textContent }}</pre>
         </div>
         <div class="actions">
-          <button v-if="authed && !textLoading" class="btn" @click="openSaveDlg(textSaveRel)" title="保存到自己的网盘，可用记事本打开">
+          <button v-if="authed && !textLoading && !info.encrypted" class="btn" @click="openSaveDlg(textSaveRel)" title="保存到自己的网盘，可用记事本打开">
             <AppIcon name="cloud" :size="14" /> 存到我的记事本
           </button>
           <button class="btn primary" @click="textShow = false">关闭</button>
@@ -126,6 +127,7 @@ import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
 import { renderMD } from '../utils/markdown'
+import { encDecryptText, encDecryptBlob } from '../utils/crypto'
 import { resolveTheme, availableThemes } from '../themes/registry'
 import { wallpaperClass } from '../assets/wallpapers'
 import { getToken } from '../api/http'
@@ -302,6 +304,13 @@ const textHtml = ref('')
 const textLoading = ref(false)
 const textIsMD = ref(false)
 const textSaveRel = ref('') // 当前查看文件相对分享根的路径（目录分享「存到我的记事本」只转存该文件）
+// 端到端加密分享：拉取密文 → 用提取码（pwd）+ 盐（info.encSalt）本地解密
+async function fetchCipher(rel: string): Promise<string> {
+  const r = await fetch(`/api/s/${token}/raw?st=${encodeURIComponent(stoken.value)}&path=${encodeURIComponent(rel)}`)
+  if (!r.ok) throw new Error('读取失败（HTTP ' + r.status + '）')
+  return r.text()
+}
+
 async function openTextViewer(rel: string, name: string) {
   textShow.value = true
   textTitle.value = name
@@ -310,9 +319,14 @@ async function openTextViewer(rel: string, name: string) {
   textIsMD.value = name.toLowerCase().endsWith('.md')
   textLoading.value = true
   try {
-    const r = await fetch(`/api/s/${token}/raw?st=${encodeURIComponent(stoken.value)}&path=${encodeURIComponent(rel)}`)
-    if (!r.ok) throw new Error('读取失败（HTTP ' + r.status + '）')
-    const t = await r.text()
+    let t: string
+    if (info.value.encrypted) {
+      t = encDecryptText(await fetchCipher(rel), pwd.value, info.value.encSalt)
+    } else {
+      const r = await fetch(`/api/s/${token}/raw?st=${encodeURIComponent(stoken.value)}&path=${encodeURIComponent(rel)}`)
+      if (!r.ok) throw new Error('读取失败（HTTP ' + r.status + '）')
+      t = await r.text()
+    }
     textContent.value = t
     if (textIsMD.value) textHtml.value = renderMD(t)
   } catch (e: any) {
@@ -322,19 +336,27 @@ async function openTextViewer(rel: string, name: string) {
   }
 }
 
-function openItem(f: any) {
+async function openItem(f: any) {
   // relPath 恒为「相对分享根」的路径（后端 RelTo(分享根, 全路径)），直接用于 raw/office/阅读器
   if (f.isDir) {
     currentRel.value = f.relPath
     loadInto(f.relPath)
   } else {
     const rel = f.relPath
-    if (OFFICE_DS_EXTS.includes(f.ext)) {
+    if (!info.value.encrypted && OFFICE_DS_EXTS.includes(f.ext)) {
       openOfficeEditor(rel)
     } else if (isTextFile(f.name)) {
       openTextViewer(rel, f.name)
     } else if (info.value.previewEnabled && canPreview(f)) {
-      window.open(`/api/s/${token}/raw?st=${stoken.value}&path=${encodeURIComponent(rel)}`)
+      if (info.value.encrypted) {
+        // 加密分享：密文下载 → 本地解密 → blob URL 预览
+        try {
+          const blob = encDecryptBlob(await fetchCipher(rel), pwd.value, info.value.encSalt, mimeOf(f.ext))
+          window.open(URL.createObjectURL(blob))
+        } catch (e: any) { errMsg.value = '预览失败：' + (e.message || '未知错误') }
+      } else {
+        window.open(`/api/s/${token}/raw?st=${stoken.value}&path=${encodeURIComponent(rel)}`)
+      }
     }
   }
 }
@@ -380,11 +402,43 @@ function startEditPoll() {
 }
 
 function downloadCurrent() {
+  if (info.value.encrypted) {
+    if (info.value.isDir) {
+      errMsg.value = '加密分享不支持目录打包下载，请逐个文件下载（下载时自动解密）'
+      return
+    }
+    downloadItem({ name: info.value.name, relPath: '', ext: extOf(info.value.name) })
+    return
+  }
   const p = currentRel.value || ''
   window.open(`/api/s/${token}/download?st=${stoken.value}&path=${encodeURIComponent(p)}`)
 }
-function downloadItem(f: any) {
+async function downloadItem(f: any) {
+  if (info.value.encrypted) {
+    // 加密分享：下载密文 → 本地解密 → 以原文件名触发浏览器下载
+    try {
+      const blob = encDecryptBlob(await fetchCipher(f.relPath), pwd.value, info.value.encSalt, mimeOf(f.ext))
+      triggerDownload(blob, f.name)
+    } catch (e: any) { errMsg.value = '下载失败：' + (e.message || '未知错误') }
+    return
+  }
   window.open(`/api/s/${token}/download?st=${stoken.value}&path=${encodeURIComponent(f.relPath)}`)
+}
+function triggerDownload(blob: Blob, name: string) {
+  const u = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = u; a.download = name
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(u), 30000)
+}
+function mimeOf(ext: string) {
+  const m: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+    mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', wav: 'audio/wav',
+    ogg: 'audio/ogg', flac: 'audio/flac', pdf: 'application/pdf'
+  }
+  return m[ext] || 'application/octet-stream'
 }
 
 function canPreview(f: any) {

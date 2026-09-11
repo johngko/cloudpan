@@ -54,6 +54,7 @@ const APP_COMPONENTS: Record<string, Component> = {
   mediacenter: asyncApp(() => import('../apps/MediaCenter.vue')),
   tasks: asyncApp(() => import('../apps/TaskCenter.vue')),
   wallpapers: asyncApp(() => import('../apps/WallpaperCenter.vue')),
+  photos: asyncApp(() => import('../apps/Photos.vue')),
   officeeditor: asyncApp(() => import('../apps/OfficeEditor.vue')),
   shared: asyncApp(() => import('../apps/SharedBrowser.vue')),
   appcenter: asyncApp(() => import('../apps/AppCenter.vue')),

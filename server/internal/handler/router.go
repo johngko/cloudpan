@@ -114,6 +114,8 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/shares", middleware.AppGate("share"), sh.Mine)
 		ug.POST("/shares", middleware.AppGate("share"), sh.Create)
 		ug.DELETE("/shares/:id", middleware.AppGate("share"), sh.Cancel)
+		// 端到端加密分享：属主上传本地加密后的密文（body = 密文字节流）
+		ug.POST("/shares/:id/encrypt-file", middleware.AppGate("share"), sh.EncryptFile)
 		// 转存：公开分享内容一键保存到自己账号（登录态）
 		ug.POST("/s/:token/save", sh.SaveToDrive)
 
@@ -240,6 +242,9 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ag.GET("/update/history", upd.History)
 
 		ag.POST("/office-test", (&OfficeHandler{Site: site}).Health)
+		// 多 Document Server：列表 + 健康状态 / 保存（保存后立即探测一次）
+		ag.GET("/office-dses", (&OfficeHandler{Site: site}).DSEndpoint)
+		ag.POST("/office-dses", (&OfficeHandler{Site: site}).DSSave)
 		ag.GET("/logs", ad.LogList)
 		ag.GET("/logs/export", ad.LogExport)
 		ag.GET("/notifications", ad.NotificationList)

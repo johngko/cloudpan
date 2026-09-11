@@ -42,6 +42,7 @@ func main() {
 	model.InitDB(cfg.DataDir)
 	model.LoadAppCache() // 应用中心：功能开关内存缓存
 	handler.StartSystemMonitor() // NAS 系统监控采样器（仪表盘数据源）
+	handler.StartDSHealthChecker() // 多 Document Server 健康检查（60s，故障切换数据源）
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()

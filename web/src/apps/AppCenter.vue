@@ -82,7 +82,8 @@ const filtered = computed(() =>
 // 可安装应用（用户自装自卸；安装态存用户设置 KV，启动器按安装态过滤）
 const installable = computed(() => installableApps())
 const INSTALL_DESCS: Record<string, string> = {
-  mediacenter: '视频/音乐媒体库：自动扫描全盘媒体文件，播放列表、继续观看进度云端保存。'
+  mediacenter: '视频/音乐媒体库：自动扫描全盘媒体文件，播放列表、继续观看进度云端保存。',
+  photos: '图库：所选目录（含子目录）的图片按月份分组照片墙，缩略图服务端缓存，点击进灯箱查看（缩放/旋转/EXIF）。'
 }
 function installDesc(id: string) {
   return INSTALL_DESCS[id] || '可选应用，安装后出现在桌面与开始菜单。'

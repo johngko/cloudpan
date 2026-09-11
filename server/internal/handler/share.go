@@ -3,12 +3,17 @@ package handler
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +41,8 @@ type shareCreateIn struct {
 	AllowDownload   *bool  `json:"allowDownload"`
 	PreviewEnabled  *bool  `json:"previewEnabled"`
 	AllowEdit       *bool  `json:"allowEdit"` // 分享访客可否在线编辑（缺省 = 允许）
+	Encrypted       *bool  `json:"encrypted"` // 端到端加密分享（客户端加密，服务端只存密文）
+	EncSalt         string `json:"encSalt"`   // 客户端生成的 base64(16B) 随机盐
 }
 
 func (h *ShareHandler) Create(c *gin.Context) {
@@ -78,6 +85,19 @@ func (h *ShareHandler) Create(c *gin.Context) {
 	if in.AllowEdit != nil {
 		allowEdit = *in.AllowEdit
 	}
+	// 端到端加密分享：提取码兼作解密密钥（必设），服务端无法解密故强制禁在线编辑
+	encrypted := in.Encrypted != nil && *in.Encrypted
+	if encrypted {
+		if strings.TrimSpace(in.Password) == "" {
+			dto.Fail(c, 400, "加密分享必须设置提取码（兼作解密密钥）")
+			return
+		}
+		if _, err := base64.StdEncoding.DecodeString(in.EncSalt); err != nil || len([]byte(in.EncSalt)) != 24 {
+			dto.Fail(c, 400, "加密盐非法（需 16 字节 base64）")
+			return
+		}
+		allowEdit = false
+	}
 	var expires *time.Time
 	if in.ExpireDays > 0 {
 		t := time.Now().AddDate(0, 0, in.ExpireDays)
@@ -87,6 +107,7 @@ func (h *ShareHandler) Create(c *gin.Context) {
 		UserID: x.user.ID, PolicyID: p.ID, Path: vp, Name: e.Name, IsDir: e.IsDir,
 		Token: genID16() + genID16(), RemainDownloads: in.RemainDownloads,
 		AllowDownload: allowDl, PreviewEnabled: preview, AllowEdit: allowEdit, ExpiresAt: expires,
+		Encrypted: encrypted, EncSalt: in.EncSalt,
 	}
 	if in.Password != "" {
 		sh.PasswordHash = hashPassword(in.Password)
@@ -113,8 +134,151 @@ func (h *ShareHandler) Mine(c *gin.Context) {
 
 func (h *ShareHandler) Cancel(c *gin.Context) {
 	x := ctxOf(c)
+	var sh model.Share
+	// 先取 token 以清理加密分享的密文目录（sharedata/<token>/）
+	_ = model.DB.Where("id = ? AND user_id = ?", c.Param("id"), x.user.ID).First(&sh).Error
 	model.DB.Where("id = ? AND user_id = ?", c.Param("id"), x.user.ID).Delete(&model.Share{})
+	if sh.Token != "" {
+		_ = os.RemoveAll(h.shareDataDir(sh.Token))
+	}
 	dto.OK(c, nil)
+}
+
+// ---- 端到端加密分享：密文存储（DataDir/sharedata/<token>/）----
+// 服务端只保存客户端上传的密文与清单（文件名/大小/mtime），永远不接触明文
+
+// shareDataDir 加密分享的密文目录
+func (h *ShareHandler) shareDataDir(token string) string {
+	return filepath.Join(h.Site.Cfg.Sub("sharedata"), filepath.Base(token))
+}
+
+// shareDataMeta 密文清单条目
+type shareDataMeta struct {
+	Size    int64 `json:"size"`
+	Mtime   int64 `json:"mtime"` // 原文件 unix ms（展示用）
+	Name    string `json:"name"` // 原文件名（下载 disposition 用）
+}
+
+func (h *ShareHandler) manifestPath(token string) string {
+	return filepath.Join(h.shareDataDir(token), ".manifest.json")
+}
+
+func (h *ShareHandler) loadManifest(token string) map[string]shareDataMeta {
+	m := map[string]shareDataMeta{}
+	b, err := os.ReadFile(h.manifestPath(token))
+	if err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	return m
+}
+
+func (h *ShareHandler) saveManifest(token string, m map[string]shareDataMeta) {
+	_ = os.MkdirAll(h.shareDataDir(token), 0o755)
+	if b, err := json.MarshalIndent(m, "", "  "); err == nil {
+		_ = os.WriteFile(h.manifestPath(token), b, 0o644)
+	}
+}
+
+// shareDataMeta 取单个文件的清单（key = 相对分享根路径；单文件分享恒为 "file"）
+func (h *ShareHandler) shareDataMeta(token, key string) (shareDataMeta, bool) {
+	m, ok := h.loadManifest(token)[key]
+	return m, ok
+}
+
+// EncryptFile 属主上传「本地加密后的密文」。
+// POST /shares/:id/encrypt-file?path=<相对分享根路径,单文件分享留空>&mtime=<原文件 unix ms>
+// body = 密文字节流（上限 2GiB）。服务端校验原文件确实存在且位于分享范围内。
+func (h *ShareHandler) EncryptFile(c *gin.Context) {
+	x := ctxOf(c)
+	var sh model.Share
+	if err := model.DB.Where("id = ? AND user_id = ?", c.Param("id"), x.user.ID).First(&sh).Error; err != nil {
+		dto.Fail(c, 404, "分享不存在")
+		return
+	}
+	if !sh.Encrypted {
+		dto.Fail(c, 400, "非加密分享")
+		return
+	}
+	rel := strings.TrimSpace(c.Query("path"))
+	var src string
+	var diskKey string // 密文目录内的键（相对分享根；单文件分享恒为 "file"）
+	if sh.IsDir {
+		if rel == "" {
+			dto.Fail(c, 400, "目录分享需指定 path")
+			return
+		}
+		// Clean 返回规整后的绝对路径（如 /a/b.txt）且拒绝 ".."；
+		// 直接拼到分享根（fscore.Join 会拒绝含 "/" 的多段名，不能用于此场景）
+		r2, err := fscore.Clean(rel)
+		if err != nil || r2 == "/" {
+			dto.Fail(c, 400, "路径非法")
+			return
+		}
+		if sh.Path == "/" {
+			src = r2
+		} else {
+			src = sh.Path + r2
+		}
+		// 纵深防御：必须严格位于分享根之下
+		if sh.Path != "/" && !strings.HasPrefix(src, sh.Path+"/") {
+			dto.Fail(c, 403, "路径越界")
+			return
+		}
+		diskKey = strings.TrimPrefix(r2, "/")
+	} else {
+		if rel != "" {
+			dto.Fail(c, 400, "单文件分享不接受 path")
+			return
+		}
+		src = sh.Path
+		diskKey = "file"
+	}
+	// 原文件必须存在且是普通文件（防止为分享范围外的任意路径写入密文）
+	var p model.Policy
+	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+		dto.Fail(c, 404, "存储已失效")
+		return
+	}
+	d, err := h.Site.Fs.DriverFor(&p, x.user)
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	orig, err := d.Stat(src)
+	if err != nil {
+		dto.Fail(c, 404, "原文件不存在")
+		return
+	}
+	if orig.IsDir {
+		dto.Fail(c, 400, "目录不能直接加密上传（请逐文件）")
+		return
+	}
+	mtime, _ := strconv.ParseInt(c.Query("mtime"), 10, 64)
+	if mtime == 0 {
+		mtime = orig.ModTime
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 2<<30))
+	if err != nil {
+		dto.Fail(c, 400, "读取密文失败")
+		return
+	}
+	if len(body) == 0 {
+		dto.Fail(c, 400, "密文为空")
+		return
+	}
+	// 落盘（diskKey 已 Clean 过，再 filepath.FromSlash 适配 Windows；token 已 Base 化）
+	dstDir := h.shareDataDir(sh.Token)
+	_ = os.MkdirAll(filepath.Dir(filepath.Join(dstDir, filepath.FromSlash(diskKey))), 0o755)
+	dst := filepath.Join(dstDir, filepath.FromSlash(diskKey))
+	if err := os.WriteFile(dst, body, 0o644); err != nil {
+		dto.Fail(c, 500, "密文写入失败")
+		return
+	}
+	m := h.loadManifest(sh.Token)
+	m[diskKey] = shareDataMeta{Size: int64(len(body)), Mtime: mtime, Name: orig.Name}
+	h.saveManifest(sh.Token, m)
+	middleware.Audit(c, "share-encrypt", sh.Name+":"+diskKey)
+	dto.OK(c, gin.H{"path": diskKey, "size": len(body)})
 }
 
 // saveShareCopy 转存复制：分享者 driver → 本人 driver（目录递归）。
@@ -165,6 +329,11 @@ func (h *ShareHandler) saveShareCopy(sd, dd fscore.Driver, src, dstDir string) e
 func (h *ShareHandler) SaveToDrive(c *gin.Context) {
 	sh, owner, ok := h.guard(c)
 	if !ok {
+		return
+	}
+	// 加密分享：服务端只有密文，转存（从创建者明文盘复制）会绕过端到端加密，禁止
+	if sh.Encrypted {
+		dto.Fail(c, 403, "加密分享不支持转存（内容仅客户端可解密）")
 		return
 	}
 	x := ctxOf(c)
@@ -295,12 +464,21 @@ func (h *ShareHandler) Info(c *gin.Context) {
 	}
 	model.DB.Model(sh).UpdateColumn("views", sh.Views+1)
 	var size int64
-	if !sh.IsDir {
-		var p model.Policy
-		if err := model.DB.First(&p, sh.PolicyID).Error; err == nil {
-			if d, err := h.Site.Fs.DriverFor(&p, owner); err == nil { // 分享内容在分享者的隔离目录内
-				if e, err := d.Stat(sh.Path); err == nil {
-					size = e.Size
+	if sh.Encrypted {
+		// 加密分享：单文件密文大小取 manifest（明文大小不暴露给未解密者）
+		if !sh.IsDir {
+			if m, ok := h.shareDataMeta(sh.Token, "file"); ok {
+				size = m.Size
+			}
+		}
+	} else {
+		if !sh.IsDir {
+			var p model.Policy
+			if err := model.DB.First(&p, sh.PolicyID).Error; err == nil {
+				if d, err := h.Site.Fs.DriverFor(&p, owner); err == nil { // 分享内容在分享者的隔离目录内
+					if e, err := d.Stat(sh.Path); err == nil {
+						size = e.Size
+					}
 				}
 			}
 		}
@@ -309,6 +487,7 @@ func (h *ShareHandler) Info(c *gin.Context) {
 		"name": sh.Name, "isDir": sh.IsDir, "size": size, "hasPassword": sh.PasswordHash != "",
 		"allowDownload": sh.AllowDownload, "previewEnabled": sh.PreviewEnabled,
 		"allowEdit": sh.AllowEdit,
+		"encrypted": sh.Encrypted, "encSalt": sh.EncSalt,
 		"expiresAt": sh.ExpiresAt, "owner": owner.Nickname, "createdAt": sh.CreatedAt,
 		"views": sh.Views + 1, "downloads": sh.Downloads,
 	})
@@ -352,6 +531,57 @@ func (h *ShareHandler) List(c *gin.Context) {
 	}
 	if !sh.IsDir {
 		dto.Fail(c, 400, "该分享是单文件")
+		return
+	}
+	// 加密分享：列表来自密文目录（sharedata/<token>/），与明文盘解耦
+	if sh.Encrypted {
+		rel := fsClean(c.Query("path"), sh.Path)
+		if rel != sh.Path {
+			if _, err := fscore.RelTo(sh.Path, rel); err != nil {
+				dto.Fail(c, 403, "路径越界")
+				return
+			}
+		}
+		sub := strings.TrimPrefix(rel, sh.Path)
+		sub = strings.TrimPrefix(sub, "/")
+		dirOnDisk := h.shareDataDir(sh.Token)
+		if sub != "" {
+			dirOnDisk = filepath.Join(dirOnDisk, filepath.FromSlash(sub))
+		}
+		entries, err := os.ReadDir(dirOnDisk)
+		if err != nil {
+			dto.Fail(c, 404, "目录不存在")
+			return
+		}
+		m := h.loadManifest(sh.Token)
+		items := make([]gin.H, 0, len(entries))
+		for _, e := range entries {
+			name := e.Name()
+			if name == ".manifest.json" || strings.HasPrefix(name, ".") {
+				continue
+			}
+			key := name
+			if sub != "" {
+				key = sub + "/" + name
+			}
+			meta, ok := m[key]
+			var mt int64
+			var sz int64
+			if ok {
+				mt, sz = meta.Mtime, meta.Size
+			}
+			if fi, err := e.Info(); err == nil {
+				if mt == 0 {
+					mt = fi.ModTime().UnixMilli()
+				}
+				if sz == 0 {
+					sz = fi.Size()
+				}
+			}
+			items = append(items, gin.H{"name": name, "isDir": e.IsDir(), "size": sz,
+				"modTime": mt, "ext": path.Ext(name), "relPath": key})
+		}
+		dto.OK(c, items)
 		return
 	}
 	var p model.Policy
@@ -428,6 +658,11 @@ func (h *ShareHandler) Raw(c *gin.Context) {
 }
 
 func (h *ShareHandler) serveShareFile(c *gin.Context, sh *model.Share, target string, attachment bool) {
+	// 加密分享：只从密文目录取密文（目录打包会泄露明文，整体禁用）
+	if sh.Encrypted {
+		h.serveEncryptedFile(c, sh, target, attachment)
+		return
+	}
 	var p model.Policy
 	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
 		dto.FailHTTP(c, 404, "存储已失效")
@@ -470,6 +705,52 @@ func (h *ShareHandler) serveShareFile(c *gin.Context, sh *model.Share, target st
 	// 分享文件按分享者所在用户组的限速执行
 	rc = wrapThrottle(rc, shareOwnerSpeed(sh.UserID))
 	http.ServeContent(c.Writer, c.Request, e.Name, time.UnixMilli(e.ModTime), rc)
+}
+
+// serveEncryptedFile 从密文目录取密文直出（接收方客户端用提取码解密）。
+// target = 全虚拟路径（分享根之下）；单文件分享的 target = 分享文件本身
+func (h *ShareHandler) serveEncryptedFile(c *gin.Context, sh *model.Share, target string, attachment bool) {
+	var key, displayName string
+	if sh.IsDir {
+		if target == sh.Path {
+			dto.FailHTTP(c, 400, "加密分享不支持目录打包下载，请逐个文件下载")
+			return
+		}
+		rel, err := fscore.RelTo(sh.Path, target)
+		if err != nil {
+			dto.FailHTTP(c, 404, "文件不存在")
+			return
+		}
+		key = rel
+	} else {
+		key = "file"
+	}
+	displayName = path.Base(target)
+	dir := h.shareDataDir(sh.Token)
+	f, err := os.Open(filepath.Join(dir, filepath.FromSlash(key)))
+	if err != nil {
+		dto.FailHTTP(c, 404, "文件不存在（密文未上传或已取消）")
+		return
+	}
+	defer f.Close()
+	fi, _ := f.Stat()
+	mtime := time.Now()
+	if meta, ok := h.shareDataMeta(sh.Token, key); ok {
+		if meta.Name != "" {
+			displayName = meta.Name
+		}
+		if meta.Mtime > 0 {
+			mtime = time.UnixMilli(meta.Mtime)
+		}
+	}
+	disposition := dispositionOf(displayName)
+	if attachment {
+		disposition = "attachment"
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, disposition, urlEscape(displayName)))
+	c.Header("Cache-Control", "no-store")
+	http.ServeContent(c.Writer, c.Request, displayName, mtime, f)
+	_ = fi
 }
 
 // shareOwnerSpeed 分享者所在用户组的下载限速（KB/s，0 = 不限速）

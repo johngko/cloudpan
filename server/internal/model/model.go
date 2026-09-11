@@ -194,8 +194,14 @@ type Share struct {
 	AllowDownload  bool   `gorm:"default:true" json:"allowDownload"`
 	// AllowEdit 分享访客可否在线编辑（ONLYOFFICE 编辑器 edit 权限）；默认开，
 	// 与 Cloudreve 分享模式一致：任何人打开分享链接都能在线编辑，保存走创建者目录并归档旧版本
-	AllowEdit      bool   `gorm:"default:true" json:"allowEdit"`
-	Views          int64  `gorm:"default:0" json:"views"`
+	AllowEdit bool `gorm:"default:true" json:"allowEdit"`
+	// Encrypted 端到端加密分享（客户端加密，服务端只存密文）：
+	// 属主在浏览器里用 PBKDF2(提取码 + EncSalt) 派生 AES 密钥，把分享文件逐个加密后
+	// 上传到 DataDir/sharedata/<token>/；服务端永远接触不到明文。
+	// 加密分享必须设提取码（兼作解密密钥），且强制不允许在线编辑/转存（服务端无法解密）
+	Encrypted bool   `json:"encrypted"`
+	EncSalt   string `gorm:"size:64" json:"encSalt"` // base64(16B) 随机盐（可公开，仅参与密钥派生）
+	Views     int64  `gorm:"default:0" json:"views"`
 	Downloads      int64  `gorm:"default:0" json:"downloads"`
 	CreatedAt      time.Time `json:"createdAt"`
 }
