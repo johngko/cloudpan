@@ -1254,6 +1254,7 @@ function iconOf(f: FileItem) {
     if (['smm', 'xmind'].includes(e)) return 'fileMindmap'
     if (e === 'excalidraw') return 'fileWhiteboard'
     if (e === 'drawio') return 'fileFlowchart'
+    if (ARCHIVE_EXTS.includes(e)) return 'fileZip'
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(e)) return 'fileImg'
     if (['mp4', 'webm', 'mkv', 'avi', 'mov'].includes(e)) return 'fileVidio'
     if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(e)) return 'fileMusic'

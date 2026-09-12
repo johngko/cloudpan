@@ -38,6 +38,7 @@ const WIN12_ICONS: Record<string, string> = {
   fileExcel: 'files/excel.png',
   filePpt: 'files/ppt.png',
   filePdf: 'files/pdf.svg',
+  fileZip: 'files/zip.svg',
   fileMindmap: 'files/mindmap.svg',
   fileWhiteboard: 'files/whiteboard.svg',
   fileFlowchart: 'files/flowchart.svg',
