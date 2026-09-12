@@ -50,6 +50,9 @@ type UserGroup struct {
 	AllowWebdav         bool   `gorm:"default:true" json:"allowWebdav"`
 	AllowArchive        bool   `gorm:"default:true" json:"allowArchive"`
 	AllowOffline        bool   `gorm:"default:false" json:"allowOffline"`
+	// AllowPosterAsset 海报素材管理：允许成员在自己的海报库里上传/删除素材与模板
+	//（系统内置资源库 T: 仍只读，仅管理员可管理）
+	AllowPosterAsset    bool   `gorm:"default:false" json:"allowPosterAsset"`
 	ShareAllowDownload  bool   `gorm:"default:true" json:"shareAllowDownload"`
 	// ReadOnly 只读用户组：成员仅可查看/下载自己的盘，不能新建/上传/移动/删除（管理员豁免；不影响他人显式授予的可写共享）
 	ReadOnly            bool   `gorm:"default:false" json:"readOnly"`

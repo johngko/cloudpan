@@ -6,7 +6,7 @@ export interface User {
 }
 export interface UserGroup {
   id: number; name: string; quotaMB: number; allowShare: boolean; allowWebdav: boolean
-  allowArchive: boolean; allowOffline: boolean; shareAllowDownload: boolean
+  allowArchive: boolean; allowOffline: boolean; allowPosterAsset: boolean; shareAllowDownload: boolean
   readOnly: boolean // 只读用户组：成员仅可查看/下载
   downloadSpeedKB: number; recycleRetentionDays: number
   keepVersions: number; versionRetentionDays: number
@@ -164,9 +164,16 @@ export const adminApi = {
   updateHistory: () => get<any[]>('/admin/update/history')
 }
 
+// 海报设计资源管理（管理员）：内置库上传/删除 + 用户海报资源查看
+export const posterApi = {
+  builtinUpload: (form: FormData) => post<any>('/admin/poster/builtin', form),
+  builtinDelete: (path: string) => del('/admin/poster/builtin?path=' + encodeURIComponent(path)),
+  userLib: (uid: number) => get<any>(`/admin/poster/userlib?uid=${uid}`),
+  userFileUrl: (uid: number, path: string) => `/api/admin/poster/userfile?uid=${uid}&path=${encodeURIComponent(path)}&t=${getToken()}`
+}
+
 // 分块上传
-export const uploadApi = {
-  init: (d: { policyId: number; parent: string; name: string; size: number; chunkSize: number; hash: string }) =>
+export const uploadApi = {  init: (d: { policyId: number; parent: string; name: string; size: number; chunkSize: number; hash: string }) =>
     post<{ instant: boolean; path?: string; sessionId?: string; chunkSize?: number; totalChunks?: number; received?: number[] }>('/upload/init', d),
   chunk: (sid: string, idx: number, data: ArrayBuffer) =>
     // 大分片在慢速网络下可能超过全局 60s 超时，分片请求不设超时

@@ -258,5 +258,12 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ag.DELETE("/shares/:id", ad.ShareDelete)
 
 		ag.POST("/apps/:key/toggle", ad.AppToggle)
+
+		// 海报资源库管理（管理员）：内置库上传/删除（绕过 fs 只读层，直接写物化目录+重建清单）、
+		// 查看任意用户的海报资源（作品/素材/模板，用户间互相隔离仅管理员可见）
+		ag.POST("/poster/builtin", middleware.AppGate("poster"), ad.PosterBuiltinUpload)
+		ag.DELETE("/poster/builtin", middleware.AppGate("poster"), ad.PosterBuiltinDelete)
+		ag.GET("/poster/userlib", middleware.AppGate("poster"), ad.PosterUserLib)
+		ag.GET("/poster/userfile", middleware.AppGate("poster"), ad.PosterUserFile)
 	}
 }

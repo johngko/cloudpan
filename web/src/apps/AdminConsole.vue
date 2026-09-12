@@ -624,6 +624,7 @@
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowWebdav" />允许 WebDAV</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowArchive" />允许压缩解压</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.allowOffline" />允许离线下载</label>
+          <label style="display: flex; gap: 6px; align-items: center" title="允许成员在「海报设计」中向自己的素材库/模板库上传与删除（系统内置资源库 T: 仍只读，仅管理员可管理）"><input type="checkbox" v-model="editGroup.allowPosterAsset" />允许管理海报素材</label>
           <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" v-model="editGroup.shareAllowDownload" />分享可下载</label>
           <label style="display: flex; gap: 6px; align-items: center" title="成员仅可查看/下载自己的盘，不能新建/上传/移动/删除（管理员豁免；不影响他人授予的可写共享）"><input type="checkbox" v-model="editGroup.readOnly" />只读（仅查看/下载）</label>
         </div>
@@ -953,7 +954,7 @@ async function savePerms() {
 }
 const groupShow = ref(false)
 const editGroup = ref<any>({})
-const emptyGroup = { name: '', quotaMB: 10240, allowShare: true, allowWebdav: true, allowArchive: true, allowOffline: false, shareAllowDownload: true, readOnly: false, downloadSpeedKB: 0, recycleRetentionDays: 0, keepVersions: 10, versionRetentionDays: 0, appPerms: {}, remark: '' }
+const emptyGroup = { name: '', quotaMB: 10240, allowShare: true, allowWebdav: true, allowArchive: true, allowOffline: false, allowPosterAsset: false, shareAllowDownload: true, readOnly: false, downloadSpeedKB: 0, recycleRetentionDays: 0, keepVersions: 10, versionRetentionDays: 0, appPerms: {}, remark: '' }
 const policyShow = ref(false)
 const editPolicy = ref<any>({})
 const emptyPolicy = { type: 'local', name: '', letter: '', rootPath: '' }
