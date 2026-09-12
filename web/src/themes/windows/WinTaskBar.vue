@@ -54,8 +54,8 @@
 
     <!-- 控制中心（电池）胶囊：铃铛 + wifi + 蓝牙 + 电池 -->
     <div class="w12-dock">
-      <button class="w12-dockbtn w12-ctrlbtn" :class="{ show: panel === 'ctrl' || panel === 'notify' }" title="控制中心" @click.stop="openPanel('ctrl')" ref="ctrlBtn">
-        <span class="sico" title="通知" @click.stop="openPanel('notify')">
+      <button class="w12-dockbtn w12-ctrlbtn" :class="{ show: panel === 'ctrl' || notify.open }" title="控制中心" @click.stop="openPanel('ctrl')" ref="ctrlBtn">
+        <span class="sico" title="通知" @click.stop="openNotify">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 9.5a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 19.5a2.2 2.2 0 0 0 4 0" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
           <span v-if="notify.unread" class="w12-bell-badge">{{ notify.unread > 99 ? '99+' : notify.unread }}</span>
         </span>
@@ -133,7 +133,7 @@ const store = useWindows()
 const session = useSession()
 const notify = useNotify()
 
-type PanelId = 'start' | 'search' | 'widgets' | 'ctrl' | 'datebox' | 'notify'
+type PanelId = 'start' | 'search' | 'widgets' | 'ctrl' | 'datebox'
 const panel = ref<PanelId | null>(null)
 const shown = ref(false)
 let closeTimer: number
@@ -214,6 +214,13 @@ function getBattery() {
     upd()
     b.addEventListener?.('levelchange', upd)
   }).catch(() => {})
+}
+
+// 铃铛 = 直接开/关通知中心（Win11 同款；通知面板由 store 的 open 驱动，不走本地 panel 状态）
+function openNotify() {
+  if (notify.open) { notify.close(); return }
+  closePanel()
+  notify.openPanel()
 }
 
 function toggleTheme() { session.setDark(!session.dark) }

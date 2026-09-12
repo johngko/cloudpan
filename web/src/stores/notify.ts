@@ -30,14 +30,17 @@ export const useNotify = defineStore('notify', {
     async refresh() {
       this.loading = true
       try {
-        this.list = await notifyApi.list(50)
-        this.unread = this.list.filter(n => !n.read).length
+        // 未读数必须走专用计数接口：列表上限 50 条，未读超过 50 时按列表重算会把角标数算小
+        const [items, u] = await Promise.all([notifyApi.list(50), notifyApi.unread()])
+        this.list = items
+        this.unread = u.count || 0
       } catch { /* 忽略 */ } finally { this.loading = false }
     },
     async markRead(id: number) {
-      await notifyApi.read(id)
       const n = this.list.find(x => x.id === id)
-      if (n) n.read = true
+      if (!n || n.read) return // 已读项重复点击不应再减未读数
+      await notifyApi.read(id)
+      n.read = true
       this.unread = Math.max(0, this.unread - 1)
     },
     async markAll() {
