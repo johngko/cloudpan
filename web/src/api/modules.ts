@@ -61,7 +61,7 @@ export const fsApi = {
   list: (policyId: number, path: string) => get<{ policy: Policy; path: string; items: FileItem[] }>(`/fs/list?policyId=${policyId}&path=${encodeURIComponent(path)}`),
   mkdir: (policyId: number, path: string, name: string) => post('/fs/mkdir', { policyId, path, name }),
   rename: (policyId: number, path: string, newName: string) => post('/fs/rename', { policyId, path, newName }),
-  move: (policyId: number, paths: string[], dstDir: string) => post('/fs/move', { policyId, paths, dstDir }),
+  move: (policyId: number, paths: string[], dstDir: string, overwrite = false) => post('/fs/move', { policyId, paths, dstDir, overwrite }),
   copy: (policyId: number, paths: string[], dstDir: string) => post('/fs/copy', { policyId, paths, dstDir }),
   crossCopy: (dstPolicyId: number, dstDir: string, items: { policyId: number; path: string }[]) => post('/fs/cross-copy', { dstPolicyId, dstDir, items }),
   crossMove: (dstPolicyId: number, dstDir: string, items: { policyId: number; path: string }[]) => post('/fs/cross-move', { dstPolicyId, dstDir, items }),

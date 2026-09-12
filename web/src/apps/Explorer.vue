@@ -170,6 +170,7 @@
       <div v-else ref="fileArea" style="flex: 1; position: relative; overflow: hidden" @mousedown="onAreaMouseDown">
         <div v-if="viewMode === 'grid'" class="file-grid">
           <div v-for="f in sortedItems" :key="f.path + (f.letter || '')" class="file-item" :class="{ selected: selSet.has(f.path) }" :data-path="f.path"
+            draggable="true"
             @mousedown="onItemDown(f, $event)" @dblclick="openItem(f)" @contextmenu.stop.prevent="onItemCtx(f, $event)"
             @dragstart="onItemDrag(f, $event)" @dragover.prevent @drop.prevent.stop="onDropTo(f, $event)">
             <input type="checkbox" class="f-check" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="toggleCheck(f)" :title="selSet.has(f.path) ? '取消选择' : '选择'" />
@@ -193,8 +194,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="f in sortedItems" :key="f.path" :data-path="f.path" :class="{ selected: selSet.has(f.path) }"
-                @mousedown="onItemDown(f, $event)" @dblclick="openItem(f)" @contextmenu.stop.prevent="onItemCtx(f, $event)" @dragstart="onItemDrag(f, $event)">
+              <tr v-for="f in sortedItems" :key="f.path" :data-path="f.path" :class="{ selected: selSet.has(f.path) }" draggable="true"
+                @mousedown="onItemDown(f, $event)" @dblclick="openItem(f)" @contextmenu.stop.prevent="onItemCtx(f, $event)"
+                @dragstart="onItemDrag(f, $event)" @dragover.prevent @drop.prevent.stop="onDropTo(f, $event)">
                 <td style="width: 34px; text-align: center"><input type="checkbox" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="toggleCheck(f)" /></td>
                 <td><div style="display: flex; align-items: center; gap: 10px">
                   <AppIcon :name="iconOf(f)" :size="19" /><span>{{ f.name }}</span>
@@ -1278,7 +1280,9 @@ function iconOf(f: FileItem) {
 const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']
 function onItemDrag(f: FileItem, e: DragEvent) {
   if (!e.dataTransfer) return
-  e.dataTransfer.setData('application/x-cp-path', f.path)
+  // Windows 习惯：拖动多选中的某一项时，整组选中项一起移动
+  const paths = selPaths.value.includes(f.path) && selPaths.value.length > 1 ? selPaths.value : [f.path]
+  e.dataTransfer.setData('application/x-cp-path', paths.join('\n'))
   e.dataTransfer.effectAllowed = 'move'
 }
 function isThumb(f: FileItem) {
@@ -1304,9 +1308,10 @@ async function newItem(kind: NewKind) {
   if (!currentPolicy.value || onSharedDrive.value || readOnly.value) return
   const t = NEW_TPL[kind]
   let final = t.base + t.ext
+  // 重名自动加序号（Windows 同款格式，含空格）：新建文件夹 (2)、新建文本文档 (2).txt
   const names = new Set(items.value.map(x => x.name))
   let i = 2
-  while (names.has(final)) { final = `${t.base}(${i})${t.ext}`; i++ }
+  while (names.has(final)) { final = `${t.base} (${i})${t.ext}`; i++ }
   try {
     if (kind === 'folder') await fsApi.mkdir(currentPolicy.value.id, path.value, final)
     else await fsApi.writeText(currentPolicy.value.id, joinPath(path.value, final), t.template || '')
@@ -1439,12 +1444,23 @@ async function onDrop(e: DragEvent) {
     if (files.length) startUpload(files)
     return
   }
-  // 内部拖拽：拖到空白处视为移动到当前目录（一般无操作）
-  const src = e.dataTransfer.getData('application/x-cp-path')
-  if (src) startInternalMove([src], path.value)
+  // 内部拖拽：拖到空白处视为移动到当前目录（多选时整组一起移动）
+  const srcs = e.dataTransfer.getData('application/x-cp-path').split('\n').filter(Boolean)
+  if (srcs.length) startInternalMove(srcs, path.value)
 }
 async function onDropTo(f: FileItem, e: DragEvent) {
   if (!currentPolicy.value || !e.dataTransfer) return
+  // 内部拖拽必须先判断：内部拖拽的 dataTransfer.items 同样非空（自定义类型本身算一项），
+  // 若先判"外部文件"分支，内部移动会被 droppedFiles 判空后静默吞掉
+  if (e.dataTransfer.types.includes('application/x-cp-path')) {
+    if (!f.isDir || onSharedDrive.value || readOnly.value) return
+    const srcs = e.dataTransfer.getData('application/x-cp-path').split('\n').filter(Boolean)
+    // 不能拖入自身或自身子目录（Windows 同款拒绝）
+    const valid = srcs.filter(s => s !== f.path && !s.startsWith(f.path + '/'))
+    if (!valid.length) { toast.error('不能移动到其自身内部'); return }
+    startInternalMove(valid, f.path)
+    return
+  }
   if (e.dataTransfer.files.length || e.dataTransfer.items?.length) {
     if (readOnly.value) { toast.error('该用户组为只读，仅可查看和下载'); return }
     if (onSharedDrive.value) {
@@ -1467,19 +1483,54 @@ async function onDropTo(f: FileItem, e: DragEvent) {
     transfer.addFiles(currentPolicy.value.id, f.path, files)
     transfer.panel(true)
     toast.success(`已加入 ${files.length} 个文件到「${f.name}」`)
-  } else if (f.isDir && !onSharedDrive.value) {
-    // 内部拖拽移动：把一个文件拖到文件夹内（共享盘内不支持内部移动）
-    const src = e.dataTransfer.getData('application/x-cp-path')
-    if (src && src !== f.path) startInternalMove([src], f.path)
   }
 }
 async function startInternalMove(paths: string[], dstDir: string) {
   if (!currentPolicy.value || onSharedDrive.value || readOnly.value) return
+  // 剪切粘贴同款冲突处理：同名文件询问替换、同名目录跳过
+  let dstList: { name: string; isDir: boolean }[] = []
   try {
-    await fsApi.move(currentPolicy.value.id, paths, dstDir)
-    toast.success(`已移动 ${paths.length} 项`)
+    const d = await fsApi.list(currentPolicy.value.id, dstDir)
+    dstList = d.items as any
+  } catch { /* 目录列取失败按无冲突处理，后端仍会兜底报错 */ }
+  const r = await resolveMoveConflicts(paths, dstList, dstDir)
+  if (!r || !r.paths.length) return
+  try {
+    await fsApi.move(currentPolicy.value.id, r.paths, dstDir, r.overwrite)
+    toast.success(`已移动 ${r.paths.length} 项`)
     load()
   } catch (e: any) { toast.error(e.message) }
+}
+// Windows 式剪切移动冲突处理：目标同名文件 → 询问替换（替换时后端先归档旧版本）；
+// 目标同名目录 → 跳过该项（不合并、不覆盖）。返回 null = 用户取消且无可粘贴项
+async function resolveMoveConflicts(srcs: string[], dstList: { name: string; isDir: boolean }[], dstDir?: string): Promise<{ paths: string[]; overwrite: boolean } | null> {
+  // 原地移动 = 无操作（拖回/粘贴回所在目录，Windows 不做任何提示），先排除避免把自己当成冲突
+  const eff = dstDir ? srcs.filter(s => (s.includes('/') ? s.slice(0, s.lastIndexOf('/')) : '/') !== dstDir) : srcs
+  const byName = new Map(dstList.map(i => [i.name, i.isDir]))
+  const base = (p: string) => p.split('/').pop() || p
+  const clean: string[] = [], fileHit: string[] = [], dirHit: string[] = []
+  for (const s of eff) {
+    const n = base(s)
+    if (byName.has(n)) (byName.get(n) ? dirHit : fileHit).push(s)
+    else clean.push(s)
+  }
+  const saySkip = () => { if (dirHit.length) toast.error(`已跳过 ${dirHit.length} 项（目标已有同名目录）`) }
+  if (fileHit.length) {
+    const msg = `目标位置已存在 ${fileHit.length} 个同名文件${dirHit.length ? `，另有 ${dirHit.length} 个同名目录将被跳过` : ''}。是否替换文件？`
+    const ok = await uiDlg.confirm('粘贴：替换文件', msg, { okText: '替换' })
+    if (!ok) {
+      if (!clean.length) { if (dirHit.length) saySkip(); return null }
+      saySkip()
+      return { paths: clean, overwrite: false }
+    }
+    saySkip()
+    return { paths: [...clean, ...fileHit], overwrite: true }
+  }
+  if (dirHit.length) {
+    if (!clean.length) { toast.error('不能粘贴：目标已存在同名目录'); return null }
+    saySkip()
+  }
+  return { paths: clean, overwrite: false }
 }
 function downloadSel() {
   if (!currentPolicy.value || !selPaths.value.length) return
@@ -1512,8 +1563,16 @@ async function pasteSel() {
   const same = clip.items.every(i => i.policyId === currentPolicy.value!.id)
   try {
     if (same) {
-      if (clip.mode === 'cut') await fsApi.move(currentPolicy.value.id, clip.items.map(i => i.path), path.value)
-      else await fsApi.copy(currentPolicy.value.id, clip.items.map(i => i.path), path.value)
+      if (clip.mode === 'cut') {
+        // Windows 式：同名文件询问替换、同名目录跳过（复制走后端自动加序号，无冲突）
+        const all = clip.items.map(i => i.path)
+        const srcs = all.filter(s => s !== path.value && !path.value.startsWith(s + '/'))
+        if (!srcs.length) { toast.error('不能粘贴到其自身内部'); return }
+        if (srcs.length < all.length) toast.error('部分项不能粘贴到其自身内部，已跳过')
+        const r = await resolveMoveConflicts(srcs, items.value as any, path.value)
+        if (!r || !r.paths.length) return
+        await fsApi.move(currentPolicy.value.id, r.paths, path.value, r.overwrite)
+      } else await fsApi.copy(currentPolicy.value.id, clip.items.map(i => i.path), path.value)
     } else {
       // 跨存储：后端跨策略复制 / 移动（源盘读、目标盘写，目录递归，重名自动加 (1)）
       const items = clip.items.map(i => ({ policyId: i.policyId, path: i.path }))
@@ -1537,6 +1596,12 @@ function renameSel() {
 }
 async function doRename() {
   if (!currentPolicy.value || !renameVal.value) return
+  // 名称未改动（新建后直接点「确定」是常态）：直接确认，不发重命名请求
+  if (renameVal.value === baseName(renameTarget.value)) {
+    renameShow.value = false
+    load()
+    return
+  }
   try {
     await fsApi.rename(currentPolicy.value.id, renameTarget.value, renameVal.value)
     renameShow.value = false
@@ -2147,8 +2212,17 @@ function pasteInto(f: FileItem) {
     const same = clip.items.every(i => i.policyId === currentPolicy.value!.id)
     try {
       if (same) {
-        if (clip.mode === 'cut') await fsApi.move(currentPolicy.value.id, clip.items.map(i => i.path), f.path)
-        else await fsApi.copy(currentPolicy.value.id, clip.items.map(i => i.path), f.path)
+        if (clip.mode === 'cut') {
+          // 与剪切粘贴同款冲突处理：同名文件询问替换、同名目录跳过
+          const all = clip.items.map(i => i.path)
+          const srcs = all.filter(s => s !== f.path && !f.path.startsWith(s + '/'))
+          if (!srcs.length) { toast.error('不能粘贴到其自身内部'); return }
+          if (srcs.length < all.length) toast.error('部分项不能粘贴到其自身内部，已跳过')
+          const dl = await fsApi.list(currentPolicy.value.id, f.path)
+          const r = await resolveMoveConflicts(srcs, dl.items as any, f.path)
+          if (!r || !r.paths.length) return
+          await fsApi.move(currentPolicy.value.id, r.paths, f.path, r.overwrite)
+        } else await fsApi.copy(currentPolicy.value.id, clip.items.map(i => i.path), f.path)
         clip.clear()
       } else {
         const items = clip.items.map(i => ({ policyId: i.policyId, path: i.path }))

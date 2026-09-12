@@ -125,6 +125,10 @@ func (d *LocalDriver) Rename(p, newName string) error {
 	if err != nil {
 		return err
 	}
+	// 重命名为原名 = 无操作（Windows 同款；否则下面的存在性检查会把自己当成"已存在的目标"）
+	if phys == target {
+		return nil
+	}
 	if _, err := os.Stat(target); err == nil {
 		return fmt.Errorf("目标名称已存在")
 	}

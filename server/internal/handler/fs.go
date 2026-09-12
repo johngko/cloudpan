@@ -232,6 +232,9 @@ type fsOpIn struct {
 	DstDir   string   `json:"dstDir"`
 	Paths    []string `json:"paths"`
 	Keyword  string   `json:"keyword"`
+	// Overwrite 粘贴替换（Windows 剪切粘贴的"替换"选项）：目标已有同名文件时
+	// 先归档旧版本再覆盖；同名目录不受该标志影响，仍拒绝
+	Overwrite bool `json:"overwrite"`
 }
 
 func (h *SiteHandler) Mkdir(c *gin.Context) {
@@ -333,11 +336,38 @@ func (h *SiteHandler) Move(c *gin.Context) {
 		}
 	}
 	ld, _ := d.(*fscore.LocalDriver)
+	x := ctxOf(c)
 	for _, src := range in.Paths {
-		if filepath := parentOf(src); filepath == dst {
+		srcClean, _ := fscore.Clean(src)
+		// 原地移动 = 无操作
+		if parentOf(src) == dst {
 			continue
 		}
-		srcClean, _ := fscore.Clean(src)
+		// 不能把目录移动到自身或自身的子目录内（Windows 同样拒绝）
+		if dst == srcClean || strings.HasPrefix(dst+"/", srcClean+"/") {
+			dto.Fail(c, 400, fmt.Sprintf("不能将 %s 移动到其自身内部", baseOf(srcClean)))
+			return
+		}
+		// 粘贴替换（overwrite）：目标已有同名文件时先归档旧版本再删除，随后正常移动覆盖
+		if in.Overwrite {
+			if tgtVP, jerr := fscore.Join(dst, baseOf(srcClean)); jerr == nil {
+				if te, terr := d.Stat(tgtVP); terr == nil {
+					if te.IsDir {
+						dto.Fail(c, 400, fmt.Sprintf("移动 %s 失败: 目标已存在同名目录", baseOf(srcClean)))
+						return
+					}
+					if ld != nil {
+						if tp, perr := ld.Physical(tgtVP); perr == nil {
+							fscore.SaveVersion(p.ID, x.user.ID, tgtVP, tp)
+						}
+					}
+					if derr := d.Delete(tgtVP); derr != nil {
+						dto.Fail(c, 400, fmt.Sprintf("移动 %s 失败: 无法移除同名旧文件", baseOf(srcClean)))
+						return
+					}
+				}
+			}
+		}
 		var isDir bool
 		if e, err := d.Stat(src); err == nil {
 			isDir = e.IsDir
