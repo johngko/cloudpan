@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { appsApi, settingsApi } from '../api/modules'
+import { useSession } from './session'
 
 // 系统功能启用状态（应用中心门控的数据源）
 // 未加载完成前一律视为启用，避免启动时入口闪烁
@@ -55,7 +56,11 @@ export const useAppState = defineStore('appstate', {
     isOn: (s) => (key: string) => (s.loaded ? s.enabled[key] !== false : true),
     // 当前用户是否有权使用该功能（组/个人权限；未加载前视为允许）
     isAllowed: (s) => (key: string) => (s.loaded ? s.allowed[key] !== false : true),
-    // 入口可见性 = 全局启用 且 当前用户有权
-    isAvailable: (s) => (key: string) => (s.isOn(key) && s.isAllowed(key))
+    // 入口可见性/可用性 = 全局启用 且 当前用户有权；
+    // 管理员不受约束（与后端 AppAllowed 一致：所有应用对管理员可见可用）
+    isAvailable: (s) => (key: string) => {
+      if (useSession().user?.role === 'admin') return true
+      return s.isOn(key) && s.isAllowed(key)
+    }
   }
 })

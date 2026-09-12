@@ -58,12 +58,16 @@ func groupAppPerm(groupID uint) (map[string]bool, bool) {
 }
 
 // AppAllowed 判断用户能否使用功能 key。
-// u 为 nil（匿名/公开分享）或管理员时仅受全局开关约束。
+// 管理员不受全局开关与组/个人权限约束（所有应用对管理员可用——桌面全量展示、可正常使用）；
+// u 为 nil（匿名/公开分享）时仅受全局开关约束。
 func AppAllowed(key string, u *User) bool {
+	if u != nil && u.Role == "admin" {
+		return true
+	}
 	if !AppEnabled(key) {
 		return false
 	}
-	if u == nil || u.Role == "admin" {
+	if u == nil {
 		return true
 	}
 	// 1) 用户个人覆盖（显式设置优先）
