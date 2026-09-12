@@ -26,6 +26,10 @@ import { useToast } from '../stores/dialog'
 import AppIcon from '../components/AppIcon.vue'
 
 // 白板（Excalidraw，npm 懒加载 chunk 不进主包）：
+// 字体/静态资源本地化：Excalidraw 默认从 esm.sh CDN 拉字体（离线环境报错且手写字体降级），
+// 指向 public/excalidraw-assets/（构建时随 dist 嵌入二进制）
+;(window as any).EXCALIDRAW_ASSET_PATH = '/excalidraw-assets/'
+
 // onMounted 时动态 import react/react-dom/@excalidraw/excalidraw 并 createRoot 挂载；
 // 打开 = 解析 .excalidraw JSON 作 initialData；
 // 保存 = {type:'excalidraw',version:2,elements,appState,files} 经 writeText 覆盖原文件。

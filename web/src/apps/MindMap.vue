@@ -60,7 +60,14 @@ function win(): Window | null {
 }
 
 onMounted(async () => {
-  if (!canSave.value) { status.value = '只读'; dataReady.value = true; return }
+  if (!canSave.value) {
+    // 无文件启动（开始菜单/启动台）：用模板初始化一张新导图。
+    // 不注入数据（latest=null）会让应用初始化崩溃（destructure 'root' of null）卡在加载态
+    latest = JSON.parse(MINDMAP_TEMPLATE)
+    status.value = '新导图'
+    dataReady.value = true
+    return
+  }
   let text = ''
   try {
     const d = await fsApi.readText(policyId.value, path.value)

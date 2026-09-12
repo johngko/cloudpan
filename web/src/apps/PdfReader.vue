@@ -12,11 +12,15 @@
       <div style="flex: 1"></div>
       <span style="font-size: 12px; color: var(--text-3)">{{ status }}</span>
     </div>
-    <div v-if="!loaded" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 13px">
+    <div v-if="!loaded && hasFile" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 13px">
       正在加载 PDF 阅读器…
     </div>
-    <iframe v-show="loaded" ref="frame" style="flex: 1; width: 100%; border: none; background: #525659"
-      :src="viewerSrc" @load="onLoad"></iframe>
+    <div v-if="!hasFile" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-3); font-size: 13px">
+      <AppIcon name="pdfreader" :size="42" />
+      <span>请在资源管理器中双击 PDF 文件打开</span>
+    </div>
+    <iframe v-show="loaded && hasFile" ref="frame" style="flex: 1; width: 100%; border: none; background: #525659"
+      :src="hasFile ? viewerSrc : ''" @load="onLoad"></iframe>
   </div>
 </template>
 
@@ -32,10 +36,11 @@ const props = defineProps<{ winId: number; props: any }>()
 
 const policyId = ref(props.props?.policyId || 0)
 const path = ref(props.props?.path || '')
+const hasFile = computed(() => !!policyId.value && !!path.value)
 const fileName = computed(() => (path.value || '未命名').split('/').pop() || '未命名')
 const bust = ref(0)
 const loaded = ref(false)
-const status = ref('加载中')
+const status = ref(hasFile.value ? '加载中' : '未打开文件')
 
 const frame = ref<HTMLIFrameElement>()
 const viewerSrc = computed(() =>
