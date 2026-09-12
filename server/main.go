@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"cloudpan/internal/builtin"
 	"cloudpan/internal/config"
 	"cloudpan/internal/driver"
 	"cloudpan/internal/fscore"
@@ -30,6 +31,16 @@ func fsService(cfg *config.Config) *fscore.Service {
 		}
 		return fscore.NewLocal(root)
 	})
+	// 内置资源库：固定只读盘（全用户共享，无按用户子目录）。
+	// 只读在驱动层强制——requireWritable 有管理员豁免，不能依赖它
+	fscore.RegisterDriver("builtin", func(p *model.Policy, _ *model.User) (fscore.Driver, error) {
+		d, err := fscore.NewLocal(p.RootPath)
+		if err != nil {
+			return nil, err
+		}
+		d.ReadOnly = true
+		return d, nil
+	})
 	fscore.RegisterDriver("pan123", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewPan123(p) })
 	fscore.RegisterDriver("aliyun", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewAliyun(p) })
 	fscore.RegisterDriver("baidu", func(p *model.Policy, _ *model.User) (fscore.Driver, error) { return driver.NewBaidu(p) })
@@ -39,6 +50,10 @@ func fsService(cfg *config.Config) *fscore.Service {
 
 func main() {
 	cfg := config.Load()
+	// 内置海报资源库：embed 内容物化到 dataDir/builtin/poster（版本一致则跳过）
+	if err := builtin.Materialize(filepath.Join(cfg.DataDir, "builtin", "poster")); err != nil {
+		log.Printf("内置资源库物化失败: %v", err)
+	}
 	model.InitDB(cfg.DataDir)
 	model.LoadAppCache() // 应用中心：功能开关内存缓存
 	handler.StartSystemMonitor() // NAS 系统监控采样器（仪表盘数据源）

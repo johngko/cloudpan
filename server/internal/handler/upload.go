@@ -73,6 +73,10 @@ func (h *UploadHandler) Init(c *gin.Context) {
 		dto.Fail(c, 403, err.Error())
 		return
 	}
+	if p.ReadOnly {
+		dto.Fail(c, 403, "内置资源库为只读，不可修改")
+		return
+	}
 	if !d.Capabilities().Upload {
 		dto.Fail(c, 400, "该存储不支持上传")
 		return
@@ -184,6 +188,10 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 	var p model.Policy
 	if err := model.DB.First(&p, sess.PolicyID).Error; err != nil {
 		dto.Fail(c, 400, "存储策略不存在")
+		return
+	}
+	if p.ReadOnly {
+		dto.Fail(c, 403, "内置资源库为只读，不可修改")
 		return
 	}
 	d, err := h.Site.Fs.DriverFor(&p, x.user)

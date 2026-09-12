@@ -1,0 +1,167 @@
+@font-face {
+  font-family: "iconfont"; /* Project id 2717063 */
+  src: url('font_2717063_ypy8vprc3b.woff2') format('woff2'),
+       url('font_2717063_ypy8vprc3b.woff') format('woff'),
+       url('font_2717063_ypy8vprc3b.ttf') format('truetype');
+}
+
+.iconfont {
+  font-family: "iconfont" !important;
+  font-size: 16px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-bold:before {
+  content: "\e6db";
+}
+
+.icon-underline:before {
+  content: "\e665";
+}
+
+.icon-italic:before {
+  content: "\e7cd";
+}
+
+.icon-strikethrough:before {
+  content: "\e660";
+}
+
+.icon-align-justify-text:before {
+  content: "\e70b";
+}
+
+.icon-align-left-text:before {
+  content: "\e650";
+}
+
+.icon-align-right-text:before {
+  content: "\e6e3";
+}
+
+.icon-align-center-text:before {
+  content: "\e6f4";
+}
+
+.icon-upload:before {
+  content: "\e632";
+}
+
+.icon-right:before {
+  content: "\e666";
+}
+
+.icon-ego-caidan:before {
+  content: "\e62f";
+}
+
+.icon-redo:before {
+  content: "\e619";
+}
+
+.icon-undo:before {
+  content: "\e61a";
+}
+
+.icon-textorientation:before {
+  content: "\e62c";
+}
+
+.icon-more:before {
+  content: "\e60f";
+}
+
+.icon-search:before {
+  content: "\e65f";
+}
+
+.icon-down1:before {
+  content: "\e664";
+}
+
+.icon-shangchuan:before {
+  content: "\e623";
+}
+
+.icon-beijing:before {
+  content: "\e61f";
+}
+
+.icon-moban:before {
+  content: "\e76a";
+}
+
+.icon-background:before {
+  content: "\e609";
+}
+
+.icon-zujian02:before {
+  content: "\e60c";
+}
+
+.icon-zujian01:before {
+  content: "\e6e8";
+}
+
+.icon-sucai:before {
+  content: "\e600";
+}
+
+.icon-wenzi:before {
+  content: "\e648";
+}
+
+.icon-gallery:before {
+  content: "\e62a";
+}
+
+.icon-down:before {
+  content: "\e734";
+}
+
+.icon-up:before {
+  content: "\e893";
+}
+
+.icon-add:before {
+  content: "\e608";
+}
+
+.icon-sub:before {
+  content: "\e64e";
+}
+
+.icon-align-left:before {
+  content: "\e891";
+}
+
+.icon-align-bottom:before {
+  content: "\e892";
+}
+
+.icon-align-center-horiz:before {
+  content: "\e65b";
+}
+
+.icon-align-right:before {
+  content: "\e65c";
+}
+
+.icon-align-top:before {
+  content: "\e65d";
+}
+
+.icon-align-center-verti:before {
+  content: "\e65e";
+}
+
+.icon-layer-up:before {
+  content: "\e88f";
+}
+
+.icon-layer-down:before {
+  content: "\e890";
+}
+

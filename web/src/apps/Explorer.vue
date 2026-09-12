@@ -1112,6 +1112,9 @@ async function openItem(f: FileItem) {
     store.open('whiteboard', p, { title: f.name + ' - 白板', icon: 'whiteboard', w: 1080, h: 700 })
   } else if (ext === 'drawio' && apps.isAvailable('flowchart')) {
     store.open('flowchart', p, { title: f.name + ' - 流程图', icon: 'flowchart', w: 1080, h: 700 })
+  } else if (isPosterFile(f) && apps.isAvailable('poster')) {
+    // .poster.json 海报作品（json 后缀须先于 TEXT_EXTS 命中）
+    store.open('poster', p, { title: f.name + ' - 海报设计', icon: 'poster', w: 1500, h: 850 })
   } else if (OFFICE_EXTS.includes(ext)) {
     // 配置了 Document Server：整页 ONLYOFFICE 编辑器（Cloudreve 模式：撑满整页 + 完整功能区，
     // 自己账号打开与分享链接打开同一形态）；PDF 走内嵌查看；未配置回退桌面窗口静态预览
@@ -1134,6 +1137,8 @@ const OFFICE_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 
 // 压缩包（压缩包浏览器在线查看/解压；功能未开启时回落下载）。
 // 单独 .gz/.bz2/.xz（非 tar 族）无目录表不可浏览，仍走下载/解压
 const ARCHIVE_EXTS = ['zip', '7z', 'rar', 'tar', 'tgz', 'tbz2', 'txz']
+// 海报设计作品文件：.poster.json 双后缀（json 是 TEXT_EXTS 成员，须优先识别）
+const isPosterFile = (f: FileItem) => (f.name || '').toLowerCase().endsWith('.poster.json')
 // 新建创意文档模板（思维导图/白板/流程图，写入即带最小可编辑骨架）
 const MINDMAP_TEMPLATE = JSON.stringify({ root: { data: { text: '中心主题' }, children: [] }, theme: { template: 'avocado', config: {} }, layout: 'logicalStructure', config: {}, view: null }, null, 2)
 const WHITEBOARD_TEMPLATE = JSON.stringify({ type: 'excalidraw', version: 2, source: 'cloudpan', elements: [], appState: { viewBackgroundColor: '#ffffff', gridSize: null }, files: {} })
@@ -1170,7 +1175,7 @@ function startEditPoll() {
 }
 
 // ---- 打开方式：强制用指定应用打开（覆盖默认路由） ----
-function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor' | 'archiveviewer' | 'mindmap' | 'whiteboard' | 'flowchart' | 'imageeditor' | 'pdfreader') {
+function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 'officeeditor' | 'archiveviewer' | 'mindmap' | 'whiteboard' | 'flowchart' | 'imageeditor' | 'pdfreader' | 'poster') {
   const pid = (f as any).policyId || currentPolicy.value?.id || 0
   if (!pid) return
   const ext = (f.ext || '').toLowerCase()
@@ -1213,7 +1218,8 @@ function openWith(f: FileItem, app: 'imageviewer' | 'mediaviewer' | 'notepad' | 
     whiteboard: { title: f.name + ' - 白板', icon: 'whiteboard', w: 1080, h: 700 },
     flowchart: { title: f.name + ' - 流程图', icon: 'flowchart', w: 1080, h: 700 },
     imageeditor: { title: f.name + ' - 图片编辑器', icon: 'imageedit', w: 980, h: 660 },
-    pdfreader: { title: f.name + ' - PDF 阅读器', icon: 'pdfreader', w: 1080, h: 700 }
+    pdfreader: { title: f.name + ' - PDF 阅读器', icon: 'pdfreader', w: 1080, h: 700 },
+    poster: { title: f.name + ' - 海报设计', icon: 'poster', w: 1500, h: 850 }
   }
   store.open(app, p, { title: map[app].title, icon: map[app].icon, w: map[app].w, h: map[app].h })
 }
@@ -1241,6 +1247,8 @@ function buildOpenWith(f: FileItem) {
     items.push({ label: '白板', icon: 'whiteboard', onClick: () => openWith(f, 'whiteboard') })
   if (ext === 'drawio' && apps.isAvailable('flowchart'))
     items.push({ label: '流程图', icon: 'flowchart', onClick: () => openWith(f, 'flowchart') })
+  if (isPosterFile(f) && apps.isAvailable('poster'))
+    items.push({ label: '海报设计', icon: 'poster', onClick: () => openWith(f, 'poster') })
   return items
 }
 
@@ -1256,6 +1264,7 @@ function iconOf(f: FileItem) {
     if (['smm', 'xmind'].includes(e)) return 'fileMindmap'
     if (e === 'excalidraw') return 'fileWhiteboard'
     if (e === 'drawio') return 'fileFlowchart'
+    if (isPosterFile(f)) return 'filePoster'
     if (ARCHIVE_EXTS.includes(e)) return 'fileZip'
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(e)) return 'fileImg'
     if (['mp4', 'webm', 'mkv', 'avi', 'mov'].includes(e)) return 'fileVidio'
@@ -1274,6 +1283,7 @@ function iconOf(f: FileItem) {
   if (['smm', 'xmind'].includes(e)) return 'mindmap'
   if (e === 'excalidraw') return 'whiteboard'
   if (e === 'drawio') return 'flowchart'
+  if (isPosterFile(f)) return 'poster'
   return 'file'
 }
 // ---- 内部拖拽移动 + 图片缩略图 ----

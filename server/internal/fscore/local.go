@@ -1,6 +1,7 @@
 package fscore
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -16,8 +17,12 @@ import (
 
 // LocalDriver 本地磁盘驱动
 type LocalDriver struct {
-	Root string // 物理根目录（绝对路径）；多用户场景下为 RootPath/<用户目录>/
+	Root     string // 物理根目录（绝对路径）；多用户场景下为 RootPath/<用户目录>/
+	ReadOnly bool   // 只读模式（内置资源库）：拒绝一切写操作
 }
+
+// ErrReadOnly 只读存储的写操作统一错误（handler 层直接透传文案给用户）
+var ErrReadOnly = errors.New("内置资源库为只读，不可修改")
 
 func NewLocal(root string) (*LocalDriver, error) {
 	abs, err := filepath.Abs(root)
@@ -28,6 +33,14 @@ func NewLocal(root string) (*LocalDriver, error) {
 		return nil, fmt.Errorf("根目录不可用: %w", err)
 	}
 	return &LocalDriver{Root: abs}, nil
+}
+
+// checkWritable 只读模式（内置资源库）拒绝写操作
+func (d *LocalDriver) checkWritable() error {
+	if d.ReadOnly {
+		return ErrReadOnly
+	}
+	return nil
 }
 
 // Physical 虚拟路径 → 物理路径（含穿越防护）
@@ -109,6 +122,9 @@ func (d *LocalDriver) Stat(p string) (*Entry, error) {
 }
 
 func (d *LocalDriver) Mkdir(dir string) error {
+	if err := d.checkWritable(); err != nil {
+		return err
+	}
 	phys, err := d.Physical(dir)
 	if err != nil {
 		return err
@@ -117,6 +133,9 @@ func (d *LocalDriver) Mkdir(dir string) error {
 }
 
 func (d *LocalDriver) Rename(p, newName string) error {
+	if err := d.checkWritable(); err != nil {
+		return err
+	}
 	phys, err := d.Physical(p)
 	if err != nil {
 		return err
@@ -139,6 +158,9 @@ func (d *LocalDriver) Rename(p, newName string) error {
 }
 
 func (d *LocalDriver) Move(src, dstDir string) error {
+	if err := d.checkWritable(); err != nil {
+		return err
+	}
 	sphys, err := d.Physical(src)
 	if err != nil {
 		return err
@@ -162,6 +184,9 @@ func unlinkHashMoved(oldPhys, newPhys string) {
 }
 
 func (d *LocalDriver) Copy(src, dstDir string) error {
+	if err := d.checkWritable(); err != nil {
+		return err
+	}
 	sphys, err := d.Physical(src)
 	if err != nil {
 		return err
@@ -240,6 +265,9 @@ func copyTree(src, dst string) error {
 }
 
 func (d *LocalDriver) Delete(p string) error {
+	if err := d.checkWritable(); err != nil {
+		return err
+	}
 	phys, err := d.Physical(p)
 	if err != nil {
 		return err
@@ -261,6 +289,9 @@ func (d *LocalDriver) Open(p string) (ReadSeekCloser, error) {
 }
 
 func (d *LocalDriver) CreateFile(p string, r io.Reader) error {
+	if err := d.checkWritable(); err != nil {
+		return err
+	}
 	phys, err := d.Physical(p)
 	if err != nil {
 		return err
@@ -315,7 +346,7 @@ func (d *LocalDriver) Quota() (used, total int64, err error) {
 }
 
 func (d *LocalDriver) Capabilities() Cap {
-	return Cap{DirectDownload: false, Upload: true, StructureList: true}
+	return Cap{DirectDownload: false, Upload: !d.ReadOnly, StructureList: true}
 }
 
 // ---- 多用户数据隔离 ----

@@ -161,6 +161,16 @@ func requireWritable(c *gin.Context) bool {
 	return true
 }
 
+// requirePolicyWritable 只读策略（内置资源库）拦截全部写操作；管理员同样不豁免——
+// 内置内容属于系统数据，误删无法从回收站以外的途径恢复（物化虽可重跑，但盘内状态不应被破坏）
+func requirePolicyWritable(c *gin.Context, p *model.Policy) bool {
+	if p != nil && p.ReadOnly {
+		dto.Fail(c, 403, "内置资源库为只读，不可修改")
+		return false
+	}
+	return true
+}
+
 func (h *SiteHandler) resolve(c *gin.Context) (*model.Policy, fscore.Driver, bool) {
 	var in struct {
 		PolicyID uint `form:"policyId"`
@@ -170,6 +180,18 @@ func (h *SiteHandler) resolve(c *gin.Context) (*model.Policy, fscore.Driver, boo
 		return nil, nil, false
 	}
 	return h.resolveByID(in.PolicyID, c)
+}
+
+// resolveWritableByID resolveByID + 只读策略拦截（全部写端点用这个；读端点仍用 resolveByID）
+func (h *SiteHandler) resolveWritableByID(policyID uint, c *gin.Context) (*model.Policy, fscore.Driver, bool) {
+	p, d, ok := h.resolveByID(policyID, c)
+	if !ok {
+		return nil, nil, false
+	}
+	if !requirePolicyWritable(c, p) {
+		return nil, nil, false
+	}
+	return p, d, true
 }
 
 // resolveByID 不消费请求体的策略解析（POST 接口先绑 JSON 再调用）
@@ -246,7 +268,7 @@ func (h *SiteHandler) Mkdir(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, ok := h.resolveByID(in.PolicyID, c)
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -283,7 +305,7 @@ func (h *SiteHandler) Rename(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, ok := h.resolveByID(in.PolicyID, c)
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -320,7 +342,7 @@ func (h *SiteHandler) Move(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, ok := h.resolveByID(in.PolicyID, c)
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -498,7 +520,7 @@ func (h *SiteHandler) Copy(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, ok := h.resolveByID(in.PolicyID, c)
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -654,7 +676,7 @@ func (h *SiteHandler) CrossCopy(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	dp, dd, ok := h.resolveByID(in.DstPolicyID, c)
+	dp, dd, ok := h.resolveWritableByID(in.DstPolicyID, c)
 	if !ok {
 		return
 	}
@@ -720,7 +742,7 @@ func (h *SiteHandler) CrossMove(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	dp, dd, ok := h.resolveByID(in.DstPolicyID, c)
+	dp, dd, ok := h.resolveWritableByID(in.DstPolicyID, c)
 	if !ok {
 		return
 	}
@@ -765,6 +787,10 @@ func (h *SiteHandler) CrossMove(c *gin.Context) {
 			dto.Fail(c, 400, "源策略不存在")
 			return
 		}
+		if sp.ReadOnly {
+			dto.Fail(c, 403, "内置资源库为只读，不可移出")
+			return
+		}
 		srcs = append(srcs, srcEntry{sd: sd, src: src, sp: &sp, size: sz})
 		add += sz
 	}
@@ -803,7 +829,7 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, ok := h.resolveByID(in.PolicyID, c)
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -892,7 +918,7 @@ func (h *SiteHandler) WriteText(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	p, d, ok := h.resolveByID(in.PolicyID, c)
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -1469,7 +1495,7 @@ func (h *SiteHandler) Archive(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	_, d, ok := h.resolveByID(in.PolicyID, c)
+	_, d, ok := h.resolveWritableByID(in.PolicyID, c)
 	if !ok {
 		return
 	}
@@ -1643,6 +1669,9 @@ func (h *SiteHandler) RecycleRestore(c *gin.Context) {
 		if err := model.DB.First(&p, item.PolicyID).Error; err != nil {
 			continue
 		}
+		if p.ReadOnly {
+			continue // 只读策略不应有回收站条目（防御性兜底）
+		}
 		d, err := h.Fs.DriverFor(&p, x.user) // 恢复到该用户自己的隔离目录
 		if err != nil {
 			continue
@@ -1793,6 +1822,10 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 	var pol model.Policy
 	if err := model.DB.First(&pol, in.PolicyID).Error; err != nil {
 		dto.Fail(c, 400, "策略不存在")
+		return
+	}
+	if pol.ReadOnly {
+		dto.Fail(c, 403, "内置资源库为只读，不可修改")
 		return
 	}
 	d, err := h.Fs.DriverFor(&pol, x.user)

@@ -50,13 +50,14 @@ export const useWindows = defineStore('windows', {
       // 单实例应用：聚焦已有窗口（带新 props 时同步——设置深链/浏览器 URL 等场景）。
       // 文档类应用（officeeditor）按文档多开：组件无 props 变更监听，复用窗口会出现
       // 标题/工具栏新文件名但预览停留在旧文件的状态，编辑保存会错位到另一文件
-      const existing = this.wins.find(w => w.app === app && (app !== 'explorer' && app !== 'notepad' && app !== 'imageviewer' && app !== 'mediaviewer' && app !== 'officeeditor' && app !== 'archiveviewer' && app !== 'mindmap' && app !== 'whiteboard' && app !== 'flowchart' && app !== 'imageeditor' && app !== 'pdfreader'))
+      const existing = this.wins.find(w => w.app === app && (app !== 'explorer' && app !== 'notepad' && app !== 'imageviewer' && app !== 'mediaviewer' && app !== 'officeeditor' && app !== 'archiveviewer' && app !== 'mindmap' && app !== 'whiteboard' && app !== 'flowchart' && app !== 'imageeditor' && app !== 'pdfreader' && app !== 'poster'))
       if (existing) {
         if (props) existing.props = props
         this.focus(existing.id)
         return existing.id
       }
-      const ww = opts.w || 900, wh = opts.h || 600
+      // 未显式给尺寸时用应用注册表默认值（开始菜单/桌面启动不传 opts）
+      const ww = opts.w || appDef(app)?.w || 900, wh = opts.h || appDef(app)?.h || 600
       const g = shellInsets()
       const maxW = window.innerWidth - g.left - g.right, maxH = window.innerHeight - g.top - g.bottom
       const w = Math.min(ww, maxW - 40), h = Math.min(wh, maxH - 40)

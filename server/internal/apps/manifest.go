@@ -25,6 +25,7 @@ var Manifest = []Def{
 	{Key: "flowchart", Name: "流程图", Icon: "flowchart", Desc: ".drawio 流程图 / UML 在线编辑", Version: "1.0", DefaultEnabled: true},
 	{Key: "image_editor", Name: "图片编辑器", Icon: "imageedit", Desc: "图片旋转/翻转/亮度/对比度/饱和度在线编辑", Version: "1.0", DefaultEnabled: true},
 	{Key: "pdf_reader", Name: "PDF 阅读器", Icon: "pdfreader", Desc: "PDF 在线阅读（目录/搜索/缩放/打印）", Version: "1.0", DefaultEnabled: true},
+	{Key: "poster", Name: "海报设计", Icon: "poster", Desc: "海报模板设计（内置模板/素材资源库 T:，离线编辑，PNG 导出与云盘保存）", Version: "1.0", DefaultEnabled: true},
 	{Key: "thumbnail", Name: "图片缩略图", Icon: "image", Desc: "服务端生成图片缩略图缓存", Version: "1.0", DefaultEnabled: true},
 	{Key: "version", Name: "版本管理", Icon: "refresh", Desc: "文件覆盖时保留历史版本", Version: "1.0", DefaultEnabled: true},
 	{Key: "notify", Name: "站内通知", Icon: "bell", Desc: "任务与配额事件通知中心", Version: "1.0", DefaultEnabled: true},

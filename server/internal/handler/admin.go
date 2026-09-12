@@ -308,6 +308,10 @@ func (h *AdminHandler) PolicyCreate(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
+	if in.Type == "builtin" {
+		dto.Fail(c, 400, "内置存储类型由系统管理，不可手工创建")
+		return
+	}
 	u := middleware.CurrentUser(c)
 	opts := "{}"
 	if in.Options != nil {
@@ -355,6 +359,10 @@ func (h *AdminHandler) PolicyUpdate(c *gin.Context) {
 		dto.Fail(c, 404, "策略不存在")
 		return
 	}
+	if p.Type == "builtin" {
+		dto.Fail(c, 400, "内置策略由系统管理，不可修改")
+		return
+	}
 	var in policyIn
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
@@ -378,6 +386,10 @@ func (h *AdminHandler) PolicyToggle(c *gin.Context) {
 		dto.Fail(c, 404, "策略不存在")
 		return
 	}
+	if p.Type == "builtin" {
+		dto.Fail(c, 400, "内置策略由系统管理，不可停用")
+		return
+	}
 	var in struct {
 		Status string `json:"status" binding:"required"`
 	}
@@ -394,6 +406,10 @@ func (h *AdminHandler) PolicyDelete(c *gin.Context) {
 	var p model.Policy
 	if err := model.DB.First(&p, c.Param("id")).Error; err != nil {
 		dto.Fail(c, 404, "策略不存在")
+		return
+	}
+	if p.Type == "builtin" {
+		dto.Fail(c, 400, "内置策略由系统管理，不可删除")
 		return
 	}
 	var n int64

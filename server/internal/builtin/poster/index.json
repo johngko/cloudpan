@@ -1,0 +1,939 @@
+{
+ "version": "20260911-1",
+ "fonts": [
+  {
+   "value": "zcool-kuaile-regular",
+   "alias": "站酷快乐体",
+   "url": "fonts/zcool-kuaile-regular.woff2"
+  },
+  {
+   "value": "zcool-xiaowei-regular",
+   "alias": "站酷小薇体",
+   "url": "fonts/zcool-xiaowei-regular.woff2"
+  }
+ ],
+ "templates": [
+  {
+   "file": "/templates/t01-spring-festival.json",
+   "thumb": "/templates/t01-spring-festival.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t02-618.json",
+   "thumb": "/templates/t02-618.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t03-double11.json",
+   "thumb": "/templates/t03-double11.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t04-mid-autumn.json",
+   "thumb": "/templates/t04-mid-autumn.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t05-national-day.json",
+   "thumb": "/templates/t05-national-day.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t06-anniversary.json",
+   "thumb": "/templates/t06-anniversary.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t07-hotpot.json",
+   "thumb": "/templates/t07-hotpot.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t08-salad.json",
+   "thumb": "/templates/t08-salad.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t09-coffee.json",
+   "thumb": "/templates/t09-coffee.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t10-dessert.json",
+   "thumb": "/templates/t10-dessert.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t11-festival.json",
+   "thumb": "/templates/t11-festival.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t12-jazz.json",
+   "thumb": "/templates/t12-jazz.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t13-concert.json",
+   "thumb": "/templates/t13-concert.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t14-premiere.json",
+   "thumb": "/templates/t14-premiere.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t15-scifi.json",
+   "thumb": "/templates/t15-scifi.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t16-backtoschool.json",
+   "thumb": "/templates/t16-backtoschool.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t17-coding.json",
+   "thumb": "/templates/t17-coding.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t18-english.json",
+   "thumb": "/templates/t18-english.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t19-wedding-chinese.json",
+   "thumb": "/templates/t19-wedding-chinese.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t20-wedding-west.json",
+   "thumb": "/templates/t20-wedding-west.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t21-launch.json",
+   "thumb": "/templates/t21-launch.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t22-5g.json",
+   "thumb": "/templates/t22-5g.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t23-baby.json",
+   "thumb": "/templates/t23-baby.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t24-fitness.json",
+   "thumb": "/templates/t24-fitness.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t25-beauty.json",
+   "thumb": "/templates/t25-beauty.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t26-home.json",
+   "thumb": "/templates/t26-home.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t27-recruit.json",
+   "thumb": "/templates/t27-recruit.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t28-house.json",
+   "thumb": "/templates/t28-house.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t29-travel.json",
+   "thumb": "/templates/t29-travel.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t30-livestream.json",
+   "thumb": "/templates/t30-livestream.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t31-esports.json",
+   "thumb": "/templates/t31-esports.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t32-bookstore.json",
+   "thumb": "/templates/t32-bookstore.png",
+   "width": 750,
+   "height": 1334
+  },
+  {
+   "file": "/templates/t33-banner-618.json",
+   "thumb": "/templates/t33-banner-618.png",
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "file": "/templates/t34-banner-concert.json",
+   "thumb": "/templates/t34-banner-concert.png",
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "file": "/templates/t35-banner-coffee.json",
+   "thumb": "/templates/t35-banner-coffee.png",
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "file": "/templates/t36-banner-tech.json",
+   "thumb": "/templates/t36-banner-tech.png",
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "file": "/templates/t37-square-618.json",
+   "thumb": "/templates/t37-square-618.png",
+   "width": 1000,
+   "height": 1000
+  },
+  {
+   "file": "/templates/t38-square-jazz.json",
+   "thumb": "/templates/t38-square-jazz.png",
+   "width": 1000,
+   "height": 1000
+  },
+  {
+   "file": "/templates/t39-square-beauty.json",
+   "thumb": "/templates/t39-square-beauty.png",
+   "width": 1000,
+   "height": 1000
+  },
+  {
+   "file": "/templates/t40-square-book.json",
+   "thumb": "/templates/t40-square-book.png",
+   "width": 1000,
+   "height": 1000
+  }
+ ],
+ "materials": [
+  {
+   "file": "/materials/backgrounds/bg-aurora-purple-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-aurora-purple-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-aurora-purple-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-berry-juice-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-berry-juice-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-candy-mix-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-candy-mix-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-candy-mix-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-coral-warm-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-coral-warm-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-crimson-red-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-crimson-red-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-emerald-mint-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-emerald-mint-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-emerald-mint-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-forest-dark-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-forest-dark-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-gold-luxury-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-gold-luxury-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-gold-luxury-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-ink-black-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-ink-black-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-kiwi-energy-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-kiwi-energy-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-lime-pop-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-lime-pop-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-midnight-blue-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-midnight-blue-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-midnight-blue-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-neon-cyan-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-neon-cyan-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-neon-cyan-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-ocean-deep-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-ocean-deep-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-peach-cream-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-peach-cream-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-rose-pink-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-rose-pink-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-rose-pink-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sand-vintage-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sand-vintage-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sky-day-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sky-day-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-slate-tech-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-slate-tech-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-space-navy-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-space-navy-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sunset-orange-1000x1000.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sunset-orange-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-sunset-orange-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-teal-fresh-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-teal-fresh-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-violet-dream-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-violet-dream-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-wine-classic-1920x1080.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/backgrounds/bg-wine-classic-750x1334.png",
+   "category": "背景"
+  },
+  {
+   "file": "/materials/decorations/deco-bolt-cyan.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-bolt-orange.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-book-cream.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-book-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-briefcase-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-cake-pink.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-circles-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-circles-pink.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-circles-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-confetti-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-confetti-party.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-corner-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-corner-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-cup-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-divider-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-divider-pink.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-divider-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-film-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-flower-cream.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-flower-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-flower-green.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-flower-pink.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-gamepad-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-gamepad-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-house-cream.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-house-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-leaf-cream.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-leaf-sage.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-mic-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-moon-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-note-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-palette-pink.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-plane-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-rays-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-rays-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-ribbon-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-ribbon-red.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-sparkle-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-sparkle-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-star-gold.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-star-pink.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-star-white.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/decorations/deco-star6-cyan.png",
+   "category": "装饰"
+  },
+  {
+   "file": "/materials/borders/border-corners-gold-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-corners-gold-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-corners-white-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-corners-white-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-dashed-gold-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-dashed-gold-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-dashed-red-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-dashed-red-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-dashed-white-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-dashed-white-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-double-gold-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-double-gold-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-frame-gold-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-frame-gold-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-frame-white-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-frame-white-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-round-gold-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-round-gold-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-round-pink-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-round-pink-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-round-white-1000x1000.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/borders/border-round-white-750x1334.png",
+   "category": "边框"
+  },
+  {
+   "file": "/materials/icons/icon-arrow-right-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-arrow-right.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-bolt.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-book.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-briefcase.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-cake.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-camera.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-check-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-check.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-clock-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-clock.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-crown.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-cup.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-film.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-flower.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-gamepad.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-gift.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-heart.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-house.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-leaf.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-mail-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-mail.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-mic.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-moon.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-note.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-palette.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-phone-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-phone.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-pin-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-pin.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-plane.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-qr-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-qr.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-snow.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-star.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-sun.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-trophy.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-website-gold.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/icons/icon-website.png",
+   "category": "图标"
+  },
+  {
+   "file": "/materials/textures/tex-bokeh-gold.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-diag-ink.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-diag-light.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-grid-cream.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-grid-dark.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-mesh-tech.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-noise-rose.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-noise-warm.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-paper-cream.png",
+   "category": "纹理"
+  },
+  {
+   "file": "/materials/textures/tex-stars-night.png",
+   "category": "纹理"
+  }
+ ]
+}

@@ -402,13 +402,16 @@ func (h *OfficeHandler) Config(c *gin.Context) {
 			dto.Fail(c, 400, "参数错误")
 			return
 		}
-		_, dd, err := h.Site.Fs.Resolve(u, x.group, policyID)
+		op, dd, err := h.Site.Fs.Resolve(u, x.group, policyID)
 		if err != nil {
 			dto.Fail(c, 403, err.Error())
 			return
 		}
 		// 只读用户组（非 admin）只能 view，与 fs.go requireWritable 语义一致
 		editable = u.Role == "admin" || x.group == nil || !x.group.ReadOnly
+		if op.ReadOnly {
+			editable = false // 只读策略（内置资源库）：仅可在线查看，不可编辑保存
+		}
 		d, vp, keyPolicy = dd, v, policyID
 	}
 	if !editable {
@@ -786,6 +789,11 @@ func (h *OfficeHandler) Callback(c *gin.Context) {
 		} else {
 			var p model.Policy
 			if err := model.DB.First(&p, t.PolicyID).Error; err == nil {
+				if p.ReadOnly {
+					// 只读策略：丢弃保存产物（view 签发的 token 本就不落盘，此处兜底）
+					c.JSON(http.StatusOK, gin.H{"error": 0})
+					return
+				}
 				if d, err := h.Site.Fs.DriverFor(&p, userOfID(t.UID)); err == nil {
 					h.saveCallbackBody(cb.URL, t.Path, d, func(phys string) {
 						fscore.SaveVersion(t.PolicyID, t.UID, t.Path, phys)

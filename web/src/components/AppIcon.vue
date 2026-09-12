@@ -42,6 +42,7 @@ const WIN12_ICONS: Record<string, string> = {
   fileMindmap: 'files/mindmap.svg',
   fileWhiteboard: 'files/whiteboard.svg',
   fileFlowchart: 'files/flowchart.svg',
+  filePoster: 'files/poster.svg',
   fileTxt: 'files/txt.png',
   fileImg: 'files/img.png',
   fileMusic: 'files/music.png',
@@ -128,6 +129,8 @@ const apps: Record<string, string> = {
     `<rect x="5.8" y="6.8" width="12.4" height="9" rx="1.2"/><circle cx="9" cy="10" r="1" stroke-width="1.6"/><path d="M6.6 14.6l2.6-2.5 1.9 1.8 1.7-1.6 2.2 2" stroke-width="1.7"/><path d="M8 18.4h8" stroke-width="1.7"/><circle cx="10.4" cy="18.4" r="1.1" fill="#ffffff" stroke="none"/>`),
   pdfreader: tile('#ff9a8a', '#dc2626',
     `<path d="M8 6.4h5l3 3v8.2a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7.4a1 1 0 0 1 1-1z"/><path d="M13 6.4v3h3"/><circle cx="10.6" cy="12.6" r="1.9" stroke-width="1.7"/><path d="M12 14l1.6 1.6" stroke-width="1.7"/>`),
+  poster: tile('#ff9dcb', '#e0328c',
+    `<rect x="7" y="5.6" width="10" height="13" rx="1.1"/><circle cx="9.9" cy="9" r="1.1" stroke-width="1.6"/><path d="M7.6 15.4l2.6-2.6 1.9 1.8 1.6-1.5 2.2 2" stroke-width="1.6"/><path d="M9.4 19.8h5.2M11.4 21.6h1.4" stroke-width="1.5"/>`),
 
   // 品牌 logo（开机/登录/菜单栏）：自由形态云朵，非 tile
   cloud: `<defs><linearGradient id="__G__" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#2f86d6"/></linearGradient></defs><path d="M7 18.6a4.4 4.4 0 0 1-.6-8.7 5.7 5.7 0 0 1 11.2 1.2 3.8 3.8 0 0 1-.4 7.5H7z" fill="url(#__G__)"/>`,

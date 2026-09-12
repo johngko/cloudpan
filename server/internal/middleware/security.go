@@ -110,7 +110,7 @@ func SecurityHeaders() gin.HandlerFunc {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		// vendor 页面（mindmap host.html / pdfjs viewer / drawio）需要被主应用窗口
+		// vendor 页面（mindmap host.html / pdfjs viewer / drawio / poster）需要被主应用窗口
 		// 以同源 iframe 嵌入，frame-ancestors 放宽为 'self'（仍禁止跨站嵌入防点击劫持）；
 		// 其余页面保持 'none' + XFO DENY。
 		if frameableVendorPath(c.Request.URL.Path) {
@@ -119,17 +119,24 @@ func SecurityHeaders() gin.HandlerFunc {
 		} else {
 			h.Set("X-Frame-Options", "DENY")
 		}
+		// 海报设计（vendored poster-design）的 vue-i18n 运行时消息编译器依赖 new Function，
+		// 无 'unsafe-eval' 时 $t 渲染整块失效（保存/下载按钮消失）。仅对该 vendored 子树放宽，
+		// 其余路径维持严格 CSP。
+		if strings.HasPrefix(c.Request.URL.Path, "/vendor/poster/") {
+			csp = strings.Replace(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' 'unsafe-eval'", 1)
+		}
 		h.Set("Content-Security-Policy", csp)
 		c.Next()
 	}
 }
 
 // frameableVendorPath 判断是否为允许被同源 iframe 嵌入的 vendor 页面：
-// 思维导图（host.html）、PDF 阅读器（web/viewer.html）、流程图（drawio index）。
+// 思维导图（host.html）、PDF 阅读器（web/viewer.html）、流程图（drawio index）、海报设计（index.html）。
 func frameableVendorPath(p string) bool {
 	return strings.HasPrefix(p, "/vendor/mindmap/") ||
 		strings.HasPrefix(p, "/vendor/pdfjs/") ||
-		strings.HasPrefix(p, "/vendor/drawio")
+		strings.HasPrefix(p, "/vendor/drawio") ||
+		strings.HasPrefix(p, "/vendor/poster/")
 }
 
 // redactQueryValues 将 "path?query" 串中指定参数的值打码（保留参数顺序与其它参数原样）

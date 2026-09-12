@@ -62,6 +62,7 @@ const APP_COMPONENTS: Record<string, Component> = {
   flowchart: asyncApp(() => import('../apps/Flowchart.vue')),
   imageeditor: asyncApp(() => import('../apps/ImageEditor.vue')),
   pdfreader: asyncApp(() => import('../apps/PdfReader.vue')),
+  poster: asyncApp(() => import('../apps/Poster.vue')),
   shared: asyncApp(() => import('../apps/SharedBrowser.vue')),
   appcenter: asyncApp(() => import('../apps/AppCenter.vue')),
   settings: asyncApp(() => import('../apps/SettingsApp.vue')),

@@ -90,12 +90,15 @@ type Policy struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	Name      string `gorm:"size:64" json:"name"`
 	Letter    string `gorm:"size:4;uniqueIndex" json:"letter"` // 虚拟盘符 C/D/E.../云盘名
-	Type      string `gorm:"size:16" json:"type"`  // local | pan123 | aliyun | baidu | tianyi
+	Type      string `gorm:"size:16" json:"type"`  // local | builtin | pan123 | aliyun | baidu | tianyi
 	RootPath  string `gorm:"size:512" json:"rootPath"` // 本地策略的物理根目录
 	Options   string `gorm:"type:text" json:"-"`       // JSON：云盘 token/密钥等
 	Status    string `gorm:"size:16;default:active" json:"status"` // active | error | disabled
 	StatusMsg string `gorm:"size:255" json:"statusMsg"`
-	UsageBytes int64     `gorm:"default:0" json:"usageBytes"`
+	// ReadOnly 只读策略（内置资源库）：API 层全部写端点拒绝（handler 层 requirePolicyWritable），
+	// 驱动层 LocalDriver.ReadOnly 为第二道防线（API 存在回收站/版本等物理操作路径）
+	ReadOnly   bool   `gorm:"default:false" json:"readOnly"`
+	UsageBytes int64  `gorm:"default:0" json:"usageBytes"`
 	UsageAt    *time.Time `json:"-"`
 	CreatedBy uint   `json:"createdBy"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -370,7 +373,7 @@ func InitDB(dataDir string) {
 	if quotaColNew {
 		DB.Model(&User{}).Where("quota_mb IS NULL OR quota_mb = 0").UpdateColumn("quota_mb", -1)
 	}
-	seed()
+	seed(dataDir)
 }
 
 // GuestUsername 游客共享账号的系统用户名。该账号由系统托管（随机密码不可知、
@@ -398,7 +401,7 @@ func visitorGroupProfile() UserGroup {
 	}
 }
 
-func seed() {
+func seed(dataDir string) {
 	// 默认用户组禁用终端（安全加固：终端可执行任意 shell 命令，仅管理员默认可用；
 	// 管理员可在用户组权限里显式放行）
 	const defaultGroupAppPerms = `{"terminal":false}`
@@ -465,6 +468,23 @@ func seed() {
 	var pc int64
 	DB.Model(&Policy{}).Count(&pc)
 	_ = pc // 存储策略由管理员在界面挂载，不预置
+
+	// 内置「海报资源库」：只读固定盘 T:（内容 embed 进二进制，由 main 物化到 dataDir/builtin/poster）。
+	// 幂等：按 type+letter 判重；管理员删除后下次启动自动重建（内置资源属于系统一部分）
+	var bp Policy
+	if err := DB.Where("type = ? AND letter = ?", "builtin", "T").First(&bp).Error; err != nil {
+		DB.Create(&Policy{
+			Name:     "海报资源库",
+			Letter:   "T",
+			Type:     "builtin",
+			RootPath: filepath.Join(dataDir, "builtin", "poster"),
+			Status:   "active",
+			ReadOnly: true,
+		})
+	} else if !bp.ReadOnly {
+		// 存量升级：确保内置盘只读标志生效
+		DB.Model(&bp).Update("read_only", true)
+	}
 
 	// 系统功能应用：按清单补种（已存在的保留其启用状态）
 	for _, def := range apps.Manifest {
