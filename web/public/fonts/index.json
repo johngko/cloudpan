@@ -1,0 +1,311 @@
+{
+ "version": "20260913-1",
+ "fonts": [
+  {
+   "alias": "思源黑体",
+   "value": "noto-sans-sc-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/noto-sans-sc-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "思源黑体 粗体",
+   "value": "noto-sans-sc-700",
+   "lang": "zh",
+   "url": "/fonts/cjk/noto-sans-sc-chinese-simplified-700.woff2"
+  },
+  {
+   "alias": "思源宋体",
+   "value": "noto-serif-sc-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/noto-serif-sc-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "思源宋体 粗体",
+   "value": "noto-serif-sc-700",
+   "lang": "zh",
+   "url": "/fonts/cjk/noto-serif-sc-chinese-simplified-700.woff2"
+  },
+  {
+   "alias": "站酷快乐体",
+   "value": "zcool-kuaile-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/zcool-kuaile-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "站酷小薇LOGO体",
+   "value": "zcool-xiaowei-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/zcool-xiaowei-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "站酷庆科黄油体",
+   "value": "zcool-qingke-huangyou-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/zcool-qingke-huangyou-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "马善政毛笔楷书",
+   "value": "ma-shan-zheng-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/ma-shan-zheng-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "柳建毛草",
+   "value": "liu-jian-mao-cao-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/liu-jian-mao-cao-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "龙藏体",
+   "value": "long-cang-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/long-cang-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "志莽行书",
+   "value": "zhi-mang-xing-400",
+   "lang": "zh",
+   "url": "/fonts/cjk/zhi-mang-xing-chinese-simplified-400.woff2"
+  },
+  {
+   "alias": "站酷快乐体",
+   "value": "zcool-kuaile-regular",
+   "lang": "zh",
+   "url": "/vendor/poster/fonts/zcool-kuaile-regular.woff2"
+  },
+  {
+   "alias": "站酷小薇LOGO体",
+   "value": "zcool-xiaowei-regular",
+   "lang": "zh",
+   "url": "/vendor/poster/fonts/zcool-xiaowei-regular.woff2"
+  },
+  {
+   "alias": "Inter",
+   "value": "inter",
+   "lang": "en",
+   "url": "/fonts/single/inter.woff2"
+  },
+  {
+   "alias": "Roboto",
+   "value": "roboto",
+   "lang": "en",
+   "url": "/fonts/single/roboto.woff2"
+  },
+  {
+   "alias": "Open Sans",
+   "value": "open-sans",
+   "lang": "en",
+   "url": "/fonts/single/open-sans.woff2"
+  },
+  {
+   "alias": "Lato",
+   "value": "lato",
+   "lang": "en",
+   "url": "/fonts/single/lato.woff2"
+  },
+  {
+   "alias": "Montserrat",
+   "value": "montserrat",
+   "lang": "en",
+   "url": "/fonts/single/montserrat.woff2"
+  },
+  {
+   "alias": "Poppins",
+   "value": "poppins",
+   "lang": "en",
+   "url": "/fonts/single/poppins.woff2"
+  },
+  {
+   "alias": "Oswald",
+   "value": "oswald",
+   "lang": "en",
+   "url": "/fonts/single/oswald.woff2"
+  },
+  {
+   "alias": "Bebas Neue",
+   "value": "bebas-neue",
+   "lang": "en",
+   "url": "/fonts/single/bebas-neue.woff2"
+  },
+  {
+   "alias": "Anton",
+   "value": "anton",
+   "lang": "en",
+   "url": "/fonts/single/anton.woff2"
+  },
+  {
+   "alias": "Playfair Display",
+   "value": "playfair-display",
+   "lang": "en",
+   "url": "/fonts/single/playfair-display.woff2"
+  },
+  {
+   "alias": "Merriweather",
+   "value": "merriweather",
+   "lang": "en",
+   "url": "/fonts/single/merriweather.woff2"
+  },
+  {
+   "alias": "Nunito",
+   "value": "nunito",
+   "lang": "en",
+   "url": "/fonts/single/nunito.woff2"
+  },
+  {
+   "alias": "Rubik",
+   "value": "rubik",
+   "lang": "en",
+   "url": "/fonts/single/rubik.woff2"
+  },
+  {
+   "alias": "Work Sans",
+   "value": "work-sans",
+   "lang": "en",
+   "url": "/fonts/single/work-sans.woff2"
+  },
+  {
+   "alias": "Dancing Script",
+   "value": "dancing-script",
+   "lang": "en",
+   "url": "/fonts/single/dancing-script.woff2"
+  },
+  {
+   "alias": "Pacifico",
+   "value": "pacifico",
+   "lang": "en",
+   "url": "/fonts/single/pacifico.woff2"
+  },
+  {
+   "alias": "Lobster",
+   "value": "lobster",
+   "lang": "en",
+   "url": "/fonts/single/lobster.woff2"
+  },
+  {
+   "alias": "Caveat",
+   "value": "caveat",
+   "lang": "en",
+   "url": "/fonts/single/caveat.woff2"
+  },
+  {
+   "alias": "Orbitron",
+   "value": "orbitron",
+   "lang": "en",
+   "url": "/fonts/single/orbitron.woff2"
+  },
+  {
+   "alias": "Audiowide",
+   "value": "audiowide",
+   "lang": "en",
+   "url": "/fonts/single/audiowide.woff2"
+  },
+  {
+   "alias": "Righteous",
+   "value": "righteous",
+   "lang": "en",
+   "url": "/fonts/single/righteous.woff2"
+  },
+  {
+   "alias": "Archivo Black",
+   "value": "archivo-black",
+   "lang": "en",
+   "url": "/fonts/single/archivo-black.woff2"
+  },
+  {
+   "alias": "Fira Code",
+   "value": "fira-code",
+   "lang": "en",
+   "url": "/fonts/single/fira-code.woff2"
+  },
+  {
+   "alias": "JetBrains Mono",
+   "value": "jetbrains-mono",
+   "lang": "en",
+   "url": "/fonts/single/jetbrains-mono.woff2"
+  },
+  {
+   "alias": "Roboto Mono",
+   "value": "roboto-mono",
+   "lang": "en",
+   "url": "/fonts/single/roboto-mono.woff2"
+  },
+  {
+   "alias": "Source Code Pro",
+   "value": "source-code-pro",
+   "lang": "en",
+   "url": "/fonts/single/source-code-pro.woff2"
+  },
+  {
+   "alias": "Space Mono",
+   "value": "space-mono",
+   "lang": "en",
+   "url": "/fonts/single/space-mono.woff2"
+  },
+  {
+   "alias": "Courier Prime",
+   "value": "courier-prime",
+   "lang": "en",
+   "url": "/fonts/single/courier-prime.woff2"
+  },
+  {
+   "alias": "Bungee",
+   "value": "bungee",
+   "lang": "en",
+   "url": "/fonts/single/bungee.woff2"
+  },
+  {
+   "alias": "Fredoka",
+   "value": "fredoka",
+   "lang": "en",
+   "url": "/fonts/single/fredoka.woff2"
+  },
+  {
+   "alias": "Comfortaa",
+   "value": "comfortaa",
+   "lang": "en",
+   "url": "/fonts/single/comfortaa.woff2"
+  },
+  {
+   "alias": "Quicksand",
+   "value": "quicksand",
+   "lang": "en",
+   "url": "/fonts/single/quicksand.woff2"
+  },
+  {
+   "alias": "Raleway",
+   "value": "raleway",
+   "lang": "en",
+   "url": "/fonts/single/raleway.woff2"
+  },
+  {
+   "alias": "Ubuntu",
+   "value": "ubuntu",
+   "lang": "en",
+   "url": "/fonts/single/ubuntu.woff2"
+  },
+  {
+   "alias": "Cinzel",
+   "value": "cinzel",
+   "lang": "en",
+   "url": "/fonts/single/cinzel.woff2"
+  },
+  {
+   "alias": "Great Vibes",
+   "value": "great-vibes",
+   "lang": "en",
+   "url": "/fonts/single/great-vibes.woff2"
+  },
+  {
+   "alias": "Indie Flower",
+   "value": "indie-flower",
+   "lang": "en",
+   "url": "/fonts/single/indie-flower.woff2"
+  },
+  {
+   "alias": "Permanent Marker",
+   "value": "permanent-marker",
+   "lang": "en",
+   "url": "/fonts/single/permanent-marker.woff2"
+  }
+ ]
+}
