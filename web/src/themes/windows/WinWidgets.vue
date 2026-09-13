@@ -35,21 +35,47 @@
     <span class="hr"></span>
     <div class="w12-wg-half">
       <div class="w12-wg-bar">
-        <p class="tit">新闻</p>
-        <span style="color: #7f7f7f; font-size: 12px">我们不对新闻内容负责</span>
+        <p class="tit">网盘动态</p>
+        <span style="color: #7f7f7f; font-size: 12px">实时</span>
       </div>
-      <div class="w12-wg-content">
-        <div class="w12-news-card">
-          <div class="bg"><img src="/icons/win12/logo.svg" style="object-fit: contain; background: radial-gradient(circle at 50% 40%, #24304d, #0a0e1a 75%)" /></div>
-          <p class="tit">CloudPan · 私有云存储</p>
-          <p class="sub">Go + Vue 全栈，三主题 Web 桌面</p>
-          <a class="a" href="https://github.com/johngko/cloudpan" target="_blank" rel="noopener">GitHub · CloudPan 开源项目</a>
+      <div class="w12-wg-content wg-scroll">
+        <!-- 存储空间：各盘用量 + 个人配额 -->
+        <div class="wg-card">
+          <p class="wg-tit">存储空间</p>
+          <div v-for="p in drives" :key="p.id" class="wg-drive">
+            <div class="wg-row"><span class="wg-name">{{ p.name }}</span><span class="wg-val">{{ fmtBytes(p.usageBytes) }}</span></div>
+            <div class="wg-track"><div class="wg-fill" :style="{ width: p._pct + '%' }"></div></div>
+          </div>
+          <div class="wg-drive">
+            <div class="wg-row"><span class="wg-name">我的配额</span><span class="wg-val">{{ quotaText }}</span></div>
+            <div class="wg-track"><div class="wg-fill quota" :style="{ width: quotaPct + '%' }"></div></div>
+          </div>
         </div>
-        <div class="w12-news-card">
-          <div class="bg"><img src="/icons/win12/windows12.svg" style="object-fit: contain; background: radial-gradient(circle at 50% 40%, #3a2450, #0d0a18 75%)" /></div>
-          <p class="tit">Windows 12 风格外壳</p>
-          <p class="sub">浮动 Dock · 双栏开始菜单 · 控制中心 · 小组件</p>
-          <a class="a" @click="emit('close')">关闭面板</a>
+        <!-- 传输任务：点击进任务中心 -->
+        <div class="wg-card wg-click" @click="openTasks">
+          <p class="wg-tit">传输任务<span class="wg-badge" v-if="transfer.activeCount">{{ transfer.activeCount }} 进行中</span></p>
+          <template v-if="transfer.tasks.length">
+            <div v-for="t in transfer.tasks.slice(0, 3)" :key="t.id" class="wg-drive">
+              <div class="wg-row"><span class="wg-name">{{ t.name }}</span><span class="wg-val">{{ taskState(t.status) }}</span></div>
+              <div class="wg-track"><div class="wg-fill trans" :class="{ err: t.status === 'error' }" :style="{ width: Math.round(t.progress) + '%' }"></div></div>
+            </div>
+            <p class="wg-more" v-if="transfer.tasks.length > 3">还有 {{ transfer.tasks.length - 3 }} 个任务…</p>
+          </template>
+          <p class="wg-empty" v-else>暂无传输任务</p>
+        </div>
+        <!-- 收藏：点击打开所在目录 -->
+        <div class="wg-card">
+          <p class="wg-tit">收藏</p>
+          <template v-if="stars.length">
+            <div v-for="s in stars.slice(0, 5)" :key="s.id" class="wg-star" :title="s.path" @click="openStar(s)">
+              <span class="wg-starico">★</span><span class="wg-name">{{ s.name }}</span>
+            </div>
+          </template>
+          <p class="wg-empty" v-else>暂无收藏（资源管理器右键「收藏到快速访问」）</p>
+        </div>
+        <div class="wg-card wg-click" @click="openGithub">
+          <p class="wg-tit">CloudPan · 私有云存储</p>
+          <p class="wg-empty">Go + Vue 全栈 · 三主题 Web 桌面 · GitHub 开源</p>
         </div>
       </div>
     </div>
@@ -57,9 +83,67 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { fsApi, type Policy } from '../../api/modules'
+import { useTransfer } from '../../stores/transfer'
+import { useSession } from '../../stores/session'
+import { useWindows } from '../../stores/windows'
 const props = defineProps<{ shown: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
+
+const transfer = useTransfer()
+const session = useSession()
+const store = useWindows()
+
+// 存储空间：各盘用量（相对最大盘归一化为条形）+ 个人配额
+const drives = ref<(Policy & { _pct: number })[]>([])
+const quotaPct = computed(() => {
+  const q = session.group?.quotaMB ?? 0
+  if (!q || q < 0) return 4 // 不限量：装饰性细条
+  return Math.min(100, Math.round((session.user?.usedBytes || 0) / (q * 1048576) * 100))
+})
+const quotaText = computed(() => {
+  const used = fmtBytes(session.user?.usedBytes || 0)
+  const q = session.group?.quotaMB ?? 0
+  return q && q > 0 ? `${used} / ${q} GB` : `${used} · 不限量`
+})
+
+function fmtBytes(n: number) {
+  if (!n) return '0 B'
+  if (n > 1073741824) return (n / 1073741824).toFixed(1) + ' GB'
+  if (n > 1048576) return (n / 1048576).toFixed(1) + ' MB'
+  if (n > 1024) return (n / 1024).toFixed(0) + ' KB'
+  return n + ' B'
+}
+
+function taskState(s: string) {
+  return ({ hashing: '校验中', uploading: '上传中', paused: '已暂停', done: '已完成', error: '失败', instant: '秒传' } as Record<string, string>)[s] || s
+}
+
+// 收藏
+const stars = ref<any[]>([])
+function openStar(s: any) {
+  const parent = s.path.slice(0, s.path.lastIndexOf('/')) || '/'
+  store.open('explorer', { policyId: s.policyId, path: parent }, { title: s.name, icon: 'explorer', w: 1000, h: 640 })
+  emit('close')
+}
+function openTasks() {
+  store.open('tasks', null, { title: '任务中心', icon: 'tasks', w: 780, h: 580 })
+  emit('close')
+}
+function openGithub() {
+  window.open('https://github.com/johngko/cloudpan', '_blank', 'noopener')
+  emit('close')
+}
+
+onMounted(async () => {
+  try {
+    const pols = await fsApi.policies()
+    const max = Math.max(1, ...pols.map(p => p.usageBytes || 0))
+    drives.value = pols.map(p => ({ ...p, _pct: Math.max(3, Math.round((p.usageBytes || 0) / max * 100)) }))
+  } catch { /* 忽略 */ }
+  try { stars.value = (await fsApi.starList()) || [] } catch { /* 忽略 */ }
+})
 
 // 计算器状态（与演示站 widgetCalculator 同行为）
 const cur = ref('0')
@@ -96,3 +180,36 @@ function back() { cur.value = cur.value.length > 1 ? cur.value.slice(0, -1) : '0
 function square() { cur.value = String(Math.pow(parseFloat(cur.value), 2)); fresh = true }
 function sqrt() { const v = parseFloat(cur.value); cur.value = v < 0 ? '错误' : String(Math.sqrt(v)); fresh = true }
 </script>
+
+<style scoped>
+.wg-scroll { overflow: auto; display: flex; flex-direction: column; gap: 10px }
+.wg-card {
+  background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(20px);
+}
+.wg-click { cursor: pointer }
+.wg-click:hover { background: rgba(255, 255, 255, 0.92) }
+.wg-tit { font-size: 13px; font-weight: 600; color: #1b1b1f; margin-bottom: 8px; display: flex; align-items: center; gap: 8px }
+.wg-badge {
+  font-size: 11px; font-weight: 500; color: #fff; background: #2f86d6;
+  border-radius: 999px; padding: 1px 8px;
+}
+.wg-drive { margin-bottom: 8px }
+.wg-drive:last-child { margin-bottom: 0 }
+.wg-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px }
+.wg-name { font-size: 12px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 78% }
+.wg-val { font-size: 11px; color: #889; flex: none }
+.wg-track { height: 6px; border-radius: 3px; background: rgba(0, 0, 0, 0.08); overflow: hidden }
+.wg-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4aa8ff, #2f86d6) }
+.wg-fill.quota { background: linear-gradient(90deg, #7ec97e, #3f9e3f) }
+.wg-fill.trans { background: linear-gradient(90deg, #ffb457, #f08c2e) }
+.wg-fill.trans.err { background: #e05252 }
+.wg-more { font-size: 11px; color: #99a; margin-top: 6px }
+.wg-empty { font-size: 12px; color: #99a }
+.wg-star {
+  display: flex; align-items: center; gap: 7px; padding: 5px 6px; border-radius: 7px;
+  cursor: pointer; font-size: 12px; color: #333;
+}
+.wg-star:hover { background: rgba(47, 134, 214, 0.1) }
+.wg-starico { color: #f7c948; font-size: 12px }
+</style>

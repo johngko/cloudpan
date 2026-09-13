@@ -90,8 +90,8 @@ export interface DesktopAppIcon { id: string; name: string; icon: string; appId:
 /**
  * 桌面图标（三个主题桌面共用）：
  * base = 主题自有的固定图标（此电脑/回收站，名称随主题语言）；
- * 动态部分 = visibleApps() 中带 desktop 标记的应用，随「可安装应用安装态」
- * 与「系统功能开关」响应式增删（安装/卸载立即生效，无需重挂桌面）。
+ * 动态部分 = 全部可见应用（visibleApps()：管理员全量，普通用户按权限），
+ * 随「可安装应用安装态」与「系统功能开关」响应式增删（安装/卸载立即生效，无需重挂桌面）。
  */
 export function useDesktopIcons(base: DesktopAppIcon[]): Ref<DesktopAppIcon[]> {
   const apps = useAppState()
@@ -100,7 +100,7 @@ export function useDesktopIcons(base: DesktopAppIcon[]): Ref<DesktopAppIcon[]> {
   const sync = () => {
     const baseIds = new Set(base.map(b => b.id))
     const dyn = visibleApps()
-      .filter(a => a.desktop && !baseIds.has(a.id))
+      .filter(a => !baseIds.has(a.id))
       .map(a => ({ id: a.id, name: a.name, icon: a.icon, appId: a.id }))
     icons.value = [...base, ...dyn]
   }
