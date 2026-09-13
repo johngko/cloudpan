@@ -129,6 +129,10 @@ const apps: Record<string, string> = {
     `<rect x="5.8" y="6.8" width="12.4" height="9" rx="1.2"/><circle cx="9" cy="10" r="1" stroke-width="1.6"/><path d="M6.6 14.6l2.6-2.5 1.9 1.8 1.7-1.6 2.2 2" stroke-width="1.7"/><path d="M8 18.4h8" stroke-width="1.7"/><circle cx="10.4" cy="18.4" r="1.1" fill="#ffffff" stroke="none"/>`),
   pdfreader: tile('#ff9a8a', '#dc2626',
     `<path d="M8 6.4h5l3 3v8.2a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7.4a1 1 0 0 1 1-1z"/><path d="M13 6.4v3h3"/><circle cx="10.6" cy="12.6" r="1.9" stroke-width="1.7"/><path d="M12 14l1.6 1.6" stroke-width="1.7"/>`),
+  gallery: tile('#74ebd5', '#9face6',
+    `<rect x="4.6" y="7.2" width="10.2" height="12" rx="1.4" fill="#ffffff" stroke="none" opacity="0.5"/><rect x="8" y="5.4" width="10.6" height="13" rx="1.4" fill="#ffffff" stroke="none"/><circle cx="11.2" cy="9.2" r="1.1" fill="#1e88e5" stroke="none"/><path d="M9 15.8l2.7-2.7 2 1.9 1.7-1.6 2.6 2.4v1.2a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1z" fill="#1e88e5" stroke="none"/>`),
+  mediacenter: tile('#ff95cc', '#a06cf8',
+    `<rect x="5.4" y="7.6" width="13.2" height="9.2" rx="1.3" fill="#ffffff" stroke="none"/><rect x="6.6" y="8.8" width="1.5" height="1.5" fill="#a06cf8" stroke="none"/><rect x="6.6" y="11.5" width="1.5" height="1.5" fill="#a06cf8" stroke="none"/><rect x="6.6" y="14.2" width="1.5" height="1.5" fill="#a06cf8" stroke="none"/><rect x="16" y="8.8" width="1.5" height="1.5" fill="#a06cf8" stroke="none"/><rect x="16" y="11.5" width="1.5" height="1.5" fill="#a06cf8" stroke="none"/><rect x="16" y="14.2" width="1.5" height="1.5" fill="#a06cf8" stroke="none"/><path d="M11 10.4l4 2.4-4 2.4z" fill="#a06cf8" stroke="none"/>`),
   poster: tile('#ff9dcb', '#e0328c',
     `<rect x="7" y="5.6" width="10" height="13" rx="1.1"/><circle cx="9.9" cy="9" r="1.1" stroke-width="1.6"/><path d="M7.6 15.4l2.6-2.6 1.9 1.8 1.6-1.5 2.2 2" stroke-width="1.6"/><path d="M9.4 19.8h5.2M11.4 21.6h1.4" stroke-width="1.5"/>`),
 

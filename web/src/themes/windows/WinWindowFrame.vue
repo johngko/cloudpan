@@ -9,16 +9,13 @@
           <svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 8.2h8" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
         </button>
         <button class="win-ctrl" @click="toggleMax" :title="w.maximized ? '还原' : '最大化'">
-          <!-- bi-app：四小方格；还原态 = 双叠层方格 -->
+          <!-- Win11 标准：最大化 = 单个空心方框；还原 = 前后两叠层方框 -->
           <svg v-if="!w.maximized" width="14" height="14" viewBox="0 0 16 16">
-            <rect x="3.4" y="3.4" width="4.6" height="4.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="8" y="3.4" width="4.6" height="4.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="3.4" y="8" width="4.6" height="4.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="8" y="8" width="4.6" height="4.6" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <rect x="3.8" y="3.8" width="8.4" height="8.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
           </svg>
           <svg v-else width="14" height="14" viewBox="0 0 16 16">
-            <path d="M5.5 4.5h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M4 7.2H3.2a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <rect x="5.6" y="5.6" width="6.8" height="6.8" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M4.4 7.4H3.8a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1h2.6a1 1 0 0 1 1 1v.6" fill="none" stroke="currentColor" stroke-width="1.2"/>
           </svg>
         </button>
         <button class="win-ctrl close" @click="close" title="关闭">

@@ -39,13 +39,13 @@ export const APPS: AppDef[] = [
   // 海报设计（poster-design 前端 vendored 到 /vendor/poster/）：模板库 + 素材库走内置只读盘 T:，
   // 编辑器同源 iframe，作品 .poster.json 存用户盘，PNG 导出走分块上传
   { id: 'poster', name: '海报设计', icon: 'poster', w: 1500, h: 850, feature: 'poster' },
-  { id: 'mediacenter', name: '媒体中心', icon: 'media', w: 1080, h: 680, desktop: true, installable: true },
+  { id: 'mediacenter', name: '媒体中心', icon: 'mediacenter', w: 1080, h: 680, desktop: true, installable: true },
   // 统一任务中心：聚合「上传/秒传任务（本机 transfer 队列）」与「离线下载（服务端任务队列）」
   { id: 'tasks', name: '任务中心', icon: 'tasks', w: 780, h: 580, desktop: true, pinned: true },
   // 壁纸中心：内置目录 + 管理员目录 + 我的壁纸（URL），支持定时自动轮换
   { id: 'wallpapers', name: '壁纸中心', icon: 'wallpapers', w: 860, h: 600, desktop: true, pinned: true },
   // 图库：按月份分组的照片墙（递归收集 + 缩略图缓存），点击进图片查看器灯箱
-  { id: 'photos', name: '图库', icon: 'image', w: 1000, h: 660, desktop: true, installable: true },
+  { id: 'photos', name: '图库', icon: 'gallery', w: 1000, h: 660, desktop: true, installable: true },
   { id: 'shared', name: '来自他人的共享', icon: 'share', w: 900, h: 600, pinned: true, feature: 'usershare' },
   { id: 'appcenter', name: '应用中心', icon: 'appstore', w: 980, h: 640, desktop: true, pinned: true, feature: 'app_center' },
   { id: 'settings', name: '设置', icon: 'settings', w: 900, h: 620, desktop: true, pinned: true },
