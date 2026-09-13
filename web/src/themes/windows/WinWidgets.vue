@@ -39,6 +39,22 @@
         <span style="color: #7f7f7f; font-size: 12px">实时</span>
       </div>
       <div class="w12-wg-content wg-scroll">
+        <!-- 天气：Open-Meteo（免费无 key），离线优雅降级 -->
+        <div class="wg-card">
+          <p class="wg-tit">天气
+            <select class="wg-city" v-model="city" title="选择城市">
+              <option v-for="c in cities" :key="c.name" :value="c.name">{{ c.name }}</option>
+            </select>
+          </p>
+          <template v-if="wx.ok">
+            <div class="wg-wx">
+              <span class="wg-wxico">{{ wx.icon }}</span>
+              <span class="wg-wxt">{{ wx.temp }}°C</span>
+              <span class="wg-wxd">{{ wx.desc }} · 风 {{ wx.wind }} km/h</span>
+            </div>
+          </template>
+          <p class="wg-empty" v-else>{{ wx.err || '获取中…' }}</p>
+        </div>
         <!-- 存储空间：各盘用量 + 个人配额 -->
         <div class="wg-card">
           <p class="wg-tit">存储空间</p>
@@ -73,6 +89,17 @@
           </template>
           <p class="wg-empty" v-else>暂无收藏（资源管理器右键「收藏到快速访问」）</p>
         </div>
+        <!-- SSH 快捷连接：有终端权限才显示 -->
+        <div class="wg-card" v-if="termAllowed">
+          <p class="wg-tit">SSH 快捷连接</p>
+          <template v-if="sshs.length">
+            <div v-for="c in sshs.slice(0, 5)" :key="c.id" class="wg-star" :title="c.username + '@' + c.host" @click="openSsh(c)">
+              <span class="wg-starico">⇄</span><span class="wg-name">{{ c.name }}</span>
+              <span class="wg-val" style="margin-left: auto">{{ c.host }}</span>
+            </div>
+          </template>
+          <p class="wg-empty" v-else>暂无 SSH 连接（终端应用中添加）</p>
+        </div>
         <div class="wg-card wg-click" @click="openGithub">
           <p class="wg-tit">CloudPan · 私有云存储</p>
           <p class="wg-empty">Go + Vue 全栈 · 三主题 Web 桌面 · GitHub 开源</p>
@@ -83,8 +110,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { fsApi, type Policy } from '../../api/modules'
+import { ref, computed, onMounted, watch } from 'vue'
+import { fsApi, termApi, appsApi, type Policy } from '../../api/modules'
+import { useAppState } from '../../stores/appstate'
 import { useTransfer } from '../../stores/transfer'
 import { useSession } from '../../stores/session'
 import { useWindows } from '../../stores/windows'
@@ -94,6 +122,52 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const transfer = useTransfer()
 const session = useSession()
 const store = useWindows()
+const appstate = useAppState()
+const termAllowed = computed(() => appstate.isAvailable('terminal'))
+
+// ---- 天气（Open-Meteo 免费无 key；离线时优雅降级）----
+const cities = [
+  { name: '北京', lat: 39.9042, lon: 116.4074 },
+  { name: '上海', lat: 31.2304, lon: 121.4737 },
+  { name: '广州', lat: 23.1291, lon: 113.2644 },
+  { name: '深圳', lat: 22.5431, lon: 114.0579 },
+  { name: '成都', lat: 30.5728, lon: 104.0668 },
+  { name: '杭州', lat: 30.2741, lon: 120.1551 },
+  { name: '西安', lat: 34.3416, lon: 108.9398 },
+  { name: '哈尔滨', lat: 45.8038, lon: 126.535 }
+]
+const city = ref(localStorage.getItem('cp_wx_city') || '北京')
+const wx = ref<{ ok: boolean; temp: string; desc: string; wind: string; icon: string; err: string }>({ ok: false, temp: '', desc: '', wind: '', icon: '', err: '' })
+const WMO: Record<number, string> = { 0: '晴', 1: '大致晴', 2: '多云', 3: '阴', 45: '雾', 48: '雾凇', 51: '毛毛雨', 53: '毛毛雨', 55: '毛毛雨', 61: '小雨', 63: '中雨', 65: '大雨', 66: '冻雨', 67: '冻雨', 71: '小雪', 73: '中雪', 75: '大雪', 77: '雪粒', 80: '阵雨', 81: '阵雨', 82: '强阵雨', 85: '阵雪', 86: '阵雪', 95: '雷雨', 96: '雷雨冰雹', 99: '雷雨冰雹' }
+async function loadWx() {
+  const c = cities.find(x => x.name === city.value) || cities[0]
+  wx.value = { ok: false, temp: '', desc: '', wind: '', icon: '', err: '获取中…' }
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const j: any = await r.json()
+    const cur = j.current || {}
+    const code = Number(cur.weather_code ?? -1)
+    wx.value = {
+      ok: true,
+      temp: String(Math.round(cur.temperature_2m ?? '')),
+      desc: WMO[code] ?? '未知',
+      wind: String(Math.round(cur.wind_speed_10m ?? 0)),
+      icon: code === 0 ? '☀️' : code <= 2 ? '⛅' : code === 3 ? '☁️' : code >= 71 && code <= 86 ? '🌨️' : code >= 95 ? '⛈️' : code >= 45 && code <= 48 ? '🌫️' : '🌧️',
+      err: ''
+    }
+  } catch {
+    wx.value = { ok: false, temp: '', desc: '', wind: '', icon: '', err: '暂无法获取天气（离线或网络不可达）' }
+  }
+}
+watch(city, (v) => { localStorage.setItem('cp_wx_city', v); loadWx() })
+
+// ---- SSH 快捷连接 ----
+const sshs = ref<{ id: number; name: string; host: string; username: string }[]>([])
+function openSsh(c: any) {
+  store.open('terminal', { mode: 'ssh', connId: c.id }, { title: 'SSH · ' + c.name, icon: 'terminal', w: 1040, h: 640 })
+  emit('close')
+}
 
 // 存储空间：各盘用量（相对最大盘归一化为条形）+ 个人配额
 const drives = ref<(Policy & { _pct: number })[]>([])
@@ -137,6 +211,10 @@ function openGithub() {
 }
 
 onMounted(async () => {
+  loadWx()
+  if (termAllowed.value) {
+    try { sshs.value = (await termApi.conns()) || [] } catch { /* 无权限/离线 */ }
+  }
   try {
     const pols = await fsApi.policies()
     const max = Math.max(1, ...pols.map(p => p.usageBytes || 0))
@@ -212,4 +290,12 @@ function sqrt() { const v = parseFloat(cur.value); cur.value = v < 0 ? '错误' 
 }
 .wg-star:hover { background: rgba(47, 134, 214, 0.1) }
 .wg-starico { color: #f7c948; font-size: 12px }
+.wg-city {
+  margin-left: auto; font-size: 11px; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px;
+  background: rgba(255,255,255,0.7); padding: 1px 4px; color: #333; outline: none;
+}
+.wg-wx { display: flex; align-items: center; gap: 10px }
+.wg-wxico { font-size: 26px }
+.wg-wxt { font-size: 22px; font-weight: 300; color: #1b1b1f }
+.wg-wxd { font-size: 12px; color: #667 }
 </style>

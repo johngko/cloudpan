@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useSession } from '../stores/session'
 import { termApi, type SshConnView } from '../api/modules'
 import TermPanel from './terminal/TermPanel.vue'
 import SftpPanel from './terminal/SftpPanel.vue'
@@ -10,8 +11,12 @@ import ConnDialog from './terminal/ConnDialog.vue'
  * 契约：{ winId, props }；关闭按钮 → cp-close-window
  */
 const props = defineProps<{ winId: number; props: any }>()
+const session = useSession()
 
-const mode = ref<'local' | 'ssh'>(props.props?.mode === 'ssh' ? 'ssh' : 'local')
+// 安全边界：本地终端 = 项目服务器 shell，仅管理员；其他用户（含访客）即使被授权
+// 也只能用 SSH 远程终端连自己的服务器（后端 WS 对非 admin 的 local 模式直接 403）
+const isAdmin = computed(() => session.user?.role === 'admin')
+const mode = ref<'local' | 'ssh'>(props.props?.mode === 'ssh' || !isAdmin.value ? 'ssh' : 'local')
 const shell = ref('')
 const shells = ref<string[]>([])
 const os = ref('linux')
@@ -94,7 +99,7 @@ function onStatus(s: typeof status.value, msg?: string) {
     <!-- 工具栏 -->
     <div class="term-toolbar">
       <div class="term-seg">
-        <button :class="{ on: mode === 'local' }" @click="mode = 'local'">
+        <button v-if="isAdmin" :class="{ on: mode === 'local' }" @click="mode = 'local'">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9l3 3-3 3M13 15h4" /></svg>
           本地终端
         </button>

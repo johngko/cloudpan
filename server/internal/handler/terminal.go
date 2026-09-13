@@ -158,6 +158,13 @@ func (h *TerminalHandler) WebSocket(c *gin.Context) {
 		dto.Fail(c, 400, "mode 必须为 local 或 ssh")
 		return
 	}
+	// 安全边界（关键）：本地终端 = 项目服务器自身的 shell，仅管理员可用。
+	// 普通用户/访客即使被授予「终端」功能权限，也只能用 SSH 远程终端连接自己的服务器，
+	// 绝不允许拿到运行本项目的主机 shell（本服务以什么身份运行，本地终端就是什么身份）。
+	if mode == "local" && (x.user == nil || x.user.Role != "admin") {
+		dto.Fail(c, 403, "本地终端仅管理员可用")
+		return
+	}
 	if !termAcquire(mode, x.user.ID) {
 		dto.Fail(c, 429, "并发终端数已达上限，请关闭部分终端后重试")
 		return

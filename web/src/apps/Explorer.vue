@@ -554,7 +554,8 @@ const apps = useAppState()
 const router = useRouter()
 // 离线下载/终端等无权限功能：入口整体隐藏（不显示禁用态），与「无权限功能完全隐藏」原则一致
 const canOffline = computed(() => canUseOffline())
-const canTerminal = computed(() => apps.isAvailable('terminal'))
+// 在终端中打开 = 本地终端（服务器 shell），仅管理员；普通用户的终端仅限 SSH 连自己的服务器
+const canTerminal = computed(() => session.user?.role === 'admin' && apps.isAvailable('terminal'))
 const clip = useClipboard()
 const transfer = useTransfer()
 const ctx = useContextMenu()

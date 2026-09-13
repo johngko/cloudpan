@@ -73,7 +73,9 @@ func buildCSP(origins []string) string {
 		"style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data: blob:; " +
 		"media-src 'self' blob:; " +
-		"connect-src 'self'; " +
+		// api.open-meteo.com：小组件天气卡的数据源（免费公共天气 API，只读 GET，无 key），
+		// 精确放行该主机；离线时前端优雅降级显示「暂无法获取天气」
+		"connect-src 'self' https://api.open-meteo.com; " +
 		"font-src 'self' data:; " +
 		"frame-src 'self'; " +
 		"frame-ancestors 'none'; " +
