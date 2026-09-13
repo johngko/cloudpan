@@ -22,7 +22,7 @@ var posterFS embed.FS
 
 // Version 内容版本号：变化时启动会把嵌入内容重新展开到目标目录（合并语义，
 // 管理员后续添加的文件保留）。重新生成模板/素材后必须同步更新本常量。
-const Version = "20260911-1"
+const Version = "20260913-1"
 
 // fonts 内置字体清单（manifest 的 fonts 段；与 vendor/poster/fonts/ 内容对应）
 var fonts = []map[string]string{
@@ -131,6 +131,7 @@ func numInt(v any) int {
 // 管理员上传时直接用中文子目录，原名透传。
 var dirCategory = map[string]string{
 	"backgrounds": "背景",
+	"patterns":    "图案",
 	"decorations": "装饰",
 	"borders":     "边框",
 	"icons":       "图标",

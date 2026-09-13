@@ -24,7 +24,7 @@
             <input v-model="tplQuery" placeholder="搜索模板（如 618、婚礼、招聘）" />
           </div>
           <div class="tpl-grid">
-            <div v-for="t in filteredTpl" :key="t.file" class="tpl-card" :title="t.title + '（' + t.width + '×' + t.height + '）'" @click="openTemplate(t)">
+            <div v-for="t in visibleTpl" :key="t.file" class="tpl-card" :title="t.title + '（' + t.width + '×' + t.height + '）'" @click="openTemplate(t)">
               <img v-if="t.thumb" :src="tUrl(t.thumb)" loading="lazy" alt="" @error="onImgErr" />
               <div v-else class="tpl-ph"><AppIcon name="poster" :size="30" /></div>
               <div class="tpl-meta">
@@ -37,6 +37,10 @@
               <AppIcon name="poster" :size="34" />
               <span>模板清单加载失败</span>
             </div>
+            <div ref="tplSentinel" style="grid-column: 1 / -1; height: 8px"></div>
+          </div>
+          <div v-if="tplLimit < visibleTpl.length || tplLimit < filteredTpl.length" style="text-align: center; padding: 0 0 10px">
+            <button class="mini-btn" @click="tplLimit += 120">加载更多（{{ filteredTpl.length - tplLimit }}）</button>
           </div>
           <div v-if="isAdmin" class="admin-upload">
             <div class="au-row">
@@ -77,10 +81,14 @@
             <div v-for="c in matCats" :key="c" class="mat-cat" :class="{ on: matCat === c }" @click="matCat = c">{{ c }}</div>
           </div>
           <div class="mat-grid">
-            <div v-for="m in filteredMat" :key="m.file" class="mat-card" :title="m.name" @click="addMaterial(m)">
+            <div v-for="m in visibleMat" :key="m.file" class="mat-card" :title="m.name" @click="addMaterial(m)">
               <img :src="tUrl(m.file)" loading="lazy" alt="" @error="onImgErr" />
               <div v-if="isAdmin" class="card-del" title="删除该内置素材" @click.stop="delBuiltin(m.file.slice(1))">×</div>
             </div>
+            <div ref="matSentinel" style="grid-column: 1 / -1; height: 8px"></div>
+          </div>
+          <div v-if="matLimit < filteredMatAll.length" style="text-align: center; padding: 0 0 10px">
+            <button class="mini-btn" @click="matLimit += 240">加载更多（{{ filteredMatAll.length - matLimit }}）</button>
           </div>
           <div v-if="isAdmin" class="admin-upload">
             <div class="au-row">
@@ -211,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { fsApi, adminApi, posterApi, rawUrl, Policy, FileItem } from '../api/modules'
 import { getToken } from '../api/http'
 import { useToast } from '../stores/dialog'
@@ -250,7 +258,7 @@ const tplSrc = ref<'sys' | 'my'>('sys')
 const matSrc = ref<'sys' | 'my'>('sys')
 const tplQuery = ref('')
 const matCat = ref('全部')
-const matCats = ['全部', '背景', '装饰', '边框', '图标', '纹理']
+const matCats = ['全部', '背景', '图案', '装饰', '边框', '图标', '纹理']
 
 const tpls = computed<Tpl[]>(() => {
   const arr: any[] = manifest.value?.templates || []
@@ -264,7 +272,31 @@ const filteredTpl = computed(() => {
   const q = tplQuery.value.trim().toLowerCase()
   return q ? tpls.value.filter(t => (t.title + t.file).toLowerCase().includes(q)) : tpls.value
 })
-const filteredMat = computed(() => matCat.value === '全部' ? mats.value : mats.value.filter(m => m.category === matCat.value))
+// 万级条目懒渲染：IntersectionObserver 触底加载下一块
+const TPL_CHUNK = 120
+const MAT_CHUNK = 240
+const tplLimit = ref(TPL_CHUNK)
+const matLimit = ref(MAT_CHUNK)
+const visibleTpl = computed(() => filteredTpl.value.slice(0, tplLimit.value))
+const filteredMatAll = computed(() => matCat.value === '全部' ? mats.value : mats.value.filter(m => m.category === matCat.value))
+const visibleMat = computed(() => filteredMatAll.value.slice(0, matLimit.value))
+const tplSentinel = ref<HTMLDivElement>()
+const matSentinel = ref<HTMLDivElement>()
+let tplObserver: IntersectionObserver | null = null
+let matObserver: IntersectionObserver | null = null
+function setupObservers() {
+  tplObserver?.disconnect(); matObserver?.disconnect()
+  tplObserver = new IntersectionObserver((es) => {
+    if (es.some(e => e.isIntersecting) && tplLimit.value < filteredTpl.value.length) tplLimit.value += TPL_CHUNK
+  }, { root: document.querySelector('.tpl-grid')?.closest('.side-body'), rootMargin: '200px' })
+  matObserver = new IntersectionObserver((es) => {
+    if (es.some(e => e.isIntersecting) && matLimit.value < filteredMatAll.value.length) matLimit.value += MAT_CHUNK
+  }, { root: document.querySelector('.mat-grid')?.closest('.side-body'), rootMargin: '200px' })
+  if (tplSentinel.value) tplObserver.observe(tplSentinel.value)
+  if (matSentinel.value) matObserver.observe(matSentinel.value)
+}
+onMounted(() => { setTimeout(setupObservers, 800) })
+watch([tplQuery, matCat, tab, tplSrc, matSrc], () => { tplLimit.value = TPL_CHUNK; matLimit.value = MAT_CHUNK; setTimeout(setupObservers, 150) })
 
 function tUrl(p: string) {
   return tPolicy.value ? rawUrl(tPolicy.value.id, p) : ''
@@ -288,8 +320,9 @@ function tplTitle(name: string) {
 }
 async function reloadManifest() {
   if (!tPolicy.value) return
-  const d = await fsApi.readText(tPolicy.value.id, '/index.json')
-  manifest.value = JSON.parse(d.content || '{}')
+  // 清单较大（万级条目）超 readText 上限，走 raw 直链
+  const r = await fetch(rawUrl(tPolicy.value.id, '/index.json'))
+  manifest.value = await r.json()
 }
 
 // ---- 我的资源（自己盘 /poster/，用户间隔离） ----
