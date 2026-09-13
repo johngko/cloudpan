@@ -1,44 +1,22 @@
 # CloudPan
 
-**Go + Vue 自托管私有云存储 —— 带完整 Web 桌面外壳（Windows 12 / macOS / Deepin 三主题）的网盘系统**
-
-A self-hosted private cloud drive in **Go + Vue** with a full **web desktop shell** — Windows 12, macOS and Deepin themes.
+用 Go 和 Vue 写的私有云盘，带一套完整的 Web 桌面，Windows 12 / macOS / Deepin 三套主题可以随时切换。
 
 ![CloudPan 桌面](docs/screenshots/win12-02-desktop.png)
 
----
+## 简介
 
-## 项目简介
+CloudPan 是一个单二进制的自托管网盘。后端 Go（Gin + GORM + SQLite），前端 Vue 3 + TypeScript + Vite，前端构建产物用 `go:embed` 打进二进制，编译出来一个可执行文件就能跑，不需要 Docker，也不依赖外部数据库。
 
-CloudPan 是一个用 **Go（Gin + GORM + SQLite）** 与 **Vue 3 + TypeScript + Vite** 从零实现的私有云存储系统。前端构建产物通过 `go:embed` 嵌入 Go 二进制，**单文件部署**，无 Docker 依赖。
+做这个项目的想法是把网盘和桌面结合起来：登录之后看到的不是一排排表单，而是一台「电脑」——开机动画、登录页、可以拖拽缩放贴边的窗口、开始菜单、任务栏、控制中心、全局搜索，桌面图标双击就能打开对应的应用。
 
-它的最大特色是**完整的 Web 桌面外壳**：打开浏览器就像开了一台电脑——BIOS 风格开机动画、系统登录页、可拖拽/缩放/贴边的窗口、开始菜单 / Launchpad / 启动器、任务栏 / Dock、全局搜索、控制中心……并且内置 **三套可切换的操作系统主题**：
+内置 26 个应用，常用的都齐了：文件资源管理器（多标签、双视图、完整右键菜单）、记事本、计算器、终端（本地 shell 和远程 SSH，带 SFTP 面板）、内置浏览器（服务端代理，大部分网站都能嵌）、图片查看器、媒体播放器、媒体中心、图库、Office 编辑器（对接 ONLYOFFICE）、PDF 阅读器、思维导图、白板、流程图、图片编辑器、压缩包浏览器，还有海报设计——内置了一万多张模板、一万一千多个素材和 51 款免费商用字体，AI 抠图和配色离线就能用。
 
-| Windows 12 概念版风格 | macOS（对标 Sonoma） | Deepin（对标 DDE 25） |
-|---|---|---|
-| ![win12](docs/screenshots/win12-02-desktop.png) | ![macos](docs/screenshots/macos-02-desktop.png) | ![deepin](docs/screenshots/deepin-02-desktop.png) |
+网盘本身该有的也都有：分块上传、断点续传、秒传，分享链接（提取码 / 有效期 / 下载次数），回收站，在线解压，离线下载（服务端代下），WebDAV，多用户、用户组、配额、审计日志。存储层参考了 Cloudreve 的驱动注册表设计，本地目录之外，123 云盘、阿里云盘、百度网盘、天翼云盘（实验性）都能挂。
 
-桌面内置 16 个应用：文件资源管理器、此电脑、回收站、记事本、终端、计算器、网络测速、**内置浏览器**、图片查看器、媒体播放器、Office 编辑器、媒体中心、来自他人的共享、应用中心、设置、管理控制台。
+字体、模板、素材、模型这些资源全部打包在本地，整个系统在局域网里没有外网也能正常使用（只有天气小组件和 AI 文案 / 生图这两个可选项需要联网，离线时会明确提示）。
 
-网盘核心功能对齐主流网盘：分块上传 + 断点续传 + SHA-256 秒传、分享链接（提取码/有效期/次数）、回收站、压缩解压、离线下载（服务器代下 + SSRF 防护）、WebDAV、ONLYOFFICE 在线编辑、多用户/用户组/配额/审计日志。存储层采用**驱动注册表架构**（借鉴 Cloudreve 设计），本地目录与 123 云盘 / 阿里云盘 / 百度网盘 / 天翼云盘（实验性）即插即用。
-
-## Project Overview
-
-CloudPan is a private cloud storage system built from scratch with **Go (Gin + GORM + SQLite)** and **Vue 3 + TypeScript + Vite**. The frontend is embedded into the Go binary via `go:embed` — **single-file deployment**, no Docker required.
-
-Its standout feature is a **complete web desktop shell**: opening the browser feels like booting a computer — BIOS-style boot animation, system login, draggable/resizable/snappable windows, Start menu / Launchpad / full-screen launcher, taskbar / Dock, global search, control center — with **three switchable OS themes**:
-
-| Windows 12 (concept style) | macOS (Sonoma-style) | Deepin (DDE 25-style) |
-|---|---|---|
-| ![win12](docs/screenshots/win12-02-desktop.png) | ![macos](docs/screenshots/macos-02-desktop.png) | ![deepin](docs/screenshots/deepin-02-desktop.png) |
-
-The desktop ships 16 built-in apps: File Explorer, This PC, Recycle Bin, Notepad, Terminal, Calculator, Network Speed Test, a **built-in browser** (server-side proxied), Image Viewer, Media Player, Office Editor, Media Center, Shared with Me, App Center, Settings, and an Admin Console.
-
-The storage core matches mainstream cloud drives: chunked upload with resume + SHA-256 instant upload, share links (access code / expiry / download count), recycle bin, zip compression/extraction, offline download (server-side fetch with SSRF protection), WebDAV, ONLYOFFICE online editing, multi-user / user groups / quotas / audit log. The storage layer uses a **driver registry architecture** (inspired by Cloudreve): local directories plus 123Pan / Aliyun Drive / Baidu Wangpan / Tianyi Cloud (experimental) plug in and out.
-
----
-
-## 截图 Screenshots
+## 截图
 
 ### Windows 12 主题
 
@@ -84,50 +62,45 @@ The storage core matches mainstream cloud drives: chunked upload with resume + S
 
 ---
 
-## 功能特性
+## 功能
 
-**桌面外壳（三主题共享架构，`themes/` 插件包）**
-- 开机动画 → 登录 → 桌面全流程；注册/锁屏；管理员与普通用户
-- 窗口管理器：拖拽、8 向缩放、最大化、贴边分屏、最小化飞行动画、多标签资源管理器
-- Windows 12：BIOS 开机 + 花朵加载、**悬浮多段胶囊 Dock**（开始/搜索/小组件/日-夜主题切换/控制中心/日期胶囊）、双栏开始菜单（应用列表 + 已固定 + 推荐收藏 + 电源区）、全局搜索面板（全部/应用/文档/网页/设置/文件夹/照片 分类，网页结果直达内置浏览器、设置分类深链到对应页）、控制中心（网速/通知/传输/护眼/深色/锁定 + 亮度）、时间小组件
-- macOS：顶部菜单栏（应用菜单 + 系统托盘）、**高斯放大 Dock**（启动弹跳）、Launchpad（搜索 + 分类）、红绿灯窗口、无卡片式登录（大时钟 + 头像 + 胶囊输入）
-- Deepin（DDE 25）：底部 48px 全宽任务栏（左启动器 / 中应用 / 右托盘 + 显示桌面）、**全屏启动器**（分类导航 + 搜索 + 电源区）、40px 居中标题栏、登录双栏
-- 每主题 9 张壁纸（4 张 Unsplash 免费授权照片 + 5 套 CSS 渐变）+ 深色模式，设置里一键切换
-- 全局右键菜单、通知中心（未读角标 + 软清除）、传输浮窗（多任务并发、暂停/继续/取消）
+### 桌面外壳
 
-**网盘核心**
-- 存储策略抽象（借鉴 Cloudreve 设计）：本地目录 + 123 云盘 + 阿里云盘 + 百度网盘（默认只读）+ 天翼云盘（实验性），驱动注册表架构，新后端即插即用；管理控制台挂载 + 测通 + OAuth 授权
-- 文件管理：新建/重命名/移动/复制/删除（入回收站）/搜索（本盘/全局）/属性/收藏快速访问；网格与列表双视图；完整右键菜单
-- 上传：**分块上传 + 断点续传 + SHA-256 秒传**（哈希索引去重）
-- 下载：单文件直下、多选/目录 zip 打包流式下载；图片/视频/音频 Range 流式预览
-- 分享：提取码/有效期/剩余下载次数/预览开关/浏览下载计数，公开分享页
-- 回收站：还原 / 彻底删除 / 清空，删除自动计入用户用量
-- 压缩解压：右键压缩为 zip / 解压到当前目录（含子目录安全校验）
-- 离线下载：HTTP(S) 链接服务器代下载入网盘，DB 任务队列重启自动恢复，**SSRF 三层防护**
-- WebDAV：`/dav/{用户名}/{盘符}/`，独立应用密码，可挂载进 Windows 资源管理器/手机
-- ONLYOFFICE 在线编辑（未配置时自动回退内置编辑器：xlsx 可编辑表格 / docx 预览 / PDF 预览）
+三套主题共用同一套底层（`themes/` 目录下插件式组织）：
 
-**终端（真实 shell）**
-- 本地终端：服务端 PTY（Linux pty / Windows ConPTY，`creack/pty`）启动真实 shell，xterm.js + WebSocket 二进制透传，完整 TUI（vim/htop 均可用）；shell 白名单（Linux: bash/sh/zsh/fish，Windows: cmd/PowerShell），工具栏可切换
-- 远程 SSH 终端：保存多个连接（密码 / 私钥，凭证 AES-256-GCM 加密落库，API 永不回显），`x/crypto/ssh` 拨号 + PTY 协商；主机密钥 **TOFU**（首次信任、变更即拒绝）；目标地址安全校验（拒绝 169.254/16 云元数据、0.0.0.0/8、组播/保留段，域名解析后逐 IP 复检）；测通接口返回延迟与远端系统信息
-- **SFTP 文件管理面板**（SSH 模式）：面包屑浏览、上传（选择/拖拽，逐文件进度条）、下载（中文文件名 RFC5987）、新建/重命名/删除（目录递归）、连接池复用 + 空闲清扫
-- 并发限制：每用户 4 本地 / 8 SSH 会话，全局 32；连接/文件操作全量审计日志；受「终端」系统功能门控（应用中心可停）
+- 完整流程：开机动画 → 登录 / 注册 → 桌面，支持锁屏
+- 窗口管理：拖拽、八向缩放、最大化 / 还原、贴边分屏、最小化动画、多标签资源管理器
+- Windows 12：BIOS 开机动画、悬浮胶囊任务栏、双栏开始菜单、全局搜索（应用 / 文档 / 网页分类结果）、控制中心、通知中心、小组件面板（计算器、存储空间、传输任务、收藏、天气、SSH 快捷连接）
+- macOS：顶部菜单栏、高斯放大 Dock、Launchpad、红绿灯窗口按钮
+- Deepin：DDE 25 风格全宽任务栏、全屏启动器
+- 每主题 9 张壁纸 + 深色模式，设置里一键切换
+- 通知中心（未读角标）、传输浮窗（多任务并发、暂停 / 继续 / 取消）、桌面与文件右键菜单
 
-**内置浏览器（特色功能）**
-- 桌面内置浏览器应用：多标签（每页独立沙箱 iframe）、地址栏（裸域名自动补 https、非 URL 当百度搜索词）、前进/后退/刷新/主页、快捷入口、"在系统浏览器中打开"兜底
-- **服务端代理**绕过站点 X-Frame-Options/CSP frame-ancestors 的嵌入限制：HTML 自动重写 src/href/action/poster/srcset/meta-refresh 为代理路径、剥离站点 `<base>` 与 CSP、注入代理 base 兜底、gbk/big5/utf-16/latin1 转 UTF-8；非 HTML 资源透传（128MB 上限、300s 缓存）
-- 安全设计：短时效 HMAC 代理票据（`pt`，30 分钟，非真实 JWT）；iframe 沙箱**故意不带 allow-same-origin**（站点 JS 读不到网盘登录态）；复用离线下载的 SSRF 三层防线（URL 校验 + 重定向复检 + 拨号层 DNS 复检）；每 IP 300 次/分钟限速；访问日志凭证脱敏
+### 网盘
 
-**多用户体系**
-- 角色（admin/user）+ 用户组（配额、功能白名单：分享/WebDAV/压缩/离线/浏览器/应用中心、分享可下载、限速、可用存储策略白名单）
-- **用户数据隔离**：本地存储策略按用户划分独立目录（`<策略根目录>/<用户目录名>/`，如 `C:/admin`、`C:/johngko`），每个用户在网页/WebDAV/分享/离线下载/版本恢复看到的都是自己目录下的虚拟根，互相不可见；目录名取安全 ASCII 用户名（其余取 `user_<id>`）并首次固化到 `UserSetting(local_dir)`，改用户名不影响已有数据。云盘策略不隔离（后端账号本身即边界）
-- 站点设置：站点名、注册开关、邀请码、公告；审计日志（登录/文件操作/分享/管理动作/通知）
-- 登录：Win12 登录页用户名框常显（预填 admin，注册用户可清空输入自己的账号）；开放注册后新用户即可登录并使用自己的隔离空间
+- 存储：本地目录 + 123 云盘 / 阿里云盘 / 百度网盘（默认只读）/ 天翼云盘（实验性），驱动注册表架构；管理台挂载、扫码授权、token 自动续期
+- 文件：新建 / 重命名 / 移动 / 复制 / 删除（入回收站）/ 搜索 / 收藏 / 属性；网格与列表双视图
+- 上传：分块上传、断点续传、SHA-256 秒传；下载：单文件直下、多选打 zip 包、媒体流式预览
+- 分享：提取码、有效期、剩余下载次数、公开分享页
+- 回收站：还原 / 彻底删除 / 清空
+- 压缩：右键打包 zip、在线解压（路径穿越校验、防 zip-bomb）
+- 离线下载：HTTP(S) 与 BT / 磁力，服务端任务队列，SSRF 三层防护
+- WebDAV：独立应用密码，可挂载进 Windows 资源管理器
+- Office：对接 ONLYOFFICE 在线编辑，未配置时回退内置渲染
+- 多用户、用户组、应用级权限、配额、只读组、审计日志
 
-**内置应用（16）**
-文件资源管理器 / 此电脑 / 回收站 / 记事本（读写网盘文本）/ **终端**（本地真实 shell + 远程 SSH 终端，xterm.js 完整 TUI；SSH 模式带 SFTP 文件管理面板：浏览/上传/下载/新建/重命名/删除，支持拖拽上传）/ 计算器 / **网络测速**（界面仿 LibreSpeed，随机数据端点不可压缩防虚高）/ **内置浏览器** / 图片查看器（缩放旋转 + EXIF/GPS）/ 媒体播放器（视频 + 音频 + 歌词字幕，封面取自 ID3）/ Office 编辑器 / 媒体中心（可安装应用）/ 来自他人的共享 / 应用中心 / 设置（壁纸主题/账号/WebDAV 密码/我的分享/离线下载）/ 管理控制台（仪表盘/用户/用户组/存储策略与云盘授权/站点设置/审计日志）
+### 终端
 
----
+- 本地终端：服务端真实 shell（Linux pty / Windows ConPTY），xterm.js 前端，vim、htop 这类 TUI 程序正常使用；仅管理员可用
+- 远程 SSH：多连接管理（密码 / 私钥，凭据 AES-256-GCM 加密存储），主机密钥 TOFU，SFTP 文件面板
+
+### 内置浏览器
+
+多标签页 + 服务端代理。有些网站不允许被 iframe 嵌入，代理会把页面内容改写后转发（链接、样式、编码都会处理）；安全上用短时效票据、iframe 沙箱、SSRF 防护和限速。
+
+### 海报设计
+
+集成了开源 poster-design 编辑器：一万多张模板、一万一千多个素材、51 款免费商用字体（中英文），全部本地内置。AI 抠图走本地模型，AI 配色是本地算法，离线可用。作品保存为 .poster.json 放在自己的网盘里，可以导出 PNG。管理员可以随时上传模板和素材，普通用户经授权后也能管理自己的素材库，用户之间互相隔离。
 
 ## 快速开始
 
@@ -154,33 +127,6 @@ cd web && npm install && npm run dev   # Vite 5173，/api 代理到 18322
 cd server && go run .                  # 后端
 ```
 
-## Quick Start
-
-```bat
-:: Windows (requires Go 1.22+ and Node.js 18+ installed)
-build.bat      :: builds the frontend, embeds it, produces server\cloudpan.exe
-start.bat      :: starts the server, open http://localhost:18322
-```
-
-```bash
-# Linux / macOS
-./build.sh && ./server/cloudpan
-```
-
-- Default admin: `admin / admin123` (**change it immediately in Settings → Account after first login**)
-- Data directory: `server/data/` (SQLite DB, recycle bin, thumbnails, upload temp, secret key); override with `CP_DATA`
-- Port: default `18322`, override with `CP_PORT`; public URL (needed by ONLYOFFICE) via `CP_PUBLIC_URL`
-- First run: log in as admin → Admin Console → Storage Policies → mount a local directory as a disk (e.g. C:), which then shows up under This PC on the desktop
-
-**Development mode**
-
-```bash
-cd web && npm install && npm run dev   # Vite on 5173, /api proxied to 18322
-cd server && go run .                  # backend
-```
-
----
-
 ## 目录结构
 
 ```
@@ -199,35 +145,10 @@ cloudpan/
     └── src/
         ├── shell/                     # ShellHost 路由壳 / 分享页
         ├── themes/                    # 三套 OS 主题包（windows / macos / deepin，插件式）
-        ├── apps/                      # 16 个内置应用
+        ├── apps/                      # 26 个内置应用
         ├── stores/                    # session / windows / apps / ui / transfer (Pinia)
         └── api/                       # axios 封装与各模块 API
 ```
-
-## Repository Layout
-
-```
-cloudpan/
-├── build.bat / build.sh / start.bat   # build & launch scripts
-├── docs/screenshots/                  # README screenshots
-├── server/                            # Go backend (single binary, embedded frontend)
-│   ├── main.go
-│   └── internal/
-│       ├── config/  model/  dto/      # config / table models / unified responses
-│       ├── fscore/                    # storage driver interface+registry, path safety, chunked upload, dedup, zip, SSRF guard
-│       ├── driver/                    # 123Pan / Aliyun / Baidu / Tianyi cloud drivers
-│       ├── handler/                   # auth/fs/upload/share/recycle/admin/office/webdav/browser/tasks
-│       └── web/                       # go:embed frontend build output
-└── web/                               # Vue 3 + TS + Vite frontend
-    └── src/
-        ├── shell/                     # ShellHost router shell / share page
-        ├── themes/                    # three OS theme packages (windows / macos / deepin, pluggable)
-        ├── apps/                      # 16 built-in applications
-        ├── stores/                    # session / windows / apps / ui / transfer (Pinia)
-        └── api/                       # axios wrapper and per-module APIs
-```
-
----
 
 ## 部署加固
 
@@ -263,43 +184,6 @@ Nginx 参考：`location / { proxy_pass http://127.0.0.1:18322; proxy_set_header
 - 资源硬上限：离线下载 / BT 种子 / 归档解压 / 上传分片均有总量与条目数上限（防 zip-bomb 与磁盘拖爆）
 - 上传分片临时区每 6 小时自动清扫（结束/超时 48h 的会话）
 - 建议定期备份 `server/data/cloudpan.db`
-
-## Deployment & Hardening
-
-**HTTPS (Caddy recommended, auto-issued certs)**
-
-```
-pan.your-domain.com {
-    reverse_proxy 127.0.0.1:18322
-}
-```
-
-Nginx: `location / { proxy_pass http://127.0.0.1:18322; proxy_set_header Host $host; client_max_body_size 0; }` (`client_max_body_size 0` lifts the upload size limit). Once on HTTPS, set `CP_PUBLIC_URL` to the https URL (required for ONLYOFFICE; both sides must share the same scheme).
-
-**Auto-start**
-- Windows service (NSSM): `nssm install CloudPan E:\cloudpan\server\cloudpan.exe` + `AppEnvironmentExtra CP_PORT=18322 CP_DATA=E:\cloudpan\server\data`
-- Linux systemd: `[Service] WorkingDirectory=/opt/cloudpan/server; ExecStart=/opt/cloudpan/server/cloudpan; Restart=always`
-
-**Security notes**
-- Login brute-force protection: 5 failures within 15 minutes for the same IP+username locks the account (Web login and WebDAV share the same lockout table); login endpoint rate-limited per IP (10/min)
-- **Client-IP trust boundary**: **no `X-Forwarded-For` is trusted by default** (the TCP peer address is used), so attackers cannot spoof XFF to bypass the per-IP rate limits/lockouts. When deployed behind a reverse proxy (Caddy/Nginx), declare the proxy CIDRs via the `CP_TRUSTED_PROXIES` env var (comma-separated CIDR/IP, e.g. `127.0.0.1` or `10.0.0.0/8`) and the real client IP will be restored from the XFF chain
-- **Terminal is admin-only by default**: the terminal app is disabled in the app manifest and blocked for the default user group (existing deployments get the flag backfilled on boot; explicit configs are respected); regular users cannot call any `/terminal/*` endpoint even with a valid session. To grant access, enable the app in the App Center and authorize the group/user. Note the terminal executes commands as the server process user (root if started as root) — run in trusted environments only, or under a dedicated low-privilege account
-- Changing/resetting a password **invalidates all of that user's JWTs immediately** (token version check); disabling an account and wrong password return the same message (username-enumeration safe)
-- ONLYOFFICE save-callback fetches are **pinned to the configured Document Server origin** (scheme + host allowlist) to prevent callback-driven SSRF
-- Magnet trackers (tr=) and plain-HTTP seeds pass the same SSRF validation (intranet/reserved ranges rejected); BT/magnet requires its own feature permission
-- Share extraction-code verification is rate-limited per IP (no brute-forcing password-protected shares); read-only groups are refused all WebDAV mutating methods
-- **html/htm/xhtml/svg are always served as `attachment`** (never inline), closing stored XSS execution on the site origin; xlsx preview HTML is DOM-sanitized against a tag/attribute allowlist
-- CSP tightened: `unsafe-eval` and all `https:` wildcards on script/style/connect/frame removed; only the configured ONLYOFFICE Document Server origin is allowed (resolved dynamically, 10s cache)
-- **First-deploy admin password is random**, printed once to the startup log only (never persisted) — change it at first login
-- SSH connection credentials stored AES-256-GCM encrypted (key = server secret.key); host-key TOFU; target addresses reject cloud metadata/reserved ranges
-- Direct links/previews accept `?t=<jwt>` query params (img/video/a tags cannot carry headers); the token IS the login JWT — serve over HTTPS in production
-- Access log auto-redacts credentials (`t`/`token`/`st`/`pt` params)
-- Offline download and the built-in browser proxy both pass the 3-layer SSRF guard (URL validation + redirect re-check + dialer-level DNS re-check); loopback/link-local/ftp always rejected
-- Hard resource caps on offline download / BT torrents / archive extraction / chunked upload (total bytes + entry counts, anti zip-bomb and disk exhaustion)
-- Chunked-upload temp area auto-swept every 6 hours (sessions finished/expired >48h)
-- Back up `server/data/cloudpan.db` regularly
-
----
 
 ## 云盘接入与扫码绑定教程
 
@@ -339,47 +223,7 @@ Nginx: `location / { proxy_pass http://127.0.0.1:18322; proxy_set_header Host $h
 - **123云盘**：<https://www.123pan.com/developer> 注册开发者 → 创建应用 → 填入 ClientID/ClientSecret → 挂载 → 测通（无需 OAuth 跳转）
 - **天翼云盘**（实验性，社区逆向 Cookie，随时可能失效）：电脑浏览器登录天翼云盘网页版 → F12 复制 Cookie 整串填入
 
-## Cloud Storage Backends & QR-Scan Binding
-
-Supported: **123Pan** (official open platform), **Aliyun Drive** (open-platform OAuth), **Baidu Wangpan** (official API, OAuth), **Tianyi Cloud** (cookie, experimental).
-Aliyun Drive / Baidu Wangpan support **one-click binding by scanning a QR code with your phone** (AList-style mounting experience): the admin console renders the vendor's OAuth authorization page as a QR code — scan with your phone → log in and confirm → the vendor redirects back to the system's callback endpoint → tokens are stored automatically, with zero copy-paste.
-
-### Prerequisite: configure the "Public URL"
-
-QR binding relies on the vendor redirecting the phone's browser back to `<public-url>/api/cloud/callback`, so **the phone must be able to reach that address**:
-
-1. Admin Console → Site Settings → **Public URL** — set an address reachable from your phone (e.g. `https://pan.example.com`, or the LAN IP `http://192.168.1.10:18322` for LAN deployments)
-2. LAN-only deployment: put the phone on the same network and use the LAN IP
-3. Public deployment: the domain must resolve to the server (reverse proxy included)
-4. If your phone cannot reach the site at all, use the dialog's "paste the authorization code" fallback (the oob authorization page displays the code directly)
-
-### Aliyun Drive (QR binding)
-
-1. Go to <https://open.alipan.com>, register a developer account
-2. Create an app under App Management — note the **ClientID / ClientSecret**
-3. CloudPan Admin Console → Storage Policies → **Mount** → type "Aliyun Drive" → fill in ClientID/ClientSecret
-4. Click **Scan & Authorize** → a QR code appears → scan it with the **Aliyun Drive app** (or a phone browser)
-5. Log in and confirm on the phone → the phone shows "binding succeeded"
-6. The dialog detects the binding within ~3s and fills in the token automatically → click Mount to save → verify with "test connection"
-7. access_token auto-renews from then on (rotated refresh tokens are persisted), so the mount stays valid long-term
-
-### Baidu Wangpan (QR binding)
-
-1. Go to <https://console.bce.baidu.com> → create an app under the Baidu open platform — note the **AppKey / SecretKey**
-2. **Register the callback URL in the app settings**: `<your-public-url>/api/cloud/callback` (Baidu requires callbacks to be pre-registered; it must match the site setting)
-3. Admin Console → Storage Policies → Mount → type "Baidu Wangpan" → fill in AppKey/SecretKey
-4. Click **Scan & Authorize** → scan with your phone → log in to Baidu and confirm → tokens fill in automatically
-5. Save → verify with "test connection"
-6. Note: **write operations** (mkdir / upload / move / delete) require a Baidu API allow-list approval; until granted the mount is **read-only** (browsing / preview / download / instant-upload dedup are unaffected). Tokens auto-renew (30-day access tokens are refreshed automatically).
-
-### 123Pan / Tianyi Cloud
-
-- **123Pan**: <https://www.123pan.com/developer> → register → create an app → fill in ClientID/ClientSecret → Mount → test (no OAuth redirect needed)
-- **Tianyi Cloud** (experimental, community-reverse-engineered cookie, may break at any time): log in to the Tianyi web drive in a desktop browser → copy the full Cookie string via F12 → paste it in
-
----
-
-## 在线 Office（ONLYOFFICE）部署指南
+## ONLYOFFICE 部署指南
 
 配置 Document Server 后，所有 Office 文档（doc/docx/odt/rtf、xls/xlsx/ods、ppt/pptx/odp、csv）打开即进入 **ONLYOFFICE 真实编辑器**——与 Cloudreve 在线 Office 相同的模式：预览与编辑是同一套编辑器界面，权限决定只读/可写，保存自动归档旧版本。PDF 走内置查看器（与 Cloudreve 一致）。**未配置 Document Server 时自动回退内置静态渲染**（docx/xlsx/pptx 客户端渲染，编辑器窗口内有配置提示条）。
 
@@ -413,43 +257,7 @@ docker run -d --name cloudpan-ds --restart unless-stopped --network host \
 - 保存：DS 自动/强制保存 → 回调 CloudPan → 旧版本自动归档进版本历史 → 覆盖文件（rename-in 原子写）。
 - 安全：回调拉取钉扎 DS 同源地址（防 SSRF）；文件拉取/回调走 HMAC 签名 token（24h 有效）。
 
-## Online Office (ONLYOFFICE) Deployment Guide
-
-With a Document Server configured, every Office document (doc/docx/odt/rtf, xls/xlsx/ods, ppt/pptx/odp, csv) opens straight into the **real ONLYOFFICE editor** — the same mode as Cloudreve's online Office: preview and editing share one editor UI, permissions decide read-only vs editable, and saves auto-archive the previous version. PDF uses the built-in viewer (as in Cloudreve). **Without a Document Server, it falls back to built-in static rendering** (client-side docx/xlsx/pptx, with a configuration hint bar in the editor window).
-
-**1. Deploy the Document Server (Docker recommended, official image `onlyoffice/documentserver`, ~2GB RAM)**
-
-```bash
-# JWT secret: one random string, must match on both DS and CloudPan (9.4.0+ images enable JWT by default; the env var is JWT_SECRET)
-SECRET=$(openssl rand -hex 32)
-
-docker run -d --name cloudpan-ds --restart unless-stopped --network host \
-  -e JWT_SECRET="$SECRET" \
-  onlyoffice/documentserver
-```
-
-- `--network host`: the DS listens on the host's port 80 and can fetch files from `127.0.0.1:18322`. With port mapping (`-p 11111:80`) instead, the DS must reach CloudPan via the "Public URL" (127.0.0.1 inside a container points to the container itself — use the host IP or `--add-host=host.docker.internal:host-gateway`).
-- First boot takes 1–3 minutes to initialize (PostgreSQL/RabbitMQ/document services); `/healthcheck` returning `true` means ready.
-
-**2. Configure CloudPan (Admin Console → Site Settings)**
-
-| Setting | Value | Notes |
-|---|---|---|
-| Document Server URL | `http://127.0.0.1` | The address the **browser** uses to reach the DS; for remote/LAN access use the server's public address |
-| ONLYOFFICE JWT | the `$SECRET` above | Must match the DS's `JWT_SECRET`; the document config and callbacks are then signed |
-| Public URL | empty or `http(s)://<server>:18322` | The CloudPan address the **DS uses to fetch files / deliver callbacks** (must be DS-reachable); empty = auto-derived from the visitor's browser host |
-
-"Test connection" should report OK. The CSP pins the DS origin automatically (10s cache) — no other changes needed.
-
-**3. Behavior**
-
-- Editing: writable identities (admin / writable group / rw share) open in edit mode; read-only identities (read-only group / ro share / guest) are forced into read-only view, and save callbacks are rejected for read-only tokens.
-- Saving: DS auto/forced save → callback to CloudPan → previous version auto-archived into history → file overwritten (rename-in atomic write).
-- Security: callback fetches are pinned to the DS origin (anti-SSRF); file fetch/callback use HMAC-signed tokens (24h).
-
----
-
-## 更新日志 Changelog
+## 更新日志
 
 > 每次更新推送时在此追加条目（中文 + 英文），最新在上；**只保留最近 2 天**的日期段，推送时删除更早的段。
 > Every release appends entries here (Chinese + English), newest first; **only the last 2 days** of date sections are kept — older sections are pruned on each push.
@@ -535,19 +343,3 @@ docker run -d --name cloudpan-ds --restart unless-stopped --network host \
 - 壁纸照片来自 Unsplash 免费授权；网络测速仅仿 LibreSpeed 界面布局（未复制代码/资产）
 - Windows、Windows 11/12、macOS、Apple、Deepin 为各自权利人的商标，本项目为独立实现，与 Microsoft / Apple / 深度科技无任何关联
 
-## License
-
-- This project's code: **MIT** (see [LICENSE](LICENSE))
-- Wallpaper photos are from Unsplash's free license; the network speed test imitates LibreSpeed's UI layout only (no code/assets copied)
-- Windows, Windows 11/12, macOS, Apple and Deepin are trademarks of their respective owners. This project is an independent implementation and is not affiliated with Microsoft, Apple or Deepin Technology
-
----
-
-## 联系 Contact
-
-- **johngko**
-- Email: **mail@johngko.com**
-
-欢迎 Star / Issue / PR。
-
-Stars, issues and PRs are welcome.
