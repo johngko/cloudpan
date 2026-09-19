@@ -453,6 +453,10 @@ func (h *AdminHandler) SettingsSet(c *gin.Context) {
 		return
 	}
 	for k, v := range in {
+		// 敏感设置（SMTP 授权码等）落库前密封；历史密文原样透传（前缀防二次加密）
+		if k == "notify_email_pass" {
+			v = sealSecret(v)
+		}
 		model.DB.Save(&model.SiteSetting{Key: k, Value: v})
 	}
 	middleware.Audit(c, "admin", "更新站点设置")

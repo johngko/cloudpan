@@ -184,6 +184,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 			// 每个端点都挂「终端」功能门控（无门控端点 = 绕过功能开关的 shell 入口，已修复）；
 			// 默认仅管理员可用（默认用户组 AppPerms 禁用 terminal，应用清单默认关闭）
 			th := NewTerminalHandler(cfg.Secret)
+			migrateSiteSecrets() // 站点敏感设置历史明文一次性密封（依赖上面注入的服务器密钥）
 			ug.GET("/terminal/ws", middleware.AppGate("terminal"), th.WebSocket)
 			ug.GET("/terminal/platform", middleware.AppGate("terminal"), th.Platform)
 			ug.POST("/terminal/conns", middleware.AppGate("terminal"), th.ConnSave)

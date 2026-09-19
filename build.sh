@@ -8,7 +8,7 @@ export CGO_ENABLED=0
 
 echo "[1/3] building frontend..."
 # 构建前对账：APPS 与注册表加载器一一对应（缺失会静默回落成记事本窗口）
-cd web && node scripts/check-app-registry.mjs && npm run build && cd ..
+cd web && node scripts/check-app-registry.mjs && node scripts/patch-excalidraw.mjs && npm run build && cd ..
 # CAD 看图 webapp：工作区已装依赖时增量重建（源码 web/tools/cad-viewer/）
 if [ -d web/tools/cad-viewer/node_modules ]; then
   (cd web/tools/cad-viewer && npm run build)

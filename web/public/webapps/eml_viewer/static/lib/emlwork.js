@@ -500,4 +500,4 @@ function getemlcontent() {
     };
     xhr.send()
 }
-getemlcontent();
+if (typeof DEFAULT_FILE_URL !== "undefined" && DEFAULT_FILE_URL) getemlcontent();

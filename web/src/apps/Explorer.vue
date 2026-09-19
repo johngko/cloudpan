@@ -1129,6 +1129,9 @@ async function openItem(f: FileItem) {
     }
   } else if (TEXT_EXTS.includes(ext) || !ext) {
     store.open('notepad', p, { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 })
+  } else if (['eml', 'mht', 'mhtml'].includes(ext) && apps.isAvailable('eml_viewer')) {
+    // EML/MHT：默认走 EML 查看器（此前双击落入下载分支）
+    store.open('emlviewer', p, { title: f.name + ' - EML 查看器', icon: 'mail', w: 1000, h: 700 })
   } else if (['dxf', 'dwg'].includes(ext) && apps.isAvailable('cad_viewer')) {
     // CAD 图纸：默认走 CAD 看图（DXF/DWG，纯浏览器端离线渲染）
     store.open('cadviewer', p, { title: f.name + ' - CAD 看图', icon: 'cad', w: 1200, h: 780 })

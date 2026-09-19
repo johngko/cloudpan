@@ -144,7 +144,7 @@ func sendNotifyEmail(ss map[string]string, p outboundPayload) {
 	host := strings.TrimSpace(ss["notify_email_host"])
 	port := strings.TrimSpace(ss["notify_email_port"])
 	user := strings.TrimSpace(ss["notify_email_user"])
-	pass := ss["notify_email_pass"]
+	pass := openSecret(ss["notify_email_pass"]) // 兼容历史明文（openSecret 无前缀原样返回）
 	toRaw := strings.TrimSpace(ss["notify_email_to"])
 	if host == "" || user == "" || toRaw == "" {
 		return

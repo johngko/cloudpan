@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -42,7 +43,30 @@ func fsService(cfg *config.Config) *fscore.Service {
 	return fscore.NewService(cfg.Sub("upload_tmp"), cfg.Sub("recycle"), cfg.Sub("thumbs"), cfg.Sub("ziptmp"))
 }
 
+// reset-admin 运维子命令：找回/重置管理员口令（须在本机以服务同等环境运行）
+func runResetAdmin() {
+	newPass := ""
+	if len(os.Args) > 2 {
+		newPass = strings.TrimSpace(os.Args[2])
+	}
+	if len(newPass) < 8 {
+		fmt.Println("用法: cloudpan reset-admin <新密码>（至少 8 位）")
+		os.Exit(1)
+	}
+	cfg := config.Load()
+	model.InitDB(cfg.DataDir)
+	if err := handler.ResetAdminPassword(newPass); err != nil {
+		fmt.Println("重置失败:", err)
+		os.Exit(1)
+	}
+	fmt.Println("✅ 管理员密码已重置；该账号全部已登录会话已失效。")
+}
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "reset-admin" {
+		runResetAdmin()
+		return
+	}
 	cfg := config.Load()
 	model.InitDB(cfg.DataDir)
 	model.LoadAppCache() // 应用中心：功能开关内存缓存

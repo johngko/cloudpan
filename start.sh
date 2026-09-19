@@ -582,6 +582,10 @@ case "$cmd" in
     install) do_install;;
     build)   do_build;;
     start)   shift; do_start "$@";;
+    reset-admin)
+        load_env
+        "$BIN" reset-admin "$2"
+        ;;
     stop)    do_stop;;
     restart) do_stop; sleep 1; do_start;;
     status)  do_status;;
