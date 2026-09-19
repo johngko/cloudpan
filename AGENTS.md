@@ -76,6 +76,7 @@ sleep 3 && curl -s -o /dev/null -w "up:%{http_code}\n" https://yun.johngko.com/ 
 ## 6. Git 与发布
 
 项目**不得提交 / 推送到 GitHub**（含代码、构建产物、文档），除非用户明确要求。
+仓库：`github.com/johngko/cloudpan`（2026-09-19 经用户授权全量推送并替换旧历史；此后每次推送仍须用户明确确认）。env.local / 备份/ / server/data/ / web/dist/ 已在 .gitignore，永不提交。
 本地改动只在 `server/` 与 `web/` 内演进；构建产物（`server/internal/web/dist`、`cloudpan` 二进制）一律不进版本库。
 
 ## 7. 验证习惯
