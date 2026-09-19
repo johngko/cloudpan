@@ -166,7 +166,7 @@ async function toggle(a: SysApp) {
   flex: none; width: 38px; height: 22px; border-radius: 11px; position: relative; cursor: pointer;
   background: var(--stroke); transition: background 0.18s;
 }
-.ac-switch.disabled { cursor: default; opacity: 0.55; }
+.ac-switch.disabled { cursor: default; opacity: 0.45; filter: grayscale(1); }
 .ac-switch .knob {
   position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
   background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: left 0.18s;

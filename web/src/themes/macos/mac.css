@@ -211,7 +211,7 @@
 /* ============ 桌面（macOS：图标左下，向上堆叠） ============ */
 .theme-macos .desktop-icons {
   /* 上下双向约束：图标过多时换列而不是顶穿菜单栏 */
-  top: 34px; bottom: calc(var(--shell-bottom) + 10px); left: 10px;
+  top: 34px; bottom: calc(var(--shell-bottom) + 10px); left: 10px; right: 96px;
   flex-direction: column-reverse;
 }
 .theme-macos .desk-icon { width: 76px; }

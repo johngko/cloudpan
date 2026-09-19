@@ -199,10 +199,12 @@ select.input { cursor: pointer; }
   background-size: 160px 160px, auto, auto;
 }
 .desktop-icons {
-  position: absolute; top: 84px; left: 8px; bottom: calc(var(--shell-bottom) + 14px);
+  position: absolute; top: 84px; left: 8px; right: 8px; bottom: calc(var(--shell-bottom) + 14px);
   display: flex; flex-direction: column; flex-wrap: wrap; align-content: flex-start; gap: 4px;
 }
 .desk-icon {
+  /* flex:none：禁止在列内被压缩（否则图标再多也挤进一列，永不起列换行） */
+  flex: none;
   width: 84px; padding: 8px 4px; border-radius: var(--radius-sm); text-align: center; cursor: default;
   border: 1px solid transparent;
 }
