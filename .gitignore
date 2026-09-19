@@ -1,0 +1,41 @@
+# ---- 工具链 / 依赖（本地便携工具，不进仓库） ----
+/tools/
+web/node_modules/
+web/tools/cad-viewer/node_modules/
+web/tools/cad-viewer/cad-data/
+
+# ---- 本地备份快照（含 env.local，绝不提交） ----
+备份/
+
+# ---- 构建产物（build.bat / build.sh 生成） ----
+web/dist/
+server/internal/web/dist/*
+!server/internal/web/dist/.keep
+server/cloudpan.exe
+server/cloudpan
+server/cloudpan.exe~
+
+# ---- 运行数据（数据库 / 密钥 / 存储挂载根，绝不可提交） ----
+server/data/
+C/
+D/
+env.local
+
+# ---- 日志与临时文件 ----
+*.log
+*.zip
+*.tmp
+nohup.out
+
+# ---- IDE / 本地状态 ----
+.mimosa/
+.zcode/
+.DS_Store
+Thumbs.db
+server/cloudpan-linux
+
+# ---- IDE ----
+.trae/
+
+# ---- ZCode 开发环境（MCP 服务器依赖不进仓库） ----
+.zcode/mcp/sqlite/node_modules/

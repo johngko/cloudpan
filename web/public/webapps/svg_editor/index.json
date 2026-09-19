@@ -1,0 +1,14 @@
+{
+  "Name": "SVG 编辑器",
+  "Description": "SVG 编辑器",
+  "Code": "svg_editor",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "实用工具",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/svg_editor/logo.png",
+  "Log": "首发",
+  "OpenExts": "",
+  "EditExts": "svg"
+}

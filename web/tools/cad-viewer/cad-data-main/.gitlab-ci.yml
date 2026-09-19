@@ -1,0 +1,19 @@
+stages:
+  - pages
+
+# ----------------------
+# GitLab Pages Deployment
+# ----------------------
+pages:
+  stage: pages
+  script:
+    - echo "Deploying to GitLab Pages..."
+    - mkdir -p public
+    - cp -r ./data public
+    - cp -r ./fonts public
+    - cp -r ./templates public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

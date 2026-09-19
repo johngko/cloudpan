@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片编辑器</title>
+  <script src="/webapps/_bridge/cloudpan.js"></script>
+  <style>html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:var(--user-bg-1-color,#f6f7fb);color:var(--user-text-1-color,#111827);font:14px system-ui}.empty{height:100%;display:grid;place-items:center;text-align:center;color:var(--user-text-2-color,#667085)}iframe{width:100%;height:100%;border:0}</style>
+
+  <script>
+    function applyExternalOpenParams(src){
+      var params = new URL(location.href).searchParams;
+      if(params.get('action') !== 'open') return src;
+      var url = new URL(src, location.href);
+      ['action','ext','name','size','url'].forEach(function(key){
+        url.searchParams.set(key, params.get(key));
+      });
+      if(params.get('saveData')) url.searchParams.set('saveData', params.get('saveData'));
+      url.searchParams.set('expAction', params.get('saveData') ? 'edit' : 'open');
+      return url.href;
+    }
+  </script>
+</head>
+<body>
+  <iframe id="frame" src="./static/index.html"></iframe>
+  <script>
+    window.addEventListener('message', function(e){ if(e.data && e.data.action === 'addOpenFiles'){ var f=document.getElementById('frame'); if(f) f.contentWindow.postMessage(e.data,'*'); } });
+    if(window.$v9os && new URL(location.href).searchParams.get('action') === 'open'){
+      $v9os.event.on('fileOpenEdit', function(params){
+        if(!params || params.target !== 'tui_image') return;
+        var file = params.data || {};
+        var f = document.getElementById('frame');
+        if(!f) return;
+        var u = new URL('./static/index.html', location.href);
+        u.searchParams.set('action','open');
+        u.searchParams.set('expAction', file.saveData ? 'edit' : 'open');
+        u.searchParams.set('ext', file.ext);
+        u.searchParams.set('name', file.name);
+        u.searchParams.set('size', file.size);
+        u.searchParams.set('url', file.url);
+        if(file.saveData) u.searchParams.set('saveData', encodeURIComponent(JSON.stringify(file.saveData)));
+        f.src = u.href;
+      });
+      $v9os.event.emit('initFileOpenEdit', {type: 'fileOpenEdit', confirm: true});
+    }
+
+  </script>
+  <script>var __f=document.getElementById('frame'); if(__f) __f.src=applyExternalOpenParams(__f.getAttribute('src'));</script>
+</body>
+</html>

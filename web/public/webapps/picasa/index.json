@@ -1,0 +1,15 @@
+{
+  "Name": "Picasa 图片预览",
+  "Description": "Picasa 图片预览",
+  "Code": "picasa",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "多媒体",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/picasa/logo.png",
+  "Log": "首发",
+  "OpenExts": "jpg,jpeg,png,bmp,gif,ico,svg,cur,webp,heic,heif",
+  "EditExts": "",
+  "ExpandExts":"multi"
+}

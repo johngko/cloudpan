@@ -1,0 +1,14 @@
+{
+  "Name": "Epub电子书阅读器",
+  "Description": "Epub电子书阅读器",
+  "Code": "epub",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "实用工具",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/epub/logo.png",
+  "Log": "首发",
+  "OpenExts": "epub",
+  "EditExts": ""
+}

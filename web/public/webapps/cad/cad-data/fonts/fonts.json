@@ -1,0 +1,732 @@
+[
+  {
+    "file": "@extfont2.shx",
+    "name": [
+      "@extfont2"
+    ],
+    "type": "shx",
+    "encoding": "shift-jis"
+  },
+  {
+    "file": "AcadEref.shx",
+    "name": [
+      "AcadEref"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "aehalf.shx",
+    "name": [
+      "aehalf"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "AIGDT.ttf",
+    "name": [
+      "AIGDT"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "AMDTSymbols.shx",
+    "name": [
+      "AMDTSymbols"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "AMGDT DWE Edits.shx",
+    "name": [
+      "AMGDT DWE Edits"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "amgdt.shx",
+    "name": [
+      "amgdt"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "AMGDTANS DWE Edits.shx",
+    "name": [
+      "AMGDTANS DWE Edits"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "amgdtans.shx",
+    "name": [
+      "amgdtans"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "arial.woff",
+    "name": [
+      "arial"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "bigfont.shx",
+    "name": [
+      "bigfont"
+    ],
+    "type": "shx",
+    "encoding": "shift-jis"
+  },
+  {
+    "file": "bold.shx",
+    "name": [
+      "bold"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "CDM_NC.shx",
+    "name": [
+      "CDM_NC"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "Cdm.shx",
+    "name": [
+      "Cdm"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "chineset.shx",
+    "name": [
+      "chineset"
+    ],
+    "type": "shx",
+    "encoding": "big5"
+  },
+  {
+    "file": "complex.shx",
+    "name": [
+      "complex"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "dim.shx",
+    "name": [
+      "dim"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "extfont.shx",
+    "name": [
+      "extfont"
+    ],
+    "type": "shx",
+    "encoding": "shift-jis"
+  },
+  {
+    "file": "extfont2.shx",
+    "name": [
+      "extfont2"
+    ],
+    "type": "shx",
+    "encoding": "shift-jis"
+  },
+  {
+    "file": "exthalf2.shx",
+    "name": [
+      "exthalf2"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "extslim2.shx",
+    "name": [
+      "extslim2"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "g12f13.shx",
+    "name": [
+      "g12f13"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "g13f12d.shx",
+    "name": [
+      "g13f12d"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "g13f12w.shx",
+    "name": [
+      "g13f12w"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "gbcbig.shx",
+    "name": [
+      "gbcbig"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "gbeitc.shx",
+    "name": [
+      "gbeitc"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "gbenor.shx",
+    "name": [
+      "gbenor"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "gbgdt.woff",
+    "name": [
+      "gbgdt"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "gbhzfs.shx",
+    "name": [
+      "gbhzfs"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "gdt.shx",
+    "name": [
+      "gdt"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "GENISO.shx",
+    "name": [
+      "GENISO"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "geniso12.shx",
+    "name": [
+      "geniso12"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "GENLTSHP.shx",
+    "name": [
+      "GENLTSHP"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "GENPRESE.shx",
+    "name": [
+      "GENPRESE"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "gothice.shx",
+    "name": [
+      "gothice"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "gothicg.shx",
+    "name": [
+      "gothicg"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "gothici.shx",
+    "name": [
+      "gothici"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "greekc.shx",
+    "name": [
+      "greekc"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "greeks.shx",
+    "name": [
+      "greeks"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "hand1.shx",
+    "name": [
+      "hand1"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "hztxt.shx",
+    "name": [
+      "hztxt"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "iges1001.shx",
+    "name": [
+      "iges1001"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "iges1002.shx",
+    "name": [
+      "iges1002"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "iges1003.shx",
+    "name": [
+      "iges1003"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "intecad.shx",
+    "name": [
+      "intecad"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "ISO.shx",
+    "name": [
+      "ISO"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "isocp.shx",
+    "name": [
+      "isocp"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "isocp2.shx",
+    "name": [
+      "isocp2"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "isocp3.shx",
+    "name": [
+      "isocp3"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "isoct.shx",
+    "name": [
+      "isoct"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "isoct2.shx",
+    "name": [
+      "isoct2"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "isoct3.shx",
+    "name": [
+      "isoct3"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "italic.shx",
+    "name": [
+      "italic"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "ITALIC8.shx",
+    "name": [
+      "ITALIC8"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "italicc.shx",
+    "name": [
+      "italicc"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "italict.shx",
+    "name": [
+      "italict"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "ltypeshp.shx",
+    "name": [
+      "ltypeshp"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "monotxt.shx",
+    "name": [
+      "monotxt"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "MONOTXT8.shx",
+    "name": [
+      "MONOTXT8"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "msgothic.woff",
+    "name": [
+      "msgothic",
+      "MS Gothic",
+      "ms gothic",
+      "ＭＳ ゴシック",
+      "MSゴシック"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "msyh.woff",
+    "name": [
+      "msyh",
+      "微软雅黑"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "noto-sans-kr.woff",
+    "name": [
+      "noto-sans-kr",
+      "malgun",
+      "malgungothic",
+      "Malgun Gothic",
+      "맑은고딕",
+      "맑은 고딕"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "pkpmeng.shx",
+    "name": [
+      "pkpmeng"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "romanc.shx",
+    "name": [
+      "romanc"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "romand.shx",
+    "name": [
+      "romand"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "romans.shx",
+    "name": [
+      "romans"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "romant.shx",
+    "name": [
+      "romant"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "scriptc.shx",
+    "name": [
+      "scriptc"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "scripts.shx",
+    "name": [
+      "scripts"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "simfang.woff",
+    "name": [
+      "simfang",
+      "FangSong",
+      "FangSong_GB2312‌",
+      "仿宋",
+      "仿宋_GB2312",
+      "华文仿宋"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "simhei.woff",
+    "name": [
+      "simhei",
+      "黑体"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "simkai.woff",
+    "name": [
+      "simkai",
+      "楷体"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "simplex.shx",
+    "name": [
+      "simplex"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "SIMPLEX8.shx",
+    "name": [
+      "SIMPLEX8"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "simsun.woff",
+    "name": [
+      "simsun",
+      "宋体",
+      "中易宋体",
+      "微软宋体"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "SJQY.woff",
+    "name": [
+      "SJQY"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "spec_bar.shx",
+    "name": [
+      "spec_bar"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "spec_sl.shx",
+    "name": [
+      "spec_sl"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "special.shx",
+    "name": [
+      "special"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "syastro.shx",
+    "name": [
+      "syastro"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "symap.shx",
+    "name": [
+      "symap"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "symath.shx",
+    "name": [
+      "symath"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "symeteo.shx",
+    "name": [
+      "symeteo"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "symusic.shx",
+    "name": [
+      "symusic"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "tahoma.woff",
+    "name": [
+      "tahoma"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "times.shx",
+    "name": [
+      "times"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "timesout.shx",
+    "name": [
+      "timesout"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "tssdchn.shx",
+    "name": [
+      "tssdchn"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "tssdeng.shx",
+    "name": [
+      "tssdeng"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "txt.shx",
+    "name": [
+      "txt"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "verdana.woff",
+    "name": [
+      "verdana"
+    ],
+    "type": "mesh"
+  },
+  {
+    "file": "whgdtxt.shx",
+    "name": [
+      "whgdtxt"
+    ],
+    "type": "shx",
+    "encoding": "euc-kr"
+  },
+  {
+    "file": "whgtxt.shx",
+    "name": [
+      "whgtxt"
+    ],
+    "type": "shx",
+    "encoding": "euc-kr"
+  },
+  {
+    "file": "whtgtxt.shx",
+    "name": [
+      "whtgtxt"
+    ],
+    "type": "shx",
+    "encoding": "euc-kr"
+  },
+  {
+    "file": "whtmtxt.shx",
+    "name": [
+      "whtmtxt"
+    ],
+    "type": "shx",
+    "encoding": "euc-kr"
+  },
+  {
+    "file": "yjkchn.shx",
+    "name": [
+      "yjkchn"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  },
+  {
+    "file": "yjkeng.shx",
+    "name": [
+      "yjkeng"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "zjdz-s.shx",
+    "name": [
+      "zjdz-s"
+    ],
+    "type": "shx"
+  },
+  {
+    "file": "zjdz.shx",
+    "name": [
+      "zjdz"
+    ],
+    "type": "shx",
+    "encoding": "gbk"
+  }
+]

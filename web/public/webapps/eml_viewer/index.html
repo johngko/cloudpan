@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EML 查看器</title>
+  <!-- 原 sdk.js?jquery=true = core SDK + jQuery + expand 垫片；
+       此处改为 CloudPan 桥 + 本地 jQuery/expand（v9os assets/expand 构建） -->
+  <script src="static/lib2/jquery.min.js"></script>
+  <script src="static/lib2/expand.js"></script>
+  <script src="/webapps/_bridge/cloudpan.js"></script>
+  <link rel="stylesheet" href="static/app/style.css">
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:auto;background:#fff;color:#111827;font:14px system-ui}
+    .empty{height:100%;display:grid;place-items:center;text-align:center;color:var(--user-text-2-color,#667085);font:14px system-ui}.empty h2{margin:0 0 8px;color:var(--user-text-1-color,#111827);font-size:24px}.empty button{margin-top:14px;padding:11px 22px;border-radius:10px;border:1px solid var(--user-primary-color,#2080f0);background:var(--user-primary-color,#2080f0);color:#fff;font-size:15px;cursor:pointer}
+    .loading{position:absolute;top:46%;left:47%;z-index:99;color:#667085}
+  </style>
+</head>
+<body>
+  <div id="app" class="empty"><div><h2>EML 查看器</h2><p>请选择 EML/MHT 文件打开</p><button id="open-btn">打开文件</button></div></div>
+  <!-- 真实 DOMPurify（Apache-2.0，本地化）：EML 正文是任意用户可控 HTML，
+       原静态包只有「原样返回」的兜底实现，等于不消毒；CloudPan 的 CSP 含
+       'unsafe-inline'，不消毒会让恶意 EML 在应用 iframe 内注入内联脚本 -->
+  <script src="static/lib/dompurify.min.js"></script>
+  <script>
+    var DEFAULT_FILE_URL = '';
+    var DEFAULT_FILE_NAME = '';
+    window.DOMPurify = window.DOMPurify || { sanitize: function(html){ return html || ''; } };
+    window.base64Decode = window.base64Decode || function(str){ str = String(str || ''); try { return decodeURIComponent(escape(atob(str))); } catch(e) { return atob(str); } };
+  </script>
+  <script src="static/lib/addmore.js"></script>
+  <script src="static/lib/bundle.js"></script>
+  <script src="static/lib/emlwork.js"></script>
+  <script>
+    const CODE = 'eml_viewer';
+    const sdk = () => window.$v9os || parent.$v9os || null;
+    function fileFromParams(){
+      const p = new URL(location.href).searchParams;
+      if(!p.get('url')) return null;
+      return {ext:p.get('ext'), name:p.get('name'), size:Number(p.get('size')||0), url:p.get('url')};
+    }
+    function renderShell(){
+      document.body.innerHTML = '<div id="header" style="height:auto;overflow:hidden"><div class="subject-box"><span id="subject"></span><a id="attachicon" href="#attachbox" class="flt-rt a_css"></a></div><div id="headsimple" class="head-simple" style="display:none"><span><span id="headfrom" class="font-bold"></span><span class="send-to"> 发送给 </span><span id="headto" class="font-bold"></span></span><span class="flt-rt"><span id="headdate" class="font-7f"></span>&nbsp;&nbsp;<a id="moredtl" href="javascript:void(0)" class="a_css" onclick="proc_more(\'更多\',\'隐藏\')">更多</a></span></div><div id="headdtl" class="head-dtl" style="display:none"><div class="dis-box"><div>发件人</div><div id="from"></div></div><div class="dis-box"><div>收件人</div><div id="to"></div></div><div class="dis-box"><div>抄送</div><div id="cc"></div></div><div class="dis-box"><div>日期</div><div id="date"></div></div><div id="attachcntbox" class="dis-box" style="display:none"><div>附件</div><div id="attachcnt"></div></div><div id="attachsizebox" class="dis-box" style="display:none"><div>大小</div><div id="attachsize"></div></div></div></div><div id="relust" class="result"></div><div id="attachbox" class="method-1-wrap wrap" style="display:none"><span id="footattachcnt" class="title">附件</span><div class="content" id="attach"></div></div><div class="loading" id="waitting">加载中...</div>';
+    }
+    async function selectFile(){ const f = await sdk()?.file?.selectFile(null, '请选择 EML/MHT 文件', 'eml,mht,mhtml', 'false'); if(f) openFile(f); }
+    function bindOpenButton(){ var btn=document.getElementById('open-btn'); if(btn) btn.onclick=selectFile; }
+    function openFile(file){
+      if(!file || !file.url) return;
+      DEFAULT_FILE_URL = file.url;
+      DEFAULT_FILE_NAME = file.name || 'mail.eml';
+      renderShell();
+      getemlcontent();
+    }
+    function wait(cb){ if(window.__winId && sdk()?.event?.on) cb(); else setTimeout(()=>wait(cb),30); }
+    bindOpenButton();
+    const initial = fileFromParams();
+    if(initial) openFile(initial);
+    else if(new URL(location.href).searchParams.get('action') === 'open') {
+      wait(function(){ sdk().event.on('fileOpenEdit', function(params){ if(params && params.target === CODE) openFile(params.data); }); sdk().event.emit('initFileOpenEdit', {type:'fileOpenEdit', confirm:true}); });
+    }
+  </script>
+</body>
+</html>

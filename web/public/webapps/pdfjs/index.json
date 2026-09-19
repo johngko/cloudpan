@@ -1,0 +1,16 @@
+{
+  "Name": "PDF阅读器",
+  "Description": "PDF阅读器",
+  "CloseDelay": "0",
+  "Code": "pdfjs",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "文件增强",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/pdfjs/logo.png",
+  "Log": "首发",
+  "Exts": "pdf",
+  "OpenExts": "pdf",
+  "EditExts": ""
+}

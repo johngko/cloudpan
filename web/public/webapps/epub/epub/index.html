@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Epub电子书阅读器</title>
+    <link rel="icon" sizes="24x24" href="favicons/favicon_24x24.png" />
+	<link rel="icon" sizes="48x48" href="favicons/favicon_48x48.png" />
+	<link rel="icon" sizes="96x96" href="favicons/favicon_96x96.png" />
+	<link href="favicons/favicon_48x48.png" rel="bookmark" />
+    <!-- 字体自托管（fonts/fonts.css：Material Icons Outlined / Lato / Arbutus Slab，
+         原 Google Fonts CDN 链接被 CSP 阻断且引入外部依赖，已本地化） -->
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="libs/normalize.min.css">
+    <link rel="stylesheet" href="style.css?v=6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="description" content="Epub电子书阅读器">
+    <meta name="referrer" content="never">
+</head>
+
+<body>
+    <div style="display:none;">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" style="display:none;">
+    <symbol id="arrow-r" viewBox="0 0 320 512"><path fill="currentColor" d="M96 480c-8.188 0-16.38-3.125-22.62-9.375-12.5-12.5-12.5-32.75 0-45.25L242.8 256 73.38 86.63c-12.5-12.5-12.5-32.75 0-45.25s32.75-12.5 45.25 0l192 192c12.5 12.5 12.5 32.75 0 45.25l-192 192C112.4 476.9 104.2 480 96 480z"/></symbol>
+    <symbol id="arrow-b" viewBox="0 0 448 512"><path fill="currentColor" d="M224 416c-8.188 0-16.38-3.125-22.62-9.375l-192-192c-12.5-12.5-12.5-32.75 0-45.25s32.75-12.5 45.25 0L224 338.8l169.4-169.4c12.5-12.5 32.75-12.5 45.25 0s12.5 32.75 0 45.25l-192 192C240.4 412.9 232.2 416 224 416z"/></symbol>
+</svg>
+    </div>
+    <div class="app">
+        <div class="dictionary-wrapper hidden">
+            <div class="dictionary"></div>
+        </div>
+        <div class="sidebar-wrapper out">
+            <div class="sidebar">
+                <div class="tab-list">
+                    <a data-tab="toc" class="item">
+                        <i class="icon material-icons-outlined">list</i>
+                    </a>
+                    <a data-tab="search" class="item">
+                        <i class="icon material-icons-outlined">search</i>
+                    </a>
+                    <a data-tab="info" class="item">
+                        <i class="icon material-icons-outlined">info</i>
+                    </a>
+                    <a data-tab="settings" class="item">
+                        <i class="icon material-icons-outlined">settings</i>
+                    </a>
+                </div>
+                <div class="tab-container">
+                    <div class="tab list" data-tab="toc">
+                        <button type="button" data-value="1" class="zk-sq" onclick="ePubViewer.allZkSq(this);">展开</button>
+                        <div class="toc-list"></div>
+                    </div>
+                    <div class="tab search" data-tab="search">
+                        <div class="search-bar">
+                            <input type="text" autocomplete="off" placeholder="搜索关键词" class="search-box">
+                            <button class="search-button">
+                                <i class="icon material-icons-outlined">search</i>
+                            </button>
+                        </div>
+                        <div class="search-results"></div>
+                    </div>
+                    <div class="tab info" data-tab="info">
+                        <div class="cover-wrapper">
+                            <img src="" alt="" class="cover">
+                        </div>
+                        <div class="title"></div>
+                        <div class="series-info">
+                            <span class="series-name"></span>
+                            <span class="divider"> - </span>
+                            <span class="series-index"></span>
+                        </div>
+                        <div class="author"></div>
+                        <div class="description"></div>
+                        <div class="more" style="text-align: center;cursor: pointer;">
+                            <button class="shelf-button" type="button" onclick="location.href='shelf.html';"><span class="">打开书架</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="tab settings" data-tab="settings">
+                        <div class="setting">
+                            <div class="setting-label">主题</div>
+                            <div class="setting-content theme chips" data-chips="theme">
+                                <div class="theme chip" style="background: #fff; color: #000;" data-default="true" data-value="#fff;#000">A</div>
+                                <div class="theme chip" style="background: #000; color: #fff;" data-value="#000;#fff">A</div>
+                                <div class="theme chip" style="background: #333; color: #eee;" data-value="#333;#eee">A</div>
+                                <div class="theme chip" style="background: #f5deb3; color: #000;" data-value="#f5deb3;#000">A</div>
+                                <div class="theme chip" style="background: #111; color: #f5deb3;" data-value="#111;#f5deb3">A</div>
+                                <div class="theme chip" style="background: #111b21; color: #e8e8e8;" data-value="#111b21;#e8e8e8">A</div>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">字体</div>
+                            <div class="setting-content font chips" data-chips="font">
+                                <div class="font chip" style="font-family: 'Arial', Arimo, Liberation Sans, sans-serif;" data-value="'Arial', Arimo, Liberation Sans, sans-serif">Arial</div>
+                                <div class="font chip" style="font-family: 'Lato', sans-serif;" data-value="'Lato', sans-serif">Lato</div>
+                                <div class="font chip" style="font-family: 'Georgia', Liberation Serif, serif;" data-value="'Georgia', Liberation Serif, serif">Georgia</div>
+                                <div class="font chip" style="font-family: 'Times New Roman', Tinos, Liberation Serif, Times, serif;" data-value="'Times New Roman', Tinos, Liberation Serif, Times, serif"
+                                    data-default="true">Times New Roman</div>
+                                <div class="font chip" style="font-family: 'Arbutus Slab', serif;" data-value="'Arbutus Slab', serif">Arbutus Slab</div>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">字号</div>
+                            <div class="setting-content font-size chips" data-chips="font-size">
+                                <div class="size chip" style="font-size: 8pt" data-value="8pt">8</div>
+                                <div class="size chip" style="font-size: 9pt" data-value="9pt">9</div>
+                                <div class="size chip" style="font-size: 10pt" data-value="10pt">10</div>
+                                <div class="size chip" style="font-size: 11pt" data-value="11pt">11</div>
+                                <div class="size chip" style="font-size: 12pt" data-default="true" data-value="12pt">12</div>
+                                <div class="size chip" style="font-size: 14pt" data-value="14pt">14</div>
+                                <div class="size chip" style="font-size: 16pt" data-value="16pt">16</div>
+                                <div class="size chip" style="font-size: 18pt" data-value="18pt">18</div>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">行间距</div>
+                            <div class="setting-content line-spacing chips" data-chips="line-spacing">
+                                <div class="size chip" data-value="1">1</div>
+                                <div class="size chip" data-value="1.2">1.2</div>
+                                <div class="size chip" data-value="1.4">1.4</div>
+                                <div class="size chip" data-default="true" data-value="1.6">1.6</div>
+                                <div class="size chip" data-value="1.8">1.8</div>
+                                <div class="size chip" data-value="2">2</div>
+                                <div class="size chip" data-value="2.3">2.3</div>
+                                <div class="size chip" data-value="2.6">2.6</div>
+                                <div class="size chip" data-value="3">3</div>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">边距</div>
+                            <div class="setting-content margin chips" data-chips="margin">
+                                <div class="size chip" data-value="0">0</div>
+                                <div class="size chip" data-value="1px">1px</div>
+                                <div class="size chip" data-value="2px">2px</div>
+                                <div class="size chip" data-value="3px">3px</div>
+                                <div class="size chip" data-value="4px">4px</div>
+                                <div class="size chip" data-default="true" data-value="5px">5px</div>
+                                <div class="size chip" data-value="7px">7px</div>
+                                <div class="size chip" data-value="9px">9px</div>
+                                <div class="size chip" data-value="12px">12px</div>
+                                <div class="size chip" data-value="15px">15px</div>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">进度显示</div>
+                            <div class="setting-content progress chips" data-chips="progress">
+                                <div class="chip" data-value="location" data-default="true">页码</div>
+                                <div class="chip" data-value="percentage" data-default="true">百分比</div>
+                                <div class="chip" data-value="chapter" data-default="true">章节名</div>
+                                <div class="chip" data-value="bar" data-default="true">进度条</div>
+                                <div class="chip" data-value="none" data-default="true">隐藏</div>
+                            </div>
+                        </div>
+                        <!--<div class="setting">
+                            <div class="setting-label">全屏</div>
+                            <div class="setting-content">
+                                <button style="border:1px solid #444;padding: 5px;" class="chip" type="button" onclick="ePubViewer.doFullscreen();">全屏</button>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">Reset</div>
+                            <div class="setting-content">
+                                <a href="javascript:void(0);" onclick="if(confirm('Are you sure?')){localStorage.clear();window.location.reload();}">Reset All</a>
+                            </div>
+                        </div>
+                        <div class="setting">
+                            <div class="setting-label">About</div>
+                            <div class="setting-content">
+                                ePubViewer v3.1.0
+                                <br /> Copyright 2019
+                                <a href="https://pgaskin.net">Patrick Gaskin</a>
+                                <br />
+                                <a href="https://github.com/pgaskin/ePubViewer">Code</a> |
+                                <a href="https://github.com/pgaskin/ePubViewer/issues">Report an issue</a>
+                                <br />
+                                <br /> This app requires Microsoft Edge 15+, Mozilla Firefox 50+, Chrome 50+, or Safari 10+.
+                            </div>
+                        </div>-->
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="error hidden" style="display:none;">
+            <div class="error-title"></div>
+            <div class="error-description"></div>
+            <div class="error-info"></div>
+            <div class="error-dump"></div>
+        </div>
+        <div class="bar">
+            <div class="left">
+                <button class="open">
+                    <i class="icon material-icons-outlined" onclick="ePubViewer.doFullOrCloseScreen();">fullscreen</i>
+                    <!---<img src="imgs/fullscreen.png" data-value="1" onclick="ePubViewer.doFullOrCloseScreen(this);" style="width: 30px;height: 30px;"/>-->
+                </button>
+            </div>
+            <div class="title">
+                <span class="book-title"></span>
+                <span class="divider"> - </span>
+                <span class="book-author"></span>
+            </div>
+            <div class="right">
+                <button class="sidebar-button hidden" onclick="ePubViewer.doSidebar()">
+                    <i class="icon material-icons-outlined">menu</i>
+                </button>
+            </div>
+        </div>
+        <div class="book">
+            <div class="empty-wrapper" style="display:none;">
+                <div class="empty">
+                    <div class="app-name">ePubViewer</div>
+                    <div class="message">
+                        Unknown error. If this message does not disappear in a few seconds, try using a different browser (Chrome or Firefox), and
+                        if the issue still persists,
+                        <a href="https://github.com/pgaskin/ePubViewer">report it here</a>.
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="bar">
+            <div class="left">
+                <button class="prev hidden">
+                    <i class="icon material-icons-outlined">chevron_left</i>
+                </button>
+            </div>
+            <div class="loc"></div>
+            <div class="right">
+                <button class="next hidden">
+                    <i class="icon material-icons-outlined">chevron_right</i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="libs/epubviewer-inject.js"></script>
+
+    <script>
+        function isIE(userAgent) {
+            userAgent = userAgent || navigator.userAgent;
+            return userAgent.indexOf("MSIE ") > -1 || userAgent.indexOf("Trident/") > -1;
+        }
+        if (isIE()) alert("ePubViewer does not support Internet Explorer. Please use Chrome or Firefox.");
+    </script>
+
+    <script>
+        if ('serviceWorker' in navigator) window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            location.reload();
+                        }
+                    };
+                };
+            })
+        });
+        try {
+            window.caches.keys().then(keys => console.log("caches: " + keys.join(", "))).catch(err => console.log("error checking cache version"));
+        } catch (err) { }
+    </script>
+
+    <script src="polyfills/babel-polyfill.min.js"></script>
+    <script src="polyfills/fetch.js"></script>
+    <script src="polyfills/pep.min.js"></script>
+    <script src="libs/sanitize-html.min.js"></script>
+    <script src="libs/jszip.min.js"></script>
+    <script src="libs/epub.js?v=1"></script>
+
+    <!-- Raven/Sentry 已移除：错误上报外部服务（sentry.io）且受 CSP 阻断，无保留价值 -->
+    <script src="script.js?v=28"></script>
+    <div id="qp-mask" style="display:none;">
+        <img src="loading.gif"/>
+    </div>
+</body>
+
+</html>

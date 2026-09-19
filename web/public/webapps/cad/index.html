@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CAD 看图</title>
+  <script src="/webapps/_bridge/cloudpan.js"></script>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #1b1d21; color: #e8eaed; font: 13px system-ui, "Microsoft YaHei", sans-serif; }
+    #cad-container { width: 100%; height: 100%; }
+    #upload-screen { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; }
+    #upload-screen h2 { margin: 0 0 8px; font-size: 20px; font-weight: 600; color: #fff; }
+    #upload-screen p { margin: 4px 0; color: #9aa0a6; }
+    #upload-dropzone { margin-top: 16px; padding: 14px 26px; border: 1px dashed #5f6368; border-radius: 12px; cursor: pointer; }
+    #upload-dropzone.is-dragover { border-color: #8ab4f8; background: rgba(138,180,248,.08); }
+    .popup-message { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 1000; padding: .6rem 1.4rem; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 12px rgba(0,0,0,.4); }
+    .popup-message.success { background: #1e3524; color: #81c995; }
+    .popup-message.error { background: #3c1f22; color: #f28b82; }
+    .popup-message.info { background: #2d2f33; color: #e8eaed; }
+  </style>
+  <script type="module" crossorigin src="./assets/index-0XlA6hGu.js"></script>
+</head>
+<body>
+  <div id="cad-container"></div>
+  <div id="upload-screen">
+    <div>
+      <h2>CAD 看图</h2>
+      <p>支持 DXF / DWG 图纸（完全离线渲染）</p>
+      <div id="upload-dropzone">点击选择文件，或拖拽图纸到此处</div>
+    </div>
+  </div>
+  <input id="file-input" type="file" accept=".dxf,.dwg" style="display:none" />
+</body>
+</html>

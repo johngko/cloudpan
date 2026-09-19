@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no">
+    <title>图片编辑 - tui-editor</title>
+    <!-- 原 v9os sdk.js?jquery=true 负责注入 jQuery；CloudPan 用已 vendored 的 3.6.0，
+         宿主桥经 parent.$v9os 获取（下方内联 kodApi 已适配） -->
+    <script src="/vendor/drawio/js/jquery/jquery-3.6.0.min.js"></script>
+    <script>
+      (function(){
+        var params = new URL(location.href).searchParams;
+        var saveData = null;
+        try { saveData = params.get('saveData') ? JSON.parse(decodeURIComponent(params.get('saveData'))) : null; } catch(e) {}
+        window.appLang = 'zh-CN';
+        window.BASE_URL_API = location.pathname;
+        window.FILE_INFO = {
+          fileUrl: params.get('url') || '',
+          fileName: params.get('name') || '新建图片.png',
+          savePath: '',
+          saveData: saveData || '',
+          canWrite: saveData ? '1' : ''
+        };
+        window.urlEncode = window.urlEncode || encodeURIComponent;
+        function sdk(){
+          try { return parent.$v9os || window.$v9os || null; }
+          catch(e) { return window.$v9os || null; }
+        }
+        function parentFile(){
+          try { return parent.$v9os && parent.$v9os.file ? parent.$v9os.file : null; }
+          catch(e) { return null; }
+        }
+        window.kodApi = window.kodApi || {};
+        kodApi.fileSelect = async function(opt){
+          var apiFile = parentFile() || (sdk() && sdk().file);
+          var file = await apiFile?.selectFile(null, opt?.title || '打开文件', opt?.allowExt || null, 'true');
+          if(file && opt && opt.callback){
+            opt.callback({downloadPath:file.url, name:file.name, path:file.url, saveData:file.saveData});
+          }
+        };
+        kodApi.fileSave = async function(saveData, content, callback){
+          var apiFile = parentFile();
+          var ok = await apiFile?.saveFileNoSelect(saveData, content);
+          callback && callback(ok);
+          return ok;
+        };
+        kodApi.fileCreate = async function(name, content, callback){
+          var apiFile = parentFile();
+          var ok = await apiFile?.saveFile('请选择保存目录', name || 'image.png', content);
+          callback && callback(ok ? {name:name, path:''} : null);
+          return ok;
+        };
+        kodApi.folderView = function(){};
+      })();
+    </script>
+    <link type="text/css" href="js/dist/tui-image-editor.min.css" rel="stylesheet" />
+    <link type="text/css" href="js/lib/tui-color-picker.css" rel="stylesheet" />
+    <link type="text/css" href="app/style.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="tui-image-editor-container"></div>
+    <script type="text/javascript" src="js/lib/fabric.js"></script>
+    <script type="text/javascript" src="js/lib/tui-code-snippet.min.js"></script>
+    <script type="text/javascript" src="js/lib/tui-color-picker.js"></script>
+    <script type="text/javascript" src="js/lib/FileSaver.min.js"></script>
+    
+    <script type="text/javascript" src="js/dist/tui-image-editor.min.js"></script>
+    <script type="text/javascript" src="js/theme/white-theme.js"></script>
+    <script type="text/javascript" src="js/theme/black-theme.js"></script>
+    <script type="text/javascript" src="app/app.js"></script>
+  </body>
+</html>

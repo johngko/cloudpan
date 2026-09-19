@@ -1,0 +1,14 @@
+{
+  "Name": "EML 查看器",
+  "Description": "EML 查看器",
+  "Code": "eml_viewer",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "实用工具",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/eml_viewer/logo.png",
+  "Log": "首发",
+  "OpenExts": "eml,mht,msg,mhtml,emlx",
+  "EditExts": ""
+}

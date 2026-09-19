@@ -1,0 +1,280 @@
+.tie-icon-add-button.icon-bubble .tui-image-editor-button[data-icontype="icon-bubble"] label,
+.tie-icon-add-button.icon-heart .tui-image-editor-button[data-icontype="icon-heart"] label,
+.tie-icon-add-button.icon-location .tui-image-editor-button[data-icontype="icon-location"] label,
+.tie-icon-add-button.icon-polygon .tui-image-editor-button[data-icontype="icon-polygon"] label,
+.tie-icon-add-button.icon-star .tui-image-editor-button[data-icontype="icon-star"] label,
+.tie-icon-add-button.icon-star-2 .tui-image-editor-button[data-icontype="icon-star-2"] label,
+.tie-icon-add-button.icon-arrow-3 .tui-image-editor-button[data-icontype="icon-arrow-3"] label,
+.tie-icon-add-button.icon-arrow-2 .tui-image-editor-button[data-icontype="icon-arrow-2"] label,
+.tie-icon-add-button.icon-arrow .tui-image-editor-button[data-icontype="icon-arrow"] label,
+.tie-icon-add-button.icon-bubble .tui-image-editor-button[data-icontype="icon-bubble"] label,
+.tie-draw-line-select-button.line .tui-image-editor-button.line label,
+.tie-draw-line-select-button.free .tui-image-editor-button.free label,
+.tie-flip-button.flipX .tui-image-editor-button.flipX label,
+.tie-flip-button.flipY .tui-image-editor-button.flipY label,
+.tie-flip-button.resetFlip .tui-image-editor-button.resetFlip label,
+.tie-crop-button .tui-image-editor-button.apply.active label,
+.tie-crop-preset-button .tui-image-editor-button.preset.active label,
+.tie-resize-button .tui-image-editor-button.apply.active label,
+.tie-resize-preset-button .tui-image-editor-button.preset.active label,
+.tie-shape-button.rect .tui-image-editor-button.rect label,
+.tie-shape-button.circle .tui-image-editor-button.circle label,
+.tie-shape-button.triangle .tui-image-editor-button.triangle label,
+.tie-text-effect-button .tui-image-editor-button.active label,
+.tie-text-align-button.tie-text-align-left .tui-image-editor-button.left label,
+.tie-text-align-button.tie-text-align-center .tui-image-editor-button.center label,
+.tie-text-align-button.tie-text-align-right .tui-image-editor-button.right label,
+.tie-mask-apply.apply.active .tui-image-editor-button.apply label,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button:hover > label,
+.tui-image-editor-container .tui-image-editor-checkbox label > span{
+	font-weight: 400 !important;
+}
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button > label, 
+.tui-image-editor-container .tui-image-editor-range-wrap.tui-image-editor-newline.short label, 
+.tui-image-editor-container .tui-image-editor-range-wrap.tui-image-editor-newline.short label > span{
+	font-weight: 400 !important;
+}
+html,body {height: 100%;margin: 0;padding:0;}
+
+
+
+.tui-image-editor-button{cursor: pointer;transition:all 0.2s;}
+.tui-image-editor-button label{cursor: pointer;}
+
+
+.tui-image-editor-container .tui-image-editor-submenu-style{
+	background: rgba(10,10,10,0.95) !important;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.tui-image-editor-container .tui-image-editor-wrap .tui-image-editor-size-wrap{padding: 10px 0 10px 0;}
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-menu-crop 
+.tui-image-editor-submenu-item .tui-image-editor-button.preset{
+	margin-bottom:0;
+}
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-menu-resize 
+.tui-image-editor-submenu-item .tui-image-editor-range-wrap.tui-image-editor-newline{margin-bottom: -15px;}
+
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-button.cancel,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-button.apply{
+	background: rgba(150,150,150,0.1);
+    padding: 3px 18px 0 13px;
+    border-radius: 20px;
+}
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-button{
+    border-radius: 3px;padding:8px 12px 4px 12px;margin: 0 2px;
+}
+
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item.flipX .flipX,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item.flipY .flipY,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tie-shape-button.rect .rect,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tie-shape-button.circle .circle,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tie-shape-button.triangle .triangle,
+
+.tui-image-editor-container .tui-image-editor-submenu .tie-text-align-button.tie-text-align-center .left,
+.tui-image-editor-container .tui-image-editor-submenu .tie-text-align-button.tie-text-align-center .center,
+.tui-image-editor-container .tui-image-editor-submenu .tie-text-align-button.tie-text-align-center .right,
+
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-arrow [data-icontype="icon-arrow"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-arrow-2 [data-icontype="icon-arrow-2"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-arrow-3 [data-icontype="icon-arrow-3"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-star [data-icontype="icon-star"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-star-2 [data-icontype="icon-star-2"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-polygon [data-icontype="icon-polygon"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-location [data-icontype="icon-location"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-heart [data-icontype="icon-heart"],
+.tui-image-editor-container .tui-image-editor-submenu .tie-icon-add-button.icon-bubbl [data-icontype="icon-bubble"],
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-button.active,
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-button:hover{
+	background: rgba(150,150,150,0.2);color:#fff;
+}
+
+.tui-image-editor-container .tui-image-editor-help-menu .tui-image-editor-item.enabled.on,
+.tui-image-editor-container .tui-image-editor-help-menu .tui-image-editor-item.enabled:hover{
+	background: rgba(150,150,150,0.1);
+	color:#fff;
+}
+.tui-image-editor-container .tui-image-editor-help-menu, 
+.tui-image-editor-container .tui-image-editor-menu{
+	/*max-width:100%;overflow-x:auto;*/
+}
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-button.preset{
+	margin: 0 2px 20px 2px;
+}
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-submenu-item  .tui-image-editor-partition{
+	margin-top: 8px;
+}
+.tui-image-editor-container .tui-image-editor-menu-resize 
+.tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-partition{margin:0;}
+.tui-image-editor-container .tui-image-editor-menu-filter 
+.tui-image-editor-submenu .tui-image-editor-submenu-item .tui-image-editor-partition{margin:0;}
+
+
+.tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item:hover{background:rgba(255,255,255,0.1);}
+.tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item.active,
+.tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item.active:hover{background-color:rgba(255,255,255,0.8);}
+
+.tui-image-editor-container .tui-image-editor-submenu{height:130px;}
+.tui-image-editor-container.bottom .tui-image-editor-submenu>div{padding-bottom:10px;}
+
+.tui-image-editor-container.bottom .tui-image-editor-submenu>.tui-image-editor-menu-flip,
+.tui-image-editor-container.bottom .tui-image-editor-submenu>.tui-image-editor-menu-icon{padding-bottom:30px;}
+.tui-image-editor-container.bottom .tui-image-editor-submenu>.tui-image-editor-menu-mask 
+.tie-mask-apply{margin-top:10px !important;}
+
+.tui-image-editor-menu-filter .filter-color-item .tui-image-editor-checkbox label{margin-left:7px;}
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button .color-picker-value {
+    border: 1px solid #555 !important;
+}
+
+
+.tui-image-editor-header .tui-image-editor-header-buttons{display: none;}
+.tui-image-editor-header-logo{display: none;}
+
+.tui-image-editor-container .tui-image-editor-controls{z-index: 10;}
+.tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item[tooltip-content]:hover:before{top:-11px;}
+.tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item[tooltip-content]:hover:after{
+	top:-34px;transform: translatex(-50%);margin-left: 20px;
+}
+.tui-image-editor-container .tui-image-editor-help-menu.top>.tui-image-editor-item[tooltip-content]:after{
+	transform: translatex(-50%);margin-left: 20px;left:0;
+}
+
+
+
+.tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-menu-resize .tui-image-editor-checkbox-wrap{
+	position: absolute;
+    margin-left: 160px;margin-top: -28px;
+}
+.tui-image-editor-canvas-container{
+	box-shadow:0 0 0 1px rgb(255 255 255 / 5%);
+	background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==) left center;
+    background-color: #ccc;
+}
+
+
+.buttons-action{position: absolute;right: 10px;top: 18px;}
+.kui-btn{
+    color: #eee;background: rgba(255,255,255,0.15);
+    padding:10px 20px 12px 20px;margin-left: 10px;
+    font-size: 13px;cursor: pointer;text-align: center;
+	transition: all 0.2s;border-radius:4px;
+}
+.kui-btn:before{font-size:16px;position: relative;top: 3px;margin-right: 2px;}
+.kui-btn.style-normal{background: rgba(255,255,255,0.15);}
+.kui-btn.style-normal:hover{background: rgba(255,255,255,0.3);color: #fff;}
+.kui-btn.style-blue{background:#5a4cdb;color: #fff;}
+.kui-btn.style-blue:hover{background:#8676e8;color: #fff;}
+
+
+.tui-image-editor-container .file-info{
+	position: absolute;left: 10px;top: 10px;
+	color: #888;background: rgba(150,150,150,0.05);
+	padding: 10px 15px 8px 15px;
+	font-size: 13px;cursor: pointer;
+	transition: all 0.2s;border-radius: 3px;
+	white-space: nowrap;overflow: hidden;text-overflow: ellipsis;
+	max-width: 30%;
+}
+.file-info:hover{background: rgba(150,150,150,0.2);color: #fff;}
+.file-info .font-icon{
+	width: 30px;height: 30px;line-height: 30px;
+    display: inline-block;text-align: center;font-size: 16px;
+    background: rgba(150,150,150,0.02);margin-right: 8px;
+	margin-top: -16px;margin-left: -12px;transform: translateY(4px);
+	transition: all 0.2s;border-radius: 3px;
+}
+.file-info .font-icon:hover{background: rgba(150,150,150,0.2);}
+
+.tui-image-editor-container.no-file .file-info{display:none;}
+.tui-image-editor-container.no-file .buttons-action{display:none;}
+.tui-image-editor-container.no-file .tui-image-editor{display:none;}
+.tui-image-editor-container .buttons-action.is-empty{
+	display:none;text-align: center;
+	position: absolute;
+    left: 0;right: 0;top: 0;top: 50%;
+}
+.tui-image-editor-container.no-file .buttons-action.is-empty{display:block;}
+.tui-image-editor-container{border:none !important;}
+
+::-webkit-scrollbar-thumb {
+    background-color: rgba(180,180,180,0.2);
+    border-radius: 12px;
+    background-clip: padding-box;
+    border: 1px solid rgba(180,180,180,0.4);
+    min-height: 28px;
+}
+::-webkit-scrollbar {width: 10px;height: 10px;}
+::-webkit-scrollbar-track-piece {
+    background-color: rgba(180,180,180,0.06);
+    border-radius: 3px;
+}
+html, body{background: #1e1e1e;overflow: hidden;}
+
+
+.change-theme{
+	position: absolute;z-index: 100;
+    right: 20px;bottom: 14px;padding:0;
+    width: 35px;height: 35px;line-height: 35px;padding: 0;
+	font-family: 'remixicon' !important;opacity: 0.9;
+}
+.change-theme:before{content:"\f1bf";font-size: 18px;top:1px;margin: 0;color:#888;}
+.theme-white .change-theme:before{content: "\ef75";color:#aaa;}
+
+
+
+
+html.theme-white,.theme-white body{background: #fff;}
+.theme-white .file-info:hover{color:#555;}
+.theme-white .tui-image-editor-main-container{background: #fff !important;}
+.theme-white .tui-image-editor-canvas-container{background-color: #fff;box-shadow: 0 0 0 1px rgba(0,0,0,0.05);}
+.theme-white .tui-image-editor-container .tui-image-editor-controls{background: #f6f6f6;}
+.theme-white .tui-image-editor-container .tui-image-editor-help-menu{background: #f6f6f6;}
+
+.theme-white .tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item.active, 
+.theme-white .tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item.active:hover{background: #ccc;}
+
+.theme-white .tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item:hover{background: #e6e6e6;}
+.theme-white .tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item.active,
+.theme-white .tui-image-editor-container .tui-image-editor-menu>.tui-image-editor-item.active:hover{background: #ddd;}
+
+.theme-white .tie-draw-line-select-button.free .tui-image-editor-button.free label,
+.theme-white .tui-image-editor-container .tui-image-editor-range-wrap label,
+.theme-white .tie-crop-preset-button .tui-image-editor-button.preset.active label,
+.theme-white .tui-image-editor-container .tui-image-editor-checkbox label > span,
+.theme-white .tui-image-editor-button.apply.active label,
+.theme-white .tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button > label,
+.theme-white .tie-mask-apply.apply.active .tui-image-editor-button.apply label,
+.theme-white .tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button .color-picker-value + label,
+.theme-white .tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button:hover > label{color:#555;}
+
+.theme-white .tui-image-editor-container .tui-image-editor-partition > div{color:#ddd;border-color: #aaa;}
+.theme-white .tui-image-editor-container .tui-image-editor-virtual-range-pointer{color:#555;background: #555;}
+.theme-white .tui-image-editor-container .tui-image-editor-range-value{background: #eee;color: #222;border-color: #ddd;}
+.theme-white .tui-image-editor-container .tui-image-editor-virtual-range-bar{background: #ccc;}
+.theme-white .tui-image-editor-container .tui-image-editor-virtual-range-subbar{background: #446;}
+
+.theme-white .tui-image-editor-container .tui-image-editor-disabled .tui-image-editor-virtual-range-pointer{color:#bbb;background: #bbb;}
+.theme-white .tui-image-editor-container .tui-image-editor-disabled .tui-image-editor-virtual-range-bar{color: #eee;background-color: #eee;}
+.theme-white .tui-image-editor-container .tui-image-editor-disabled .tui-image-editor-virtual-range-subbar{background: #ddd;}
+
+
+.theme-white .tui-image-editor-container .tui-image-editor-checkbox label > span:before {background: #f3f3f3;border: 1px solid #888;}
+
+.theme-white .tui-image-editor-container .tui-image-editor-submenu-style{
+	background: rgba(255,255,255,0.95) !important;
+    border-top: 1px solid #f6f6f6;
+    border-bottom: 1px solid #f6f6f6;
+}
+
+.theme-white .tui-image-editor-submenu use.active.use-default,
+.theme-white .tui-image-editor-menu use.hover.use-default, 
+.theme-white .tui-image-editor-help-menu use.hover.use-default{stroke:#333;fill: #333;}
+.theme-white .kui-btn.style-normal{background:#eee;color:#555;}
+.theme-white .kui-btn.style-normal:hover{background:#ddd;color: #333;}

@@ -1,0 +1,277 @@
+package handler
+
+import (
+	"github.com/gin-gonic/gin"
+
+	"cloudpan/internal/config"
+	"cloudpan/internal/middleware"
+)
+
+// Setup 装配全部路由
+func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
+	api := r.Group("/api")
+
+	// 公开
+	api.GET("/site/public", site.PublicInfo)
+	auth := &AuthHandler{Secret: cfg.Secret}
+	// 登录/注册按来源 IP 限速，防密码暴破与批量注册
+	loginLimiter := middleware.NewIPRateLimiter(10, 5) // 10 次/分钟，突发 5
+	regLimiter := middleware.NewIPRateLimiter(5, 2)    // 5 次/小时，突发 2
+	// 游客登录是匿名默认入口，限流比账号登录宽松但仍防爆刷
+	guestLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+	// 刷新令牌续期：401 静默续期入口，独立限流防刷
+	refreshLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+	api.POST("/auth/login", middleware.RateLimit(loginLimiter), auth.Login)
+	api.POST("/auth/register", middleware.RateLimit(regLimiter), auth.Register)
+	api.POST("/auth/guest", middleware.RateLimit(guestLimiter), auth.GuestLogin)
+	api.POST("/auth/refresh", middleware.RateLimit(refreshLimiter), auth.Refresh)
+
+	// 公开分享（受「公开分享」功能门控）
+	sh := &ShareHandler{Site: site, Secret: cfg.Secret}
+	// 分享提取码验证按 IP 限速：带密码的分享链接可被暴力试码
+	verifyLimiter := middleware.NewIPRateLimiter(20, 8) // 20 次/分钟，突发 8
+	sg := api.Group("/s/:token", middleware.AppGate("share"))
+	{
+		sg.GET("/info", sh.Info)
+		sg.POST("/verify", middleware.RateLimit(verifyLimiter), sh.Verify)
+		sg.GET("/list", sh.List)
+		sg.GET("/download", sh.Download)
+		sg.GET("/raw", sh.Raw)
+	}
+
+	// 公开分享链接的在线 Office 编辑器配置（匿名，Cloudreve 分享模式：任何人打开分享链接可进 ONLYOFFICE 编辑器）。
+	// 双重功能门控（share+office 均启用才放行，防止单开关被绕）；独立限流防爆刷签发
+	officePubLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+	officePub := &OfficeHandler{Site: site, Secret: cfg.Secret}
+	api.GET("/s/:token/office",
+		middleware.AppGate("share"), middleware.AppGate("office"),
+		middleware.RateLimit(officePubLimiter),
+		officePub.ConfigShare)
+	// 分享链接的「正在编辑」协作状态（匿名，与编辑器配置同门控同限流）
+	api.GET("/s/:token/office/status",
+		middleware.AppGate("share"), middleware.AppGate("office"),
+		middleware.RateLimit(officePubLimiter),
+		officePub.StatusShare)
+
+	// 需登录（GuestReadOnly：游客共享账号只读兜底，见 middleware/guest.go）
+	ug := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
+	{
+		ug.GET("/auth/me", auth.Me)
+		ug.PUT("/users/me", auth.UpdateMe)
+		ug.PUT("/users/me/password", auth.ChangePassword)
+		ug.PUT("/users/me/webdav-password", auth.SetWebdavPassword)
+
+		ug.GET("/policies", site.Policies)
+
+		ug.GET("/fs/list", site.List)
+		ug.POST("/fs/mkdir", site.Mkdir)
+		ug.POST("/fs/rename", site.Rename)
+		ug.POST("/fs/move", site.Move)
+		ug.POST("/fs/copy", site.Copy)
+		ug.POST("/fs/cross-copy", site.CrossCopy)
+		ug.POST("/fs/cross-move", site.CrossMove)
+		ug.POST("/fs/delete", site.Delete)
+		ug.GET("/fs/text", site.ReadText)
+		ug.POST("/fs/text", site.WriteText)
+		ug.GET("/fs/search", site.Search)
+		ug.GET("/fs/global-search", middleware.AppGate("global_search"), site.GlobalSearch)
+		ug.GET("/fs/properties", site.Properties)
+		ug.GET("/fs/raw", site.Raw)
+		// 外部壁纸同源代理（SSRF 段检查 + 20MB 上限，见 handler/wallpaper.go）
+		ug.GET("/fs/wallpaper", site.Wallpaper)
+		ug.GET("/fs/download", site.Download)
+		ug.POST("/fs/archive", site.Archive)
+		// 压缩包在线浏览（受「压缩包浏览器」功能门控）
+		ug.GET("/fs/archive/list", middleware.AppGate("archive_view"), site.ArchiveList)
+		ug.GET("/fs/archive/raw", middleware.AppGate("archive_view"), site.ArchiveRaw)
+
+		// 文件版本管理（受「版本管理」功能门控）
+		ug.GET("/fileversions", middleware.AppGate("version"), site.FileVersions)
+		ug.GET("/fileversions/download", middleware.AppGate("version"), site.FileVersionDownload)
+		ug.POST("/fileversions/restore", middleware.AppGate("version"), site.FileVersionRestore)
+
+		up := &UploadHandler{Site: site}
+		ug.POST("/upload/init", up.Init)
+		ug.PUT("/upload/chunk/:sid/:idx", up.Chunk)
+		ug.POST("/upload/complete", up.Complete)
+		ug.DELETE("/upload/:sid", up.Abort)
+		ug.GET("/upload/:sid/status", up.Status)
+
+		ug.GET("/recycle", site.RecycleList)
+		ug.POST("/recycle/restore", site.RecycleRestore)
+		ug.POST("/recycle/purge", site.RecyclePurge)
+
+		ug.GET("/stars", site.StarList)
+		ug.POST("/stars", site.StarAdd)
+		ug.DELETE("/stars", site.StarRemove)
+
+		// 用户设置 KV（播放列表/观看进度等）
+		ug.GET("/settings", site.UserSettingsGet)
+		ug.PUT("/settings", site.UserSettingsSet)
+
+		// 网络测速（内置应用，界面仿 LibreSpeed；download 随机数据 no-store，upload 丢弃）
+		// 受「网络测速」功能门控：游客（访客组）无权限，API 403 且桌面/应用中心入口隐藏
+		st := &SpeedTestHandler{}
+		ug.GET("/speedtest/ping", middleware.AppGate("speedtest"), st.Ping)
+		ug.GET("/speedtest/download", middleware.AppGate("speedtest"), st.Download)
+		ug.POST("/speedtest/upload", middleware.AppGate("speedtest"), st.Upload)
+
+		ug.GET("/shares", middleware.AppGate("share"), sh.Mine)
+		ug.POST("/shares", middleware.AppGate("share"), sh.Create)
+		ug.DELETE("/shares/:id", middleware.AppGate("share"), sh.Cancel)
+		// 端到端加密分享：属主上传本地加密后的密文（body = 密文字节流）
+		ug.POST("/shares/:id/encrypt-file", middleware.AppGate("share"), sh.EncryptFile)
+		// 转存：公开分享内容一键保存到自己账号（登录态）
+		ug.POST("/s/:token/save", sh.SaveToDrive)
+
+		// ONLYOFFICE（受「在线 Office」功能门控）
+		office := &OfficeHandler{Site: site}
+		ug.GET("/office/config", middleware.AppGate("office"), office.Config)
+		// 实时协作「正在编辑」状态：编辑器心跳 + 文件列表批量只读查询
+		ug.GET("/office/status", middleware.AppGate("office"), office.Status)
+		ug.POST("/office/status-batch", middleware.AppGate("office"), office.StatusBatch)
+
+		// 云盘授权（管理员专属：涉及云盘凭据绑定/token 交换，普通用户无权限操作存储策略）
+		ca := &CloudAuth{Site: site}
+		ug.GET("/cloud/auth-url", middleware.AdminOnly(), ca.AuthURL)
+		ug.POST("/cloud/exchange", middleware.AdminOnly(), ca.Exchange)
+		ug.GET("/cloud/status", middleware.AdminOnly(), ca.Status)
+
+		// 离线下载（HTTP 或 BT 任一启用即放行）
+		off := &OfflineHandler{}
+		ug.POST("/offline", middleware.AppGateAny("offline_http", "bt"), off.Create)
+		ug.GET("/offline", off.List)
+		ug.DELETE("/offline/:id", off.Cancel)
+		// 任务中心统一轮询（offline/bt/compress/decompress 全类型）
+		ug.GET("/tasks", off.TaskList)
+
+		// 站内通知（每用户隔离，受「站内通知」功能门控）
+		notify := &NotifyHandler{}
+		ug.GET("/notify", middleware.AppGate("notify"), notify.List)
+		ug.GET("/notify/unread", middleware.AppGate("notify"), notify.Unread)
+		ug.GET("/notify/stream", middleware.AppGate("notify"), notify.Stream)
+		ug.POST("/notify/read", middleware.AppGate("notify"), notify.Read)
+		ug.POST("/notify/clear", middleware.AppGate("notify"), notify.Clear)
+
+		// 站内用户共享（受「内部共享」功能门控）
+		// 发起/管理共享（create/mine/cancel）挂个人 AppGate：访客等无权限账号不能发起共享；
+		// 消费端点（with-me/info/list/raw/download）不挂个人 AppGate——被共享者能否看到取决于
+		// 共享目标（用户/组/所有人）命中，而不是本人有无「内部共享」权限，否则共享给访客永远不可见。
+		// 消费端点仍受全局功能开关约束（handler 内 shareFeatureOn 校验 AppEnabled）。
+		ush := &UserShareHandler{Site: site}
+		office.LoadShare = ush.loadShareByID // Office 编辑器支持共享盘文件（Config 需共享可见性校验）
+		ug.GET("/users", ush.Users)
+		ug.GET("/groups", ush.Groups)
+		ug.POST("/usershares", middleware.AppGate("usershare"), ush.Create)
+		ug.GET("/usershares", middleware.AppGate("usershare"), ush.Mine)
+		ug.DELETE("/usershares/:id", middleware.AppGate("usershare"), ush.Cancel)
+		ug.GET("/usershares/with-me", ush.WithMe)
+		ug.GET("/shared/:id/info", ush.Info)
+		ug.GET("/shared/:id/list", ush.List)
+		ug.GET("/shared/:id/raw", ush.Raw)
+		ug.GET("/shared/:id/download", ush.Download)
+		ug.POST("/shared/:id/mkdir", middleware.AppGate("usershare"), ush.Mkdir)
+		ug.POST("/shared/:id/upload", middleware.AppGate("usershare"), ush.Upload)
+		ug.POST("/shared/:id/delete", middleware.AppGate("usershare"), ush.Delete)
+
+		// 海报应用专属：内置资源库（T:）策略信息——T 盘对非管理员不进盘列表，
+		// 应用经此取 policyId 后走通用 fs 只读接口（按「海报」功能门控）
+
+		// 系统功能清单（应用中心数据源）
+		ug.GET("/apps", site.AppList)
+
+			// 终端：本地真实 shell（PTY/ConPTY）/ 远程 SSH 终端 + SFTP 文件管理。
+			// 每个端点都挂「终端」功能门控（无门控端点 = 绕过功能开关的 shell 入口，已修复）；
+			// 默认仅管理员可用（默认用户组 AppPerms 禁用 terminal，应用清单默认关闭）
+			th := NewTerminalHandler(cfg.Secret)
+			ug.GET("/terminal/ws", middleware.AppGate("terminal"), th.WebSocket)
+			ug.GET("/terminal/platform", middleware.AppGate("terminal"), th.Platform)
+			ug.POST("/terminal/conns", middleware.AppGate("terminal"), th.ConnSave)
+			ug.GET("/terminal/conns", middleware.AppGate("terminal"), th.ConnList)
+			ug.PUT("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnUpdate)
+			ug.DELETE("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnDelete)
+			ug.POST("/terminal/conns/:id/test", middleware.AppGate("terminal"), th.ConnTest)
+			ug.GET("/terminal/fs/list", middleware.AppGate("terminal"), th.FSList)
+			ug.POST("/terminal/fs/op", middleware.AppGate("terminal"), th.FSOps)
+			ug.GET("/terminal/fs/download", middleware.AppGate("terminal"), th.FSDownload)
+			ug.POST("/terminal/fs/upload", middleware.AppGate("terminal"), th.FSUpload)
+	}
+
+	// 内置浏览器代理：iframe 子资源请求没有 Authorization 头，故独立鉴权——
+	// 登录 JWT（头或 ?t=）与短时效代理票据 ?pt= 二者皆可（见 browser.go）
+	bh := &BrowserHandler{Secret: cfg.Secret}
+	bg := api.Group("", bh.auth, middleware.AppGate("browser"), middleware.RateLimit(middleware.NewIPRateLimiter(300, 100)))
+	bg.GET("/browser/session", bh.Session)
+	bg.GET("/browser/p/:b64", bh.Proxy)
+
+	// ONLYOFFICE 服务端回调（无 JWT，用签名 token 鉴权；受「在线 Office」功能门控）
+	api.GET("/office/file", middleware.AppGate("office"), (&OfficeHandler{Site: site}).File)
+	api.POST("/office/callback", middleware.AppGate("office"), (&OfficeHandler{Site: site}).Callback)
+
+	// 云盘 OAuth 回调（公开路由：厂商把用户浏览器重定向回这里，此时浏览器未必登录本系统；
+	// 安全靠 HMAC 签名 state 而非登录态——state 绑定策略 ID/类型/回调地址，30 分钟过期）
+	ca2 := &CloudAuth{Site: site}
+	api.GET("/cloud/callback", ca2.Callback)
+
+	// 直链提取：签发需登录，访问免登录
+	dlh := &DLHandler{Site: site}
+	ug2 := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
+	ug2.GET("/fs/dlink", dlh.Create)
+	api.GET("/dl", dlh.Serve)
+
+	// 管理端
+	ag := api.Group("/admin", middleware.Auth(cfg.Secret), middleware.AdminOnly())
+	{
+		ad := &AdminHandler{Site: site}
+		ag.GET("/dashboard", ad.Dashboard)
+
+		// 系统资源监控（受「系统监控」功能门控）
+		ag.GET("/system", middleware.AppGate("system_monitor"), ad.SystemInfo)
+
+		ag.GET("/users", ad.UserList)
+		ag.POST("/users", ad.UserCreate)
+		ag.PUT("/users/:id", ad.UserUpdate)
+		ag.PUT("/users/:id/password", ad.UserResetPassword)
+		ag.DELETE("/users/:id", ad.UserDelete)
+
+		ag.GET("/groups", ad.GroupList)
+		ag.POST("/groups", ad.GroupSave)
+		ag.PUT("/groups/:id", ad.GroupSave)
+		ag.DELETE("/groups/:id", ad.GroupDelete)
+
+		ag.GET("/policies", ad.PolicyList)
+		ag.POST("/policies", ad.PolicyCreate)
+		ag.PUT("/policies/:id", ad.PolicyUpdate)
+		ag.PUT("/policies/:id/status", ad.PolicyToggle)
+		ag.DELETE("/policies/:id", ad.PolicyDelete)
+
+		ag.GET("/settings", ad.SettingsGet)
+		ag.PUT("/settings", ad.SettingsSet)
+
+		// 系统版本更新（检查/下载/自重启/历史）
+		upd := &UpdateHandler{Site: site}
+		ag.GET("/update/check", upd.Check)
+		ag.POST("/update/start", upd.Start)
+		ag.GET("/update/status", upd.Status)
+		ag.GET("/update/history", upd.History)
+
+		ag.POST("/office-test", (&OfficeHandler{Site: site}).Health)
+		// 多 Document Server：列表 + 健康状态 / 保存（保存后立即探测一次）
+		ag.GET("/office-dses", (&OfficeHandler{Site: site}).DSEndpoint)
+		ag.POST("/office-dses", (&OfficeHandler{Site: site}).DSSave)
+		ag.GET("/logs", ad.LogList)
+		ag.GET("/logs/export", ad.LogExport)
+		ag.GET("/notifications", ad.NotificationList)
+		ag.GET("/tasks", ad.TaskList)
+		ag.GET("/shares", ad.ShareAudit)
+		ag.DELETE("/shares/:id", ad.ShareDelete)
+		// 站内用户共享审计（与外链分享审计并列）
+		ag.GET("/usershares", ad.UserShareAudit)
+		ag.DELETE("/usershares/:id", ad.UserShareCancel)
+
+		ag.POST("/apps/:key/toggle", ad.AppToggle)
+
+		// 海报资源库管理（管理员）：内置库上传/删除（绕过 fs 只读层，直接写物化目录+重建清单）、
+		// 查看任意用户的海报资源（作品/素材/模板，用户间互相隔离仅管理员可见）
+	}
+}

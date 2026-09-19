@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- saved from url=(0030)http://ebook.micsapp.com/books -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>我的书架</title>
+    <link rel="stylesheet" href="./shelf-asserts/css/style.css">
+    <script src="./shelf-asserts/js/vue.global.prod.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <div class="body-wrapper">
+        <nav class="main no-icons">
+            <div class="left">
+                <a href="#" class="brand">我的书架</a>
+            </div>
+        </nav>
+
+         
+        <div class="bar">
+            
+            <div class="search">
+                <input type="text" name="q" placeholder="请输入关键词" value="" class="box" v-model="keyword" @keyup.enter="search()"> 
+                <button type="button" class="button" @click="search()">
+                    <i class="fa fa-search"></i>
+                </button>
+            </div>
+        </div>
+         <div class="current-view books cards">
+            <div class="book" v-for="item in showBooks">
+                <a :href="'./index.html#'+item.id" class="cover">
+
+                    <img :src="item.img" alt="cover">
+
+                </a>
+                <div class="meta">
+                    <a :href="'./index.html#'+item.id" class="title">{{item.title}}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="prog" style="display: none; position: fixed; bottom: 12px; right: 12px; background: rgb(255, 255, 255); border: 1px solid rgb(221, 221, 221); box-shadow: rgba(0, 0, 0, 0.09) 0px 1px 6px; border-radius: 12px; z-index: 2000; padding: 12px; font-size: 18px;"></div>
+    </div>
+</body>
+<script type="text/javascript" charset="utf-8">
+    Vue.createApp({
+        data(){
+            return {
+                books:[],
+                showBooks:[],
+                keyword:""
+            }
+        },
+        methods:{
+            init:function (){
+                let that = this;
+                fetch("shelf.json?v="+new Date().getTime()).then(function(res){
+                    return res.json();
+                }).then(function(list){
+                    that.books = list;
+                    that.showBooks = list;
+                });
+            },
+            search:function(){
+                var that = this;
+                var list = [];
+                for(var i=0;i<that.books.length;i++){
+                    var one = that.books[i];
+                    if(one.title.indexOf(that.keyword)!=-1){
+                        list.push(one);
+                    }
+                };
+                that.showBooks = list;
+            }
+        },
+        mounted:function(){
+            this.init();
+        }
+    }).mount("#app");
+</script>
+<style>
+    .books.cards .book .meta .title{
+        white-space:initial;
+    }
+    body .body-wrapper {
+      min-height: calc(100vh - 10px);
+    }
+</style>
+</html>

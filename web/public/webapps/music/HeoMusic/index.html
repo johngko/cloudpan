@@ -1,0 +1,39 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music - 播放器</title>
+  <link rel="stylesheet" type="text/css" href="./css/APlayer.min.css">
+  <link rel="stylesheet" type="text/css" href="./main.css">
+  <link rel="icon" type="image/x-icon" href="./icon.png">
+  <link rel="apple-touch-icon" href="./icon.png">
+  <meta name="apple-mobile-web-app-title" content="音乐">
+  <link rel="bookmark" href="./icon.png">
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./icon.png">
+  <meta name="description" content="一个简单好用的音乐播放器。">  
+  <meta name="referrer" content="never">  
+</head>
+<body>
+<div id="music_bg"></div>
+<div id="heoMusic-page">
+</div>
+<script>
+    (function(){
+        let uid = new URL(location.href).searchParams.get("id");
+        if(!uid){
+          uid = "default";
+        }
+        window.userId = encodeURIComponent(uid);
+        window.userServer = "v9os";
+        window.userType = "playlist";
+        window.meting_api = new URL(location.href).searchParams.get("api");
+    })();
+</script>
+<script src="./js/APlayer.min.js"></script>
+<script src="./js/Meting2.min.js"></script>
+<script async data-pjax src="./js/main.js"></script>
+</body>
+</html>

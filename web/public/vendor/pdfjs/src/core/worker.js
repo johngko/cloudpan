@@ -1,0 +1,1072 @@
+/* Copyright 2012 Mozilla Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  AbortException,
+  assert,
+  getVerbosityLevel,
+  info,
+  isNodeJS,
+  PasswordException,
+  setVerbosityLevel,
+  VerbosityLevel,
+  warn,
+} from "../shared/util.js";
+import {
+  arrayBuffersToBytes,
+  getNewAnnotationsMap,
+  XRefParseException,
+} from "./core_utils.js";
+import { Dict, isDict, Ref, RefMap } from "./primitives.js";
+import { LocalPdfManager, NetworkPdfManager } from "./pdf_manager.js";
+import { MessageHandler, wrapReason } from "../shared/message_handler.js";
+import { AnnotationFactory } from "./annotation.js";
+import { clearGlobalCaches } from "./cleanup_helper.js";
+import { incrementalUpdate } from "./writer.js";
+import { PDFEditor } from "./editor/pdf_editor.js";
+import { PDFWorkerStream } from "./worker_stream.js";
+import { stringToPDFString } from "./string_utils.js";
+import { StructTreeRoot } from "./struct_tree.js";
+
+class WorkerTask {
+  #capability = Promise.withResolvers();
+
+  terminated = false;
+
+  constructor(name) {
+    this.name = name;
+  }
+
+  get finished() {
+    return this.#capability.promise;
+  }
+
+  finish() {
+    this.#capability.resolve();
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+
+  ensureNotTerminated() {
+    if (this.terminated) {
+      throw new Error("Worker task was terminated");
+    }
+  }
+}
+
+class WorkerMessageHandler {
+  static {
+    // Worker thread (and not Node.js)?
+    if (
+      typeof window === "undefined" &&
+      !isNodeJS &&
+      typeof self !== "undefined" &&
+      /* isMessagePort = */
+      typeof self.postMessage === "function" &&
+      "onmessage" in self
+    ) {
+      this.initializeFromPort(self);
+    }
+  }
+
+  static setup(handler, port) {
+    let testMessageProcessed = false;
+    handler.on("test", data => {
+      if (testMessageProcessed) {
+        return; // we already processed 'test' message once
+      }
+      testMessageProcessed = true;
+
+      // Ensure that `TypedArray`s can be sent to the worker.
+      handler.send("test", data instanceof Uint8Array);
+    });
+
+    handler.on("configure", data => {
+      setVerbosityLevel(data.verbosity);
+    });
+
+    handler.on("GetDocRequest", data => this.createDocumentHandler(data, port));
+
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      handler.on("GetWorkerCoverage", function () {
+        return globalThis.__coverage__ ?? {};
+      });
+    }
+  }
+
+  static createDocumentHandler(docParams, port) {
+    // This context is actually holds references on pdfManager and handler,
+    // until the latter is destroyed.
+    let pdfManager;
+    let terminated = false;
+    let cancelXHRs = null;
+    const WorkerTasks = new Set();
+    const verbosity = getVerbosityLevel();
+
+    const { docId, apiVersion } = docParams;
+    const workerVersion =
+      typeof PDFJSDev !== "undefined" && !PDFJSDev.test("TESTING")
+        ? PDFJSDev.eval("BUNDLE_VERSION")
+        : null;
+    if (apiVersion !== workerVersion) {
+      throw new Error(
+        `The API version "${apiVersion}" does not match ` +
+          `the Worker version "${workerVersion}".`
+      );
+    }
+
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+      // Fail early, and predictably, rather than having (some) fonts fail to
+      // load/render with slightly cryptic error messages in environments where
+      // the `{Object, Array}.prototype` has been *incorrectly* extended.
+      //
+      // PLEASE NOTE: We do *not* want to slow down font parsing by adding
+      //              `Object.hasOwn` checks all over the code-base.
+      const buildMsg = (type, prop) =>
+        `The \`${type}.prototype\` contains unexpected enumerable property ` +
+        `"${prop}", thus breaking e.g. \`for...in\` iteration of ${type}s.`;
+
+      for (const prop in {}) {
+        throw new Error(buildMsg("Object", prop));
+      }
+      for (const prop in []) {
+        throw new Error(buildMsg("Array", prop));
+      }
+    }
+    const workerHandlerName = docId + "_worker";
+    let handler = new MessageHandler(workerHandlerName, docId, port);
+
+    function ensureNotTerminated() {
+      if (terminated) {
+        throw new Error("Worker was terminated");
+      }
+    }
+
+    function startWorkerTask(task) {
+      WorkerTasks.add(task);
+    }
+
+    function finishWorkerTask(task) {
+      task.finish();
+      WorkerTasks.delete(task);
+    }
+
+    async function loadDocument(recoveryMode) {
+      await pdfManager.initDocument(recoveryMode);
+
+      const isPureXfa = await pdfManager.ensureDoc("isPureXfa");
+      if (isPureXfa) {
+        const task = new WorkerTask("loadXfaResources");
+        startWorkerTask(task);
+
+        await pdfManager.ensureDoc("loadXfaResources", [handler, task]);
+        finishWorkerTask(task);
+      }
+
+      const [numPages, fingerprints] = await Promise.all([
+        pdfManager.ensureDoc("numPages"),
+        pdfManager.ensureDoc("fingerprints"),
+      ]);
+
+      // Get htmlForXfa after numPages to avoid to create HTML twice.
+      const htmlForXfa = isPureXfa
+        ? await pdfManager.ensureDoc("htmlForXfa")
+        : null;
+
+      return { numPages, fingerprints, htmlForXfa };
+    }
+
+    async function getPdfManager({
+      data,
+      password,
+      disableAutoFetch,
+      rangeChunkSize,
+      docBaseUrl,
+      enableXfa,
+      evaluatorOptions,
+    }) {
+      const pdfManagerArgs = {
+        source: null,
+        disableAutoFetch,
+        docBaseUrl,
+        docId,
+        enableXfa,
+        evaluatorOptions,
+        handler,
+        length: 0,
+        password,
+        rangeChunkSize,
+      };
+
+      if (data) {
+        pdfManagerArgs.source = data;
+
+        return new LocalPdfManager(pdfManagerArgs);
+      }
+      const pdfStream = new PDFWorkerStream({ msgHandler: handler }),
+        fullReader = pdfStream.getFullReader();
+
+      const { promise, resolve, reject } = Promise.withResolvers();
+      let newPdfManager,
+        cachedChunks = [];
+      cancelXHRs = reason => pdfStream.cancelAllRequests(reason);
+
+      fullReader.headersReady
+        .then(() => {
+          if (!fullReader.isRangeSupported) {
+            return;
+          }
+          pdfManagerArgs.source = pdfStream;
+          pdfManagerArgs.length = fullReader.contentLength;
+          // We don't need auto-fetch when streaming is enabled.
+          pdfManagerArgs.disableAutoFetch ||= fullReader.isStreamingSupported;
+
+          newPdfManager = new NetworkPdfManager(pdfManagerArgs);
+          // There may be a chance that `newPdfManager` is not initialized for
+          // the first few iterations of the `readData` code. Be sure to send
+          // all cached chunks, if any, to chunked_stream via pdf_manager.
+          for (const chunk of cachedChunks) {
+            newPdfManager.sendProgressiveData(chunk);
+          }
+          cachedChunks = null;
+
+          resolve(newPdfManager);
+          cancelXHRs = null;
+        })
+        .catch(reason => {
+          reject(reason);
+          cancelXHRs = null;
+        });
+
+      async function readData() {
+        let loaded = 0;
+
+        while (true) {
+          const { value, done } = await fullReader.read();
+          ensureNotTerminated();
+
+          if (done) {
+            break;
+          }
+          if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+            assert(
+              value instanceof ArrayBuffer,
+              "readData (getPdfManager) - expected an ArrayBuffer."
+            );
+          }
+          loaded += value.byteLength;
+
+          if (!fullReader.isStreamingSupported) {
+            handler.send("DocProgress", {
+              loaded,
+              total: fullReader.contentLength,
+            });
+          }
+
+          if (newPdfManager) {
+            newPdfManager.sendProgressiveData(value);
+          } else {
+            cachedChunks.push(value);
+          }
+        }
+
+        if (!newPdfManager) {
+          pdfManagerArgs.source = arrayBuffersToBytes(cachedChunks);
+          cachedChunks = null;
+
+          newPdfManager = new LocalPdfManager(pdfManagerArgs);
+          resolve(newPdfManager);
+        }
+        cancelXHRs = null;
+      }
+      readData().catch(reason => {
+        reject(reason);
+        cancelXHRs = null;
+      });
+
+      return promise;
+    }
+
+    async function getPassword(ex) {
+      if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+        assert(
+          ex instanceof PasswordException,
+          "getPassword - must be a `PasswordException`."
+        );
+      }
+      const task = new WorkerTask(`PasswordException: response ${ex.code}`);
+      startWorkerTask(task);
+
+      try {
+        const res = await handler.sendWithPromise("PasswordRequest", ex);
+        return res.password;
+      } finally {
+        // Ensure that any `catch` handler runs *before* removing the task.
+        Promise.resolve().then(() => {
+          finishWorkerTask(task);
+        });
+      }
+    }
+
+    function setupDoc(data) {
+      function onSuccess(doc) {
+        ensureNotTerminated();
+        handler.send("GetDoc", { pdfInfo: doc });
+      }
+
+      function onFailure(ex) {
+        if (terminated) {
+          return;
+        }
+
+        if (ex instanceof PasswordException) {
+          getPassword(ex)
+            .then(password => {
+              pdfManager.updatePassword(password);
+              pdfManagerReady();
+            })
+            .catch(() => {
+              handler.send("DocException", ex);
+            });
+        } else {
+          // Ensure that we always fallback to `UnknownErrorException`.
+          handler.send("DocException", wrapReason(ex));
+        }
+      }
+
+      function pdfManagerReady() {
+        ensureNotTerminated();
+
+        loadDocument(false).then(onSuccess, function (reason) {
+          ensureNotTerminated();
+
+          // Try again with recoveryMode == true
+          if (!(reason instanceof XRefParseException)) {
+            onFailure(reason);
+            return;
+          }
+          pdfManager.requestLoadedStream().then(function () {
+            ensureNotTerminated();
+
+            loadDocument(true).then(onSuccess, onFailure);
+          }, onFailure);
+        });
+      }
+
+      ensureNotTerminated();
+
+      getPdfManager(data)
+        .then(function (newPdfManager) {
+          if (terminated) {
+            // We were in a process of setting up the manager, but it got
+            // terminated in the middle.
+            newPdfManager.terminate(
+              new AbortException("Worker was terminated.")
+            );
+            throw new Error("Worker was terminated");
+          }
+          pdfManager = newPdfManager;
+
+          pdfManager.requestLoadedStream(/* noFetch = */ true).then(
+            stream => {
+              handler.send("DataLoaded", { length: stream.bytes.byteLength });
+            },
+            () => {
+              // Avoid errors if document loading was terminated.
+            }
+          );
+        })
+        .then(pdfManagerReady, onFailure);
+    }
+
+    handler.on("GetPage", async function ({ pageIndex }) {
+      const page = await pdfManager.getPage(pageIndex);
+
+      const [rotate, ref, userUnit, view] = await Promise.all([
+        pdfManager.ensure(page, "rotate"),
+        pdfManager.ensure(page, "ref"),
+        pdfManager.ensure(page, "userUnit"),
+        pdfManager.ensure(page, "view"),
+      ]);
+      return {
+        rotate,
+        ref,
+        refStr: ref?.toString() ?? null,
+        userUnit,
+        view,
+      };
+    });
+
+    handler.on("GetPageIndex", function ({ num, gen }) {
+      return pdfManager.ensureCatalog("getPageIndex", [Ref.get(num, gen)]);
+    });
+
+    handler.on("GetDestinations", function () {
+      return pdfManager.ensureCatalog("destinations");
+    });
+
+    handler.on("GetDestination", function ({ id }) {
+      return pdfManager.ensureCatalog("getDestination", [id]);
+    });
+
+    handler.on("GetPageLabels", function () {
+      return pdfManager.ensureCatalog("pageLabels");
+    });
+
+    handler.on("GetPageLayout", function () {
+      return pdfManager.ensureCatalog("pageLayout");
+    });
+
+    handler.on("GetPageMode", function () {
+      return pdfManager.ensureCatalog("pageMode");
+    });
+
+    handler.on("GetViewerPreferences", function () {
+      return pdfManager.ensureCatalog("viewerPreferences");
+    });
+
+    handler.on("GetOpenAction", function () {
+      return pdfManager.ensureCatalog("openAction");
+    });
+
+    handler.on("GetAttachments", function () {
+      return pdfManager.ensureCatalog("attachments");
+    });
+
+    handler.on("GetAttachmentContent", async function (id) {
+      let passwordEx;
+
+      // Loop to prompt again after an incorrect password.
+      while (true) {
+        const password = passwordEx ? await getPassword(passwordEx) : null;
+
+        try {
+          if (password) {
+            pdfManager.updatePassword(password);
+          }
+          return await pdfManager.ensureCatalog("attachmentContent", [id]);
+        } catch (ex) {
+          if (ex instanceof PasswordException) {
+            passwordEx = ex;
+            continue;
+          }
+          throw ex;
+        }
+      }
+    });
+
+    handler.on("GetDocJSActions", function () {
+      return pdfManager.ensureCatalog("jsActions");
+    });
+
+    handler.on("GetPageJSActions", async function ({ pageIndex }) {
+      const page = await pdfManager.getPage(pageIndex);
+      return pdfManager.ensure(page, "jsActions");
+    });
+
+    handler.on(
+      "GetAnnotationsByType",
+      async function ({ types, pageIndexesToSkip }) {
+        const [numPages, annotationGlobals] = await Promise.all([
+          pdfManager.ensureDoc("numPages"),
+          pdfManager.ensureDoc("annotationGlobals"),
+        ]);
+
+        if (!annotationGlobals) {
+          return null;
+        }
+        const pagePromises = [];
+        const annotationPromises = [];
+        let task = null;
+        try {
+          for (let i = 0, ii = numPages; i < ii; i++) {
+            if (pageIndexesToSkip?.has(i)) {
+              continue;
+            }
+            if (!task) {
+              task = new WorkerTask("GetAnnotationsByType");
+              startWorkerTask(task);
+            }
+            pagePromises.push(
+              pdfManager
+                .getPage(i)
+                .then(page =>
+                  page.collectAnnotationsByType(
+                    handler,
+                    task,
+                    types,
+                    annotationPromises,
+                    annotationGlobals
+                  )
+                )
+            );
+          }
+          await Promise.all(pagePromises);
+          const annotations = await Promise.all(annotationPromises);
+          return annotations.filter(Boolean);
+        } finally {
+          if (task) {
+            finishWorkerTask(task);
+          }
+        }
+      }
+    );
+
+    handler.on("GetOutline", function () {
+      return pdfManager.ensureCatalog("documentOutline");
+    });
+
+    handler.on("GetOptionalContentConfig", function () {
+      return pdfManager.ensureCatalog("optionalContentConfig");
+    });
+
+    handler.on("GetPermissions", function () {
+      return pdfManager.ensureCatalog("permissions");
+    });
+
+    handler.on("GetMetadata", function () {
+      return Promise.all([
+        pdfManager.ensureDoc("documentInfo"),
+        pdfManager.ensureCatalog("metadata"),
+        pdfManager.ensureCatalog("hasStructTree"),
+      ]);
+    });
+
+    handler.on("GetMarkInfo", function () {
+      return pdfManager.ensureCatalog("markInfo");
+    });
+
+    handler.on("GetData", async function () {
+      const stream = await pdfManager.requestLoadedStream();
+      return stream.bytes;
+    });
+
+    handler.on("GetAnnotations", async function ({ pageIndex, intent }) {
+      const page = await pdfManager.getPage(pageIndex);
+
+      const task = new WorkerTask(`GetAnnotations: page ${pageIndex}`);
+      startWorkerTask(task);
+
+      try {
+        return await page.getAnnotationsData(handler, task, intent);
+      } finally {
+        finishWorkerTask(task);
+      }
+    });
+
+    handler.on("GetFieldObjects", async function () {
+      const fieldObjects = await pdfManager.ensureDoc("fieldObjects");
+      return fieldObjects?.allFields || null;
+    });
+
+    handler.on("GetSignatures", function () {
+      return pdfManager.ensureDoc("signatures");
+    });
+
+    handler.on("GetSignatureData", function (id) {
+      return pdfManager.ensureDoc("getSignatureData", [id]);
+    });
+
+    handler.on("HasJSActions", function () {
+      return pdfManager.ensureDoc("hasJSActions");
+    });
+
+    handler.on("GetCalculationOrderIds", function () {
+      return pdfManager.ensureDoc("calculationOrderIds");
+    });
+
+    handler.on(
+      "ExtractPages",
+      async function ({ pageInfos, annotationStorage }) {
+        if (!pageInfos) {
+          warn("extractPages: nothing to extract.");
+          return null;
+        }
+        if (!Array.isArray(pageInfos)) {
+          pageInfos = [pageInfos];
+        }
+        let newDocumentId = 0;
+        for (const pageInfo of pageInfos) {
+          if (pageInfo.image) {
+            continue;
+          }
+          if (pageInfo.document === null) {
+            pageInfo.document = pdfManager.pdfDocument;
+          } else if (ArrayBuffer.isView(pageInfo.document)) {
+            const manager = new LocalPdfManager({
+              source: pageInfo.document,
+              docId: `${docId}_extractPages_${newDocumentId++}`,
+              handler,
+              password: pageInfo.password ?? null,
+              evaluatorOptions: Object.assign({}, pdfManager.evaluatorOptions),
+            });
+            let recoveryMode = false;
+            let isValid = true;
+            while (true) {
+              try {
+                await manager.requestLoadedStream();
+                await manager.initDocument(recoveryMode);
+                break;
+              } catch (e) {
+                if (e instanceof XRefParseException) {
+                  if (recoveryMode === false) {
+                    recoveryMode = true;
+                    continue;
+                  } else {
+                    isValid = false;
+                    warn("extractPages: XRefParseException.");
+                  }
+                } else if (e instanceof PasswordException) {
+                  try {
+                    const password = await getPassword(e);
+                    manager.updatePassword(password);
+                  } catch {
+                    isValid = false;
+                    warn("extractPages: invalid password.");
+                  }
+                } else {
+                  isValid = false;
+                  warn("extractPages: invalid document.");
+                }
+                if (!isValid) {
+                  break;
+                }
+              }
+            }
+            if (!isValid) {
+              pageInfo.document = null;
+            }
+            const isPureXfa = await manager.ensureDoc("isPureXfa");
+            if (isPureXfa) {
+              pageInfo.document = null;
+              warn("extractPages does not support pure XFA documents.");
+            } else {
+              pageInfo.document = manager.pdfDocument;
+            }
+          } else {
+            warn("extractPages: invalid document.");
+          }
+        }
+        let task;
+        try {
+          const pdfEditor = new PDFEditor();
+          task = new WorkerTask(`ExtractPages: ${pageInfos.length} page(s)`);
+          startWorkerTask(task);
+
+          return await pdfEditor.extractPages(
+            pageInfos,
+            annotationStorage,
+            pdfManager.pdfDocument,
+            handler,
+            task
+          );
+        } catch (reason) {
+          warn(`extractPages: "${reason}".`);
+          return null;
+        } finally {
+          if (task) {
+            finishWorkerTask(task);
+          }
+        }
+      }
+    );
+
+    handler.on(
+      "SaveDocument",
+      async function ({ isPureXfa, numPages, annotationStorage, filename }) {
+        const globalPromises = [
+          pdfManager.requestLoadedStream(),
+          pdfManager.ensureCatalog("acroForm"),
+          pdfManager.ensureCatalog("acroFormRef"),
+          pdfManager.ensureDoc("startXRef"),
+          pdfManager.ensureDoc("xref"),
+          pdfManager.ensureCatalog("structTreeRoot"),
+        ];
+        const changes = new RefMap();
+        const promises = [];
+
+        const newAnnotationsByPage = !isPureXfa
+          ? getNewAnnotationsMap(annotationStorage)
+          : null;
+        const [
+          stream,
+          acroForm,
+          acroFormRef,
+          startXRef,
+          xref,
+          _structTreeRoot,
+        ] = await Promise.all(globalPromises);
+        const catalogRef = xref.trailer.getRaw("Root") || null;
+        let structTreeRoot;
+
+        if (newAnnotationsByPage) {
+          if (!_structTreeRoot) {
+            if (
+              await StructTreeRoot.canCreateStructureTree({
+                catalogRef,
+                pdfManager,
+                newAnnotationsByPage,
+              })
+            ) {
+              structTreeRoot = null;
+            }
+          } else if (
+            await _structTreeRoot.canUpdateStructTree({
+              pdfManager,
+              newAnnotationsByPage,
+            })
+          ) {
+            structTreeRoot = _structTreeRoot;
+          }
+
+          const imagePromises = AnnotationFactory.generateImages(
+            annotationStorage.values(),
+            xref,
+            pdfManager.evaluatorOptions.isOffscreenCanvasSupported
+          );
+          const newAnnotationPromises =
+            structTreeRoot === undefined ? promises : [];
+          for (const [pageIndex, annotations] of newAnnotationsByPage) {
+            newAnnotationPromises.push(
+              pdfManager.getPage(pageIndex).then(page => {
+                const task = new WorkerTask(`Save (editor): page ${pageIndex}`);
+                startWorkerTask(task);
+
+                return page
+                  .saveNewAnnotations(
+                    handler,
+                    task,
+                    annotations,
+                    imagePromises,
+                    changes
+                  )
+                  .finally(() => {
+                    finishWorkerTask(task);
+                  });
+              })
+            );
+          }
+          if (structTreeRoot === null) {
+            // No structTreeRoot exists, so we need to create one.
+            promises.push(
+              Promise.all(newAnnotationPromises).then(async () => {
+                await StructTreeRoot.createStructureTree({
+                  newAnnotationsByPage,
+                  xref,
+                  catalogRef,
+                  pdfManager,
+                  changes,
+                });
+              })
+            );
+          } else if (structTreeRoot) {
+            promises.push(
+              Promise.all(newAnnotationPromises).then(async () => {
+                await structTreeRoot.updateStructureTree({
+                  newAnnotationsByPage,
+                  pdfManager,
+                  changes,
+                });
+              })
+            );
+          }
+        }
+
+        if (isPureXfa) {
+          promises.push(
+            pdfManager.ensureDoc("serializeXfaData", [annotationStorage])
+          );
+        } else {
+          for (let pageIndex = 0; pageIndex < numPages; pageIndex++) {
+            promises.push(
+              pdfManager.getPage(pageIndex).then(function (page) {
+                const task = new WorkerTask(`Save: page ${pageIndex}`);
+                startWorkerTask(task);
+
+                return page
+                  .save(handler, task, annotationStorage, changes)
+                  .finally(() => {
+                    finishWorkerTask(task);
+                  });
+              })
+            );
+          }
+        }
+        const refs = await Promise.all(promises);
+
+        let xfaData = null;
+        if (isPureXfa) {
+          xfaData = refs[0];
+          if (!xfaData) {
+            return stream.bytes;
+          }
+        } else if (changes.size === 0) {
+          // No new refs so just return the initial bytes
+          return stream.bytes;
+        }
+
+        const needAppearances =
+          acroFormRef &&
+          acroForm instanceof Dict &&
+          changes.values().some(ref => ref.needAppearances);
+
+        const xfa = (acroForm instanceof Dict && acroForm.get("XFA")) || null;
+        let xfaDatasetsRef = null;
+        let hasXfaDatasetsEntry = false;
+        if (Array.isArray(xfa)) {
+          for (let i = 0, ii = xfa.length; i < ii; i += 2) {
+            if (xfa[i] === "datasets") {
+              xfaDatasetsRef = xfa[i + 1];
+              hasXfaDatasetsEntry = true;
+            }
+          }
+          if (xfaDatasetsRef === null) {
+            xfaDatasetsRef = xref.getNewTemporaryRef();
+          }
+        } else if (xfa) {
+          // TODO: Support XFA streams.
+          warn("Unsupported XFA type.");
+        }
+
+        let newXrefInfo = Object.create(null);
+        if (xref.trailer) {
+          // Get string info from Info in order to compute fileId.
+          const infoMap = new Map();
+          const xrefInfo = xref.trailer.get("Info") || null;
+          if (xrefInfo instanceof Dict) {
+            for (const [key, value] of xrefInfo) {
+              if (typeof value === "string") {
+                infoMap.set(key, stringToPDFString(value));
+              }
+            }
+          }
+
+          newXrefInfo = {
+            rootRef: catalogRef,
+            encryptRef: xref.trailer.getRaw("Encrypt") || null,
+            newRef: xref.getNewTemporaryRef(),
+            infoRef: xref.trailer.getRaw("Info") || null,
+            infoMap,
+            fileIds: xref.trailer.get("ID") || null,
+            startXRef,
+            filename,
+          };
+        }
+
+        return incrementalUpdate({
+          originalData: stream.bytes,
+          xrefInfo: newXrefInfo,
+          changes,
+          xref,
+          hasXfa: !!xfa,
+          xfaDatasetsRef,
+          hasXfaDatasetsEntry,
+          needAppearances,
+          acroFormRef,
+          acroForm,
+          xfaData,
+          // Use the same kind of XRef as the previous one.
+          useXrefStream: isDict(xref.topDict, "XRef"),
+        }).finally(() => {
+          xref.resetNewTemporaryRef();
+        });
+      }
+    );
+
+    handler.on(
+      "GetOperatorList",
+      function (
+        { pageId, pageIndex, intent, cacheKey, annotationStorage, modifiedIds },
+        sink
+      ) {
+        pdfManager.getPage(pageId).then(function (page) {
+          const task = new WorkerTask(`GetOperatorList: page ${pageIndex}`);
+          startWorkerTask(task);
+
+          // NOTE: Keep this condition in sync with the `info` helper function.
+          const start = verbosity >= VerbosityLevel.INFOS ? Date.now() : 0;
+
+          // Pre compile the pdf page and fetch the fonts/images.
+          page
+            .getOperatorList({
+              handler,
+              sink,
+              task,
+              intent,
+              cacheKey,
+              annotationStorage,
+              modifiedIds,
+              pageIndex,
+            })
+            .then(
+              opListInfo => {
+                if (start) {
+                  info(
+                    `${task.name}; time=${Date.now() - start}ms, len=${opListInfo.length}`
+                  );
+                }
+                sink.close();
+              },
+              reason => {
+                if (task.terminated) {
+                  return; // ignoring errors from the terminated thread
+                }
+                sink.error(reason);
+              }
+            )
+            .finally(() => {
+              finishWorkerTask(task);
+            });
+        });
+      }
+    );
+
+    handler.on(
+      "GetTextContent",
+      function (
+        { pageId, pageIndex, includeMarkedContent, disableNormalization },
+        sink
+      ) {
+        pdfManager.getPage(pageId).then(function (page) {
+          const task = new WorkerTask("GetTextContent: page " + pageIndex);
+          startWorkerTask(task);
+
+          // NOTE: Keep this condition in sync with the `info` helper function.
+          const start = verbosity >= VerbosityLevel.INFOS ? Date.now() : 0;
+
+          page
+            .extractTextContent({
+              handler,
+              task,
+              sink,
+              includeMarkedContent,
+              disableNormalization,
+            })
+            .then(
+              () => {
+                if (start) {
+                  info(`${task.name}; time=${Date.now() - start}ms`);
+                }
+                sink.close();
+              },
+              reason => {
+                if (task.terminated) {
+                  return; // ignoring errors from the terminated thread
+                }
+                sink.error(reason);
+              }
+            )
+            .finally(() => {
+              finishWorkerTask(task);
+            });
+        });
+      }
+    );
+
+    handler.on("GetStructTree", async function ({ pageIndex }) {
+      const page = await pdfManager.getPage(pageIndex);
+      return pdfManager.ensure(page, "getStructTree");
+    });
+
+    handler.on("FontFallback", function ({ id }) {
+      return pdfManager.fontFallback(id, handler);
+    });
+
+    if (
+      typeof PDFJSDev === "undefined" ||
+      PDFJSDev.test("TESTING || INTERNAL_VIEWER")
+    ) {
+      handler.on("GetRawData", async function ({ ref, page }) {
+        let value = null;
+        if (page >= 1) {
+          value = (
+            await pdfManager.ensureCatalog("getPageDict", [page - 1])
+          )[1];
+        } else if (ref) {
+          value =
+            typeof ref === "string"
+              ? Ref.fromString(ref)
+              : Ref.get(ref.num, ref.gen);
+        }
+        return pdfManager.ensureDoc("toJSObject", [value]);
+      });
+    }
+
+    handler.on("Cleanup", function () {
+      return pdfManager.cleanup(/* manuallyTriggered = */ true);
+    });
+
+    handler.on("Terminate", async function () {
+      terminated = true;
+
+      const waitOn = [];
+      if (pdfManager) {
+        pdfManager.terminate(new AbortException("Worker was terminated."));
+
+        const cleanupPromise = pdfManager.cleanup();
+        waitOn.push(cleanupPromise);
+
+        pdfManager = null;
+      } else {
+        clearGlobalCaches();
+      }
+      cancelXHRs?.(new AbortException("Worker was terminated."));
+
+      for (const task of WorkerTasks) {
+        waitOn.push(task.finished);
+        task.terminate();
+      }
+
+      await Promise.all(waitOn);
+      // Notice that even if we destroying handler, resolved response promise
+      // must be sent back.
+      handler.destroy();
+      handler = null;
+    });
+
+    handler.on("Ready", function () {
+      setupDoc(docParams);
+      docParams = null; // we don't need docParams anymore -- saving memory.
+    });
+
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      handler.on("GetXFADatasets", function () {
+        return pdfManager.ensureDoc("xfaDatasets");
+      });
+      handler.on("GetStartXRefPos", function () {
+        return pdfManager.ensureDoc("startXRef");
+      });
+      handler.on("GetAnnotArray", async function ({ pageIndex }) {
+        const page = await pdfManager.getPage(pageIndex);
+        return page.annotations.map(a => a.toString());
+      });
+      handler.on("GetWorkerCoverage", function () {
+        return globalThis.__coverage__ ?? {};
+      });
+    }
+
+    return workerHandlerName;
+  }
+
+  static initializeFromPort(port) {
+    const handler = new MessageHandler("worker", "main", port);
+    this.setup(handler, port);
+    handler.send("ready", null);
+  }
+}
+
+export { WorkerMessageHandler, WorkerTask };

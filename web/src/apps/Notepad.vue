@@ -1,0 +1,221 @@
+<template>
+  <div class="app-root">
+    <div class="app-toolbar">
+      <button class="tool-btn" @click="save" :disabled="!canSave"><AppIcon name="check" :size="15" />保存</button>
+      <button class="tool-btn" @click="openSaveAs" :disabled="!content.trim() || saving || !saPolicies.length" title="选择盘与路径，把当前内容存为新文件（新建文档未落盘前用）">
+        <AppIcon name="edit" :size="15" />另存为
+      </button>
+      <button class="tool-btn" @click="openShare" :disabled="!canSave || shareBusy" title="生成公开分享链接，任何人打开链接即可在线阅读（Markdown 自动渲染）">
+        <AppIcon name="share2" :size="15" />分享
+      </button>
+      <div class="tool-sep"></div>
+      <span style="font-size: 12px; color: var(--text-3)">{{ path || '未命名' }}</span>
+      <div style="flex: 1"></div>
+      <span style="font-size: 12px; color: var(--text-3)">{{ canSave ? (dirty ? '未保存' : '已保存') : '只读' }} · {{ content.length }} 字符</span>
+    </div>
+    <textarea v-model="content" spellcheck="false"
+      style="flex: 1; background: transparent; border: none; resize: none; padding: 14px 18px; font-family: Consolas, 'Courier New', monospace; font-size: 13.5px; line-height: 1.6; color: var(--text); user-select: text"
+      @input="dirty = true"
+      @keydown.ctrl.s.prevent="save"></textarea>
+
+    <!-- 另存为对话框：新建文档（无目标文件，「保存」禁用）或换位置落盘 -->
+    <div class="dialog-mask" v-if="saveAsShow" @click.self="saveAsShow = false">
+      <div class="dialog" style="width: 400px">
+        <h3>另存为</h3>
+        <div class="row">
+          <label>保存到</label>
+          <select class="input" v-model.number="saPolicy" style="width: 100%">
+            <option v-for="p in saPolicies" :key="p.id" :value="p.id">{{ p.name }} ({{ p.letter }})</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>文件路径</label>
+          <input class="input" v-model="saPath" placeholder="/笔记/待办.txt" style="width: 100%" @keydown.enter="doSaveAs" />
+        </div>
+        <div class="row" style="font-size: 12px; color: var(--text-3)">带目录会存到对应文件夹；不带扩展名自动补 .txt</div>
+        <div v-if="saMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ saMsg }}</div>
+        <div class="actions">
+          <button class="btn" @click="saveAsShow = false">取消</button>
+          <button class="btn primary" :disabled="saving" @click="doSaveAs">{{ saving ? '保存中…' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分享对话框：公开链接在线阅读（.md 渲染 / .txt 原文） -->
+    <div class="dialog-mask" v-if="shareShow" @click.self="shareShow = false">
+      <div class="dialog" style="width: 400px">
+        <h3>分享「{{ fileName }}」</h3>
+        <div v-if="!shareLink">
+          <div class="row">
+            <label>提取码{{ shareEnc ? '（必填，兼作解密密钥）' : '（留空则公开）' }}</label>
+            <input class="input" v-model="sharePwd" :placeholder="shareEnc ? '至少 4 位' : '4-6 位'" style="width: 100%" />
+          </div>
+          <div class="row">
+            <label>有效期</label>
+            <select class="input" v-model.number="shareExpire" style="width: 100%">
+              <option :value="0">永久有效</option>
+              <option :value="1">1 天</option>
+              <option :value="7">7 天</option>
+              <option :value="30">30 天</option>
+            </select>
+          </div>
+          <div class="row">
+            <label style="display: flex; align-items: center; gap: 6px">
+              <input type="checkbox" v-model="shareEnc" :disabled="shareBusy" />端到端加密（E2E）
+            </label>
+          </div>
+          <div class="row" style="font-size: 12px; color: var(--text-3)">
+            {{ shareEnc
+              ? '端到端加密：内容在本浏览器内用提取码加密后再上传，服务端无法查看；对方需提取码解密后才能阅读'
+              : '对方打开链接即可在线阅读（无需登录）；.md 文件将渲染为 Markdown' }}
+          </div>
+          <div v-if="shareMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ shareMsg }}</div>
+          <div class="actions">
+            <button class="btn" :disabled="shareBusy" @click="shareShow = false">取消</button>
+            <button class="btn primary" :disabled="shareBusy" @click="doShare">{{ shareBusy ? (shareEnc ? '加密上传中…' : '创建中…') : '创建链接' }}</button>
+          </div>
+        </div>
+        <div v-else>
+          <div class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
+            {{ shareLink }}
+          </div>
+          <div v-if="shareMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ shareMsg }}</div>
+          <div class="actions">
+            <button class="btn" @click="shareShow = false">关闭</button>
+            <button class="btn primary" @click="copyShare">复制链接</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { fsApi, shareApi, type Policy } from '../api/modules'
+import { useWindows } from '../stores/windows'
+import { useToast } from '../stores/dialog'
+import { copyText } from '../utils/clipboard'
+import { createEncryptedShare } from '../utils/shareEncrypt'
+
+const props = defineProps<{ winId: number; props: any }>()
+const store = useWindows()
+const toast = useToast()
+const path = ref(props.props?.path || '')
+const policyId = ref(props.props?.policyId || 0)
+const content = ref('')
+const dirty = ref(false)
+const editable = ref(!!path.value && !!policyId.value)
+// 保存 = 往自己盘写文本文件（/api/fs/text 在游客白名单内，受 24h TTL 管理）
+const canSave = computed(() => editable.value)
+const fileName = computed(() => (path.value || '未命名').split('/').pop() || '未命名')
+
+// ---- 在线分享：公开链接在线阅读（复用公开分享体系，分享页对 .md 渲染 Markdown）----
+const shareShow = ref(false)
+const sharePwd = ref('')
+const shareExpire = ref(0)
+const shareLink = ref('')
+const shareBusy = ref(false)
+const shareMsg = ref('')
+const shareEnc = ref(false)
+function openShare() {
+  sharePwd.value = ''; shareExpire.value = 0; shareLink.value = ''; shareMsg.value = ''; shareEnc.value = false
+  shareShow.value = true
+}
+async function doShare() {
+  shareBusy.value = true; shareMsg.value = ''
+  try {
+    if (shareEnc.value) {
+      const r = await createEncryptedShare(
+        { policyId: policyId.value, path: path.value, isDir: false, password: sharePwd.value },
+        { expireDays: shareExpire.value, allowDownload: true, previewEnabled: true },
+        () => { shareMsg.value = '' }
+      )
+      shareLink.value = location.origin + location.pathname + '#/s/' + r.token
+      toast.success('加密分享已创建')
+      return
+    }
+    const s = await shareApi.create({
+      policyId: policyId.value, path: path.value,
+      password: sharePwd.value || undefined, expireDays: shareExpire.value,
+      remainDownloads: 0, allowDownload: true, previewEnabled: true, allowEdit: false
+    })
+    shareLink.value = location.origin + location.pathname + '#/s/' + s.token
+  } catch (e: any) {
+    shareMsg.value = e?.message || '创建失败'
+  } finally {
+    shareBusy.value = false
+  }
+}
+// HTTP 非安全上下文下 navigator.clipboard 不可用，copyText 内部回退 execCommand
+async function copyShare() {
+  const ok = await copyText(shareLink.value)
+  if (ok) toast.success('链接已复制')
+  else shareMsg.value = '复制失败，请选中上方链接后按 Ctrl+C 复制'
+}
+
+// ---- 另存为：新建文档没有目标文件（「保存」禁用），选盘+路径落盘后窗口转为可编辑 ----
+const saveAsShow = ref(false)
+const saPolicies = ref<Policy[]>([])
+const saPolicy = ref(0)
+const saPath = ref('')
+const saMsg = ref('')
+const saving = ref(false)
+async function loadSaveAsPolicies() {
+  try {
+    // 内置资源库（T:）只读，排除；游客也能存（/api/fs/text 在游客白名单内，24h TTL 管理）
+    saPolicies.value = (await fsApi.policies()).filter(p => p.type !== 'builtin')
+  } catch { saPolicies.value = [] }
+}
+function openSaveAs() {
+  saMsg.value = ''
+  saPolicy.value = saPolicies.value.some(p => p.id === policyId.value) ? policyId.value : (saPolicies.value[0]?.id || 0)
+  saPath.value = path.value || '/未命名.txt'
+  saveAsShow.value = true
+}
+async function doSaveAs() {
+  if (saving.value || !saPolicies.value.length) return
+  let p = saPath.value.trim().replace(/\\/g, '/')
+  if (!p) { saMsg.value = '请输入文件路径'; return }
+  if (!p.startsWith('/')) p = '/' + p
+  p = p.replace(/\/+$/, '')
+  if (!/\.[a-z0-9]{1,8}$/i.test(p.split('/').pop() || '')) p += '.txt'
+  saving.value = true; saMsg.value = ''
+  try {
+    await fsApi.writeText(saPolicy.value, p, content.value)
+    path.value = p
+    policyId.value = saPolicy.value
+    editable.value = true
+    dirty.value = false
+    saveAsShow.value = false
+    store.setTitle(props.winId, p.split('/').pop() + ' - 记事本')
+    window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId: saPolicy.value, path: p.slice(0, p.lastIndexOf('/')) || '/' } }))
+    toast.success('已保存为 ' + p)
+  } catch (e: any) {
+    saMsg.value = e?.message || '保存失败'
+  } finally {
+    saving.value = false
+  }
+}
+onMounted(async () => {
+  loadSaveAsPolicies()
+  if (editable.value) {
+    try {
+      const d = await fsApi.readText(policyId.value, path.value)
+      content.value = d.content
+    } catch (e: any) {
+      content.value = ''
+      editable.value = false
+    }
+  }
+})
+
+async function save() {
+  if (!canSave.value) return
+  try {
+    await fsApi.writeText(policyId.value, path.value, content.value)
+    dirty.value = false
+    window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId: policyId.value, path: path.value.slice(0, path.value.lastIndexOf('/')) || '/' } }))
+  } catch (e: any) { toast.error('保存失败：' + e.message) }
+}
+</script>

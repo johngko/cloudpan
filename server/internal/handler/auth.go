@@ -1,0 +1,282 @@
+package handler
+
+import (
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
+
+	"cloudpan/internal/dto"
+	"cloudpan/internal/middleware"
+	"cloudpan/internal/model"
+)
+
+type AuthHandler struct{ Secret []byte }
+
+// issueTokens 签发「访问令牌 + 刷新令牌」对：
+// 访问 7 天（游客 24h），刷新 30 天（游客 7 天）。二者共用同一 Claims 结构
+// 与 TokenVer 版本化——改密后旧刷新令牌同样失效，无额外安全面。
+func (h *AuthHandler) issueTokens(u *model.User) (string, string, error) {
+	ttl, refresh := 7*24*time.Hour, 30*24*time.Hour
+	if model.IsGuestUser(u) {
+		ttl, refresh = 24*time.Hour, 7*24*time.Hour
+	}
+	token, err := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, ttl)
+	if err != nil {
+		return "", "", err
+	}
+	rt, err := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, refresh)
+	return token, rt, err
+}
+
+// 登录防爆破：同 IP+用户名 15 分钟内失败 5 次即锁定
+var loginFails sync.Map // key -> *failInfo
+
+type failInfo struct {
+	count int
+	until time.Time
+}
+
+func loginLocked(key string) bool {
+	if v, ok := loginFails.Load(key); ok {
+		f := v.(*failInfo)
+		if time.Now().Before(f.until) {
+			return true
+		}
+		if !f.until.IsZero() {
+			loginFails.Delete(key) // 仅清除已过期的锁，保留计数中的条目
+		}
+	}
+	return false
+}
+
+func loginFail(key string) {
+	var f *failInfo
+	if v, ok := loginFails.Load(key); ok {
+		f = v.(*failInfo)
+	} else {
+		f = &failInfo{}
+		loginFails.Store(key, f)
+	}
+	f.count++
+	if f.count >= 5 {
+		f.until = time.Now().Add(15 * time.Minute)
+		f.count = 0
+	}
+}
+
+func (h *AuthHandler) Login(c *gin.Context) {
+	var in struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	lockKey := c.ClientIP() + "|" + in.Username
+	if loginLocked(lockKey) {
+		dto.Fail(c, 4291, "失败次数过多，账号已临时锁定，请 15 分钟后再试")
+		return
+	}
+	var u model.User
+	if err := model.DB.Where("username = ?", in.Username).First(&u).Error; err != nil {
+		loginFail(lockKey)
+		dto.Fail(c, 4001, "用户名或密码错误")
+		return
+	}
+	// 枚举防护：账号禁用与密码错误返回完全一致的提示，避免借响应差异枚举有效用户名
+	if u.Disabled {
+		dto.Fail(c, 4001, "用户名或密码错误")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)) != nil {
+		loginFail(lockKey)
+		dto.Fail(c, 4001, "用户名或密码错误")
+		return
+	}
+	loginFails.Delete(lockKey)
+	now := time.Now()
+	model.DB.Model(&u).UpdateColumn("last_login_at", &now)
+	token, rt, err := h.issueTokens(&u)
+	if err != nil {
+		dto.Fail(c, 500, "签发令牌失败")
+		return
+	}
+	model.DB.Create(&model.AuditLog{UserID: u.ID, Username: u.Username, Action: "login", Detail: "用户登录", IP: c.ClientIP()})
+	dto.OK(c, gin.H{"token": token, "refreshToken": rt, "user": u, "isGuest": model.IsGuestUser(&u)})
+}
+
+// Refresh 刷新令牌静默续期（TabOS /auth/refresh 同款模式）：
+// 前端收到 401 时用刷新令牌换新令牌对并重试原请求，用户无感知。
+// 刷新令牌 = 更长有效期的同构 JWT（TokenVer 版本化，改密即失效），IP 限流防刷。
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var in struct {
+		RefreshToken string `json:"refreshToken" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	claims, err := middleware.ParseToken(in.RefreshToken, h.Secret)
+	if err != nil {
+		dto.Fail(c, 401, "刷新令牌无效或已过期，请重新登录")
+		return
+	}
+	var u model.User
+	if err := model.DB.First(&u, claims.UID).Error; err != nil || u.Disabled || u.TokenVer != claims.Ver {
+		dto.Fail(c, 401, "登录状态已失效，请重新登录")
+		return
+	}
+	token, rt, err := h.issueTokens(&u)
+	if err != nil {
+		dto.Fail(c, 500, "签发令牌失败")
+		return
+	}
+	dto.OK(c, gin.H{"token": token, "refreshToken": rt, "user": u, "isGuest": model.IsGuestUser(&u)})
+}
+
+// GuestLogin 游客登录：登录页「游客登录」入口。
+// 无需凭据，直接为共享游客账号（guest，访客组）签发短时效令牌（24h）。
+// 前置：站点开关 guest_login 非 "false"（默认开）且游客账号存在且未被禁用。
+func (h *AuthHandler) GuestLogin(c *gin.Context) {
+	s := GetSiteSettings()
+	if s["guest_login"] == "false" {
+		dto.Fail(c, 403, "游客登录未开启")
+		return
+	}
+	var u model.User
+	if err := model.DB.Where("username = ?", model.GuestUsername).First(&u).Error; err != nil || u.Disabled {
+		dto.Fail(c, 403, "游客登录未开启")
+		return
+	}
+	now := time.Now()
+	model.DB.Model(&u).UpdateColumn("last_login_at", &now)
+	token, rt, err := h.issueTokens(&u)
+	if err != nil {
+		dto.Fail(c, 500, "签发令牌失败")
+		return
+	}
+	model.DB.Create(&model.AuditLog{UserID: u.ID, Username: u.Username, Action: "guest-login", Detail: "游客登录", IP: c.ClientIP()})
+	dto.OK(c, gin.H{"token": token, "refreshToken": rt, "user": u, "isGuest": true})
+}
+
+func (h *AuthHandler) Register(c *gin.Context) {
+	var in struct {
+		Username   string `json:"username" binding:"required,min=2,max=32"`
+		Password   string `json:"password" binding:"required,min=6,max=64"`
+		Nickname   string `json:"nickname"`
+		InviteCode string `json:"inviteCode"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误：用户名 2-32 位，密码至少 6 位")
+		return
+	}
+	settings := GetSiteSettings()
+	if settings["register_open"] != "true" {
+		dto.Fail(c, 4003, "本站未开放注册")
+		return
+	}
+	if code := settings["register_invite_code"]; code != "" && code != in.InviteCode {
+		dto.Fail(c, 4004, "邀请码错误")
+		return
+	}
+	var n int64
+	model.DB.Model(&model.User{}).Where("username = ?", in.Username).Count(&n)
+	if n > 0 {
+		dto.Fail(c, 4005, "用户名已存在")
+		return
+	}
+	var g model.UserGroup
+	if err := model.DB.Where("is_default = ?", true).First(&g).Error; err != nil {
+		dto.Fail(c, 500, "默认用户组缺失")
+		return
+	}
+	nickname := in.Nickname
+	if nickname == "" {
+		nickname = in.Username
+	}
+	u := model.User{Username: in.Username, PasswordHash: hashPassword(in.Password), Nickname: nickname, Role: "user", GroupID: g.ID}
+	if err := model.DB.Create(&u).Error; err != nil {
+		dto.Fail(c, 500, "注册失败")
+		return
+	}
+	token, rt, _ := h.issueTokens(&u)
+	dto.OK(c, gin.H{"token": token, "refreshToken": rt, "user": u, "isGuest": false})
+}
+
+func (h *AuthHandler) Me(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	var g model.UserGroup
+	model.DB.First(&g, u.GroupID)
+	// isGuest：前端据此隐藏账号自管理入口（改密/改昵称/WebDAV 密码等）；
+	// 后端兜底拦截见 middleware.GuestReadOnly
+	dto.OK(c, gin.H{"user": u, "group": g, "isGuest": model.IsGuestUser(u)})
+}
+
+func (h *AuthHandler) UpdateMe(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	var in struct {
+		Nickname *string `json:"nickname"`
+		Avatar   *int    `json:"avatar"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	up := map[string]interface{}{}
+	if in.Nickname != nil {
+		up["nickname"] = strings.TrimSpace(*in.Nickname)
+	}
+	if in.Avatar != nil {
+		up["avatar"] = *in.Avatar
+	}
+	if len(up) > 0 {
+		model.DB.Model(u).Updates(up)
+	}
+	dto.OK(c, u)
+}
+
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	var in struct {
+		Old string `json:"old" binding:"required"`
+		New string `json:"new" binding:"required,min=6,max=64"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误：新密码至少 6 位")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Old)) != nil {
+		dto.Fail(c, 4006, "原密码错误")
+		return
+	}
+	// 令牌版本自增：改密后该用户其余会话的旧 JWT 立即失效
+	model.DB.Model(u).Updates(map[string]interface{}{
+		"password_hash": hashPassword(in.New),
+		"token_ver":     u.TokenVer + 1,
+	})
+	middleware.Audit(c, "password", "修改登录密码")
+	dto.OK(c, nil)
+}
+
+// SetWebdavPassword 设置/重置 WebDAV 独立密码
+func (h *AuthHandler) SetWebdavPassword(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	var in struct {
+		Password string `json:"password" binding:"required,min=6,max=64"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误：密码至少 6 位")
+		return
+	}
+	model.DB.Model(u).UpdateColumn("webdav_password_hash", hashPassword(in.Password))
+	dto.OK(c, nil)
+}
+
+func hashPassword(pwd string) string {
+	b, _ := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
+	return string(b)
+}

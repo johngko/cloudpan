@@ -1,0 +1,16 @@
+{
+  "Name": "音乐播放器",
+  "Description": "系统内置支持歌词的音乐播放器",
+  "CloseDelay": "0",
+  "Code": "music",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "多媒体",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/music/logo.png",
+  "Log": "首发",
+  "OpenExts": "mp3,flac,aac,ogg,wav,m4a,wma",
+  "EditExts": "",
+  "ExpandExts":"multi,lrc"
+}

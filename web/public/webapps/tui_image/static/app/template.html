@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+	<meta name="apple-mobile-web-app-capable" content="yes"/>
+	<title><?php echo LNG('tuiImage.meta.title');?></title>
+	<link rel="icon" href="<?php $this->url('static/app/images/logo.png');?>">
+	<script>var kodSdkConfig = {api:'<?php echo APP_HOST;?>'};</script>
+	<?php $this->link('app/dist/sdk.js','static');?>
+	<?php $this->link('style/lib/font-icon/style.css','static');?>
+
+	<?php $this->link('static/js/dist/tui-image-editor.min.css');?>
+	<?php $this->link('static/js/lib/tui-color-picker.css');?>
+	<?php $this->link('static/app/style.css');?>
+	<script>
+	var appLang = '<?php echo I18n::getType();?>';
+		var BASE_URL = "<?php echo $this->pluginHost.'static/';?>";
+		var BASE_URL_API = "<?php echo $this->pluginApi;?>";
+		var FILE_INFO = {
+			fileUrl:	'<?php echo clear_quote($fileUrl);?>',	// 获取url
+			fileName: 	'<?php echo clear_quote($fileName);?>', // 文件名
+			savePath:	'<?php echo clear_quote($savePath);?>', // 文件路径;有则可以直接保存;没有且canWrite则可以另存为;
+			canWrite:	'<?php echo clear_quote($canWrite);?>'	// 是否可写; 可写才能编辑;
+		};
+	</script>
+</head>
+
+<body>
+	<div id="tui-image-editor-container"></div>
+	<?php $this->link('static/js/lib/fabric.js');?>
+	<?php $this->link('static/js/lib/tui-code-snippet.min.js');?>
+	<?php $this->link('static/js/lib/tui-color-picker.js');?>
+	<?php $this->link('static/js/lib/FileSaver.min.js');?>
+	<?php $this->link('static/js/dist/tui-image-editor.min.js');?>
+	<?php $this->link('static/js/theme/white-theme.js');?>
+	<?php $this->link('static/js/theme/black-theme.js');?>
+	<?php $this->link('static/app/app.js');?>
+</body>
+
+</html>

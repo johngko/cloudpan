@@ -1,0 +1,14 @@
+{
+  "Name": "图片编辑器",
+  "Description": "图片编辑器",
+  "Code": "tui_image",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "编程修图​",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/tui_image/logo.png",
+  "Log": "首发",
+  "OpenExts": "",
+  "EditExts": "jpg,jpeg,png,webp,ico"
+}

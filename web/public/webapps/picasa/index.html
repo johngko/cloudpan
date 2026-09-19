@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Picasa 图片预览</title>
+  <script src="/vendor/drawio/js/jquery/jquery-3.6.0.min.js"></script>
+  <script>
+    // picasa.js 是 jQuery 1.x 时代的脚本，用了 1.7+ 已移除的 .die()；
+    // 这里的用法均为 .die("click").bind('click',fn)，等价于 off('click')
+    if (!jQuery.fn.die) jQuery.fn.die = function (evt) { return this.off(evt); };
+    // 缩略图懒加载用的 inScreen() 是 v9os 环境里的第三方 jQuery 插件，CloudPan 未引入，
+    // 用原生 getBoundingClientRect 等价实现
+    if (!jQuery.fn.inScreen) jQuery.fn.inScreen = function () {
+      var e = this[0]; if (!e) return false;
+      var r = e.getBoundingClientRect();
+      var w = window.innerWidth || document.documentElement.clientWidth;
+      var h = window.innerHeight || document.documentElement.clientHeight;
+      return r.top < h && r.bottom > 0 && r.left < w && r.right > 0;
+    };
+  </script>
+  <script src="/webapps/_bridge/cloudpan.js"></script>
+  <link rel="stylesheet" href="static/picasa/style/style.css">
+  <style>
+    /* ===== Picasa 现代皮肤：玻璃拟态底部工具栏（Win11 照片风格）=====
+       本块在 style.css 之后加载，同级特异性下后者生效；!important 用于压过
+       picasa.js 运行时写入的内联样式（width/top/left 定位逻辑保持不变） */
+    html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0c12;color:#fff;font:14px system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+    .empty{height:100%;display:grid;place-items:center;text-align:center;color:#aab}
+    .empty h2{margin:0 0 8px;color:#fff;font-size:22px;font-weight:600}
+    .empty button{margin-top:14px;padding:11px 22px;border:none;border-radius:10px;background:#3b82f6;color:#fff;font-size:15px;cursor:pointer;box-shadow:0 4px 16px rgba(59,130,246,.4)}
+    .empty button:hover{background:#2f6fe0}
+
+    /* 桌面窗口自带关闭键；删除/外链按钮无意义，隐藏 */
+    #PV_Close,#PV_Btn_Remove,#PV_Btn_Open{display:none!important}
+
+    /* 遮罩与画布 */
+    #PicasaMask{background:#0b0c12 !important}
+    #PV_Picture{border-radius:2px;box-shadow:0 18px 60px rgba(0,0,0,.55)}
+    #PV_Loading{background-color:rgba(20,22,30,.85);border-radius:12px;opacity:.9}
+
+    /* 底部控制栏：整宽玻璃栏（高度改 64，JS 读 offsetHeight 定位自洽） */
+    #PV_Control{height:64px !important;background:rgba(15,17,25,.78) !important;border-top:1px solid rgba(255,255,255,.06) !important;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 -10px 30px rgba(0,0,0,.35)}
+    #PV_Buttons{opacity:1 !important;margin:11px auto 0 !important}
+    #PV_Buttons a,#PV_Buttons .tool-btn{width:38px !important;height:38px !important;line-height:38px !important;margin:0 3px !important;border:none !important;border-radius:11px !important;background:transparent !important;background-image:none !important;color:rgba(255,255,255,.85) !important;transition:background .15s,color .15s}
+    #PV_Buttons a:hover,#PV_Buttons .tool-btn:hover{background:rgba(255,255,255,.14) !important;color:#fff !important}
+    #PV_Btn_ZoomActual{font-size:12px !important;font-weight:700;letter-spacing:.3px}
+    #PV_Select{background:none !important;width:auto !important;height:42px !important;margin:0 8px !important;overflow:visible}
+    #PV_Buttons a#PV_Btn_Slide{width:42px !important;height:42px !important;line-height:42px !important;margin:0 5px !important;border-radius:50% !important;background:#3b82f6 !important;box-shadow:0 2px 12px rgba(59,130,246,.5)}
+    #PV_Buttons a#PV_Btn_Slide:hover{background:#2f6fe0 !important}
+    #PV_Buttons a.seled#PV_Btn_Slide{background:#e8a13a !important;box-shadow:0 2px 12px rgba(232,161,58,.45)}
+
+    /* 胶片缩略条：与工具栏同层互相重叠且信息冗余（有前后翻页+计数），整体隐藏 */
+    #PV_Items{display:none !important}
+
+    /* 文件名字幕与张数计数：半透明药丸 */
+    #PV_Hint{width:auto !important;left:50% !important;transform:translateX(-50%);height:28px !important;line-height:28px;font:600 12px system-ui,"Microsoft YaHei",sans-serif;color:rgba(255,255,255,.92);background:rgba(15,17,25,.72);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:0 14px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+    #PV_Number{right:16px;bottom:82px;color:rgba(255,255,255,.9);font:600 12px system-ui,"Microsoft YaHei",sans-serif;background:rgba(15,17,25,.72);border:1px solid rgba(255,255,255,.08);padding:4px 12px;border-radius:999px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+    #PV_PerHint{background:rgba(15,17,25,.8) !important;border-radius:999px !important;font:600 12px/28px system-ui,"Microsoft YaHei",sans-serif !important}
+
+    /* 图标字形替换（无 remixicon 依赖，用字符替代） */
+    #PV_Buttons i{font-style:normal;font-family:Arial,"Microsoft YaHei",sans-serif;font-weight:700;display:inline-block;line-height:20px;min-width:14px;text-align:center;color:inherit}
+    .ri-arrow-left-line:before{content:"‹";font-size:24px;line-height:20px}
+    .ri-arrow-right-line:before{content:"›";font-size:24px;line-height:20px}
+    .ri-play-fill:before{content:"▶";font-size:13px}
+    #PV_Buttons a.seled#PV_Btn_Slide i:before,#PV_Btn_Slide.seled .ri-play-fill:before{content:"Ⅱ"!important;font-size:13px!important;font-family:Arial,"Microsoft YaHei",sans-serif!important}
+    .ri-pause-fill:before{content:"Ⅱ";font-size:13px}
+    .ri-anticlockwise-fill-2:before{content:"↶";font-size:17px}
+    .ri-clockwise-line-2:before{content:"↷";font-size:17px}
+    .ri-fullscreen-line:before{content:"⛶";font-size:15px}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="empty"><div><h2>Picasa 图片预览</h2><p>请选择图片文件打开</p><button id="open-btn">打开图片</button></div></div></div>
+  <script src="static/picasa/picasa.js"></script>
+  <script>
+    (function(){
+      const CODE='picasa';
+      const sdk=()=>window.$v9os||parent.$v9os||null;
+      let currentFile=null;
+      let player=null;
+
+      function htmlEncode(text){
+        return String(text||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      }
+      window.htmlEncode = window.htmlEncode || htmlEncode;
+
+      function itemFromFile(file){
+        return [[file.url,file.url,file.url], htmlEncode(file.name||''), [0,0], '', {src:file.url,title:file.name||'',data:file}];
+      }
+
+      function buildItems(file){
+        if(file && Array.isArray(file.expandFiles) && file.expandFiles.length){
+          let index = 0;
+          const items = file.expandFiles.map(function(one,i){
+            if(one.default) index = i;
+            return itemFromFile(one);
+          });
+          return {items,index};
+        }
+        return {items:[itemFromFile(file)],index:0};
+      }
+
+      if(!$.fullScreen){
+        $.fullScreen = function(){
+          const el = document.documentElement;
+          if(document.fullscreenElement){
+            document.exitFullscreen && document.exitFullscreen();
+          }else{
+            (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen).call(el);
+          }
+        };
+      }
+
+      function imageRotateItem(src,radius,isSave){
+        if(!src) return;
+        const $image = $('#PV_Picture');
+        const style = $image.attr('style') || '';
+        const match = style.match(/transform:\s*rotate\((\d+)deg\)/);
+        if(radius == 'get') return match ? match[1] : 0;
+        const transform = radius ? 'rotate('+radius+'deg)' : '';
+        $image.css('transform', transform);
+      }
+
+      function patchPicasa(instance){
+        instance.close=function(){};
+        instance.imageRotate=function(rotate){
+          const index = parseInt($('#PV_Control #PV_Items .current').attr('number')) || 0;
+          const image = instance.arrItems[index] && instance.arrItems[index][0];
+          if(!image) return;
+          let radius = parseInt(imageRotateItem(image[1],'get')) || 0;
+          radius = radius + rotate;
+          imageRotateItem(image[1], radius, true);
+        };
+        const oldSet=instance.setElementEvent;
+        instance.setElementEvent=function(){
+          oldSet.call(instance);
+          instance.frame.onclick=function(e){ e&&e.stopPropagation&&e.stopPropagation(); return false; };
+          instance.CloseBox.onclick=function(e){ e&&e.stopPropagation&&e.stopPropagation(); return false; };
+        };
+      }
+
+      async function selectFile(){ const f=await sdk()?.file?.selectFile(null,'请选择图片文件','jpg,jpeg,png,gif,bmp,webp,ico','false'); if(f)openFile(f); }
+      function bindOpenButton(){ const btn=document.getElementById('open-btn'); if(btn)btn.onclick=selectFile; }
+      function openFile(file){
+        if(!file)return;
+        currentFile=file;
+        const imageData = buildItems(file);
+        if(!imageData.items.length)return;
+        document.getElementById('app').innerHTML='';
+        if(!player){
+          player=new Picasa();
+          patchPicasa(player);
+          window.myPicasa=player;
+        }
+        player.play(imageData.items,imageData.index);
+      }
+
+      function parseInitial(){
+        const p=new URL(location.href).searchParams;
+        if(!p.get('url'))return null;
+        return {ext:p.get('ext'),name:p.get('name'),size:Number(p.get('size')||0),url:p.get('url')};
+      }
+      function wait(cb){ if(window.__winId&&sdk()?.event?.on)cb(); else setTimeout(()=>wait(cb),30); }
+
+      window.addEventListener('message',function(e){const data=e.data||{};if(data.action==='addOpenFiles'&&data.files&&data.files[0])openFile(data.files[0]);});
+      bindOpenButton();
+      const initial=parseInitial();
+      if(initial)openFile(initial);
+      if(new URL(location.href).searchParams.get('action')==='open'&&!initial){
+        wait(()=>{sdk().event.on('fileOpenEdit',p=>{if(p?.target===CODE)openFile(p.data)});sdk().event.emit('initFileOpenEdit',{type:'fileOpenEdit',confirm:true});});
+      }
+    })();
+  </script>
+</body>
+</html>

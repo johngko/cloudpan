@@ -1,0 +1,507 @@
+package handler
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
+	"cloudpan/internal/dto"
+	"cloudpan/internal/fscore"
+	"cloudpan/internal/middleware"
+	"cloudpan/internal/model"
+)
+
+// UserShareHandler 站内用户共享：把目录共享给其他注册用户（ro 只读 / rw 可写）
+type UserShareHandler struct{ Site *SiteHandler }
+
+// Users 列出可共享目标用户（登录即可见，仅基础字段）。
+// 游客（共享账号）无共享发起能力，不开放用户枚举接口
+func (h *UserShareHandler) Users(c *gin.Context) {
+	if model.IsGuestUser(ctxOf(c).user) {
+		dto.Fail(c, 403, "游客不能使用该功能")
+		return
+	}
+	var items []model.User
+	model.DB.Where("disabled = false").Select("id, username, nickname, avatar").Find(&items)
+	dto.OK(c, items)
+}
+
+// Groups 列出用户组（共享对话框选组用；登录即可见，仅 id+名称）。游客同上
+func (h *UserShareHandler) Groups(c *gin.Context) {
+	if model.IsGuestUser(ctxOf(c).user) {
+		dto.Fail(c, 403, "游客不能使用该功能")
+		return
+	}
+	var items []model.UserGroup
+	model.DB.Select("id, name").Order("id").Find(&items)
+	dto.OK(c, items)
+}
+
+type userShareCreateIn struct {
+	PolicyID   uint   `json:"policyId" binding:"required"`
+	Path       string `json:"path" binding:"required"`
+	TargetType string `json:"targetType"` // user | group | all，缺省 user（兼容旧客户端）
+	TargetID   uint   `json:"targetId"`
+	Perm       string `json:"perm"`
+}
+
+func (h *UserShareHandler) Create(c *gin.Context) {
+	x := ctxOf(c)
+	// 管理员豁免用户组共享限制（用户与管理员均可发起共享，目标可选所有人/组/用户）
+	if x.user.Role != "admin" && !x.group.AllowShare {
+		dto.Fail(c, 403, "当前用户组不允许共享")
+		return
+	}
+	var in userShareCreateIn
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	tt := in.TargetType
+	if tt == "" {
+		tt = "user"
+	}
+	if tt != "user" && tt != "group" && tt != "all" {
+		dto.Fail(c, 400, "共享范围非法")
+		return
+	}
+	targetID := in.TargetID
+	targetName := ""
+	switch tt {
+	case "all":
+		targetID = 0
+		targetName = "所有人"
+	case "group":
+		if targetID == 0 {
+			dto.Fail(c, 400, "请选择用户组")
+			return
+		}
+		var g model.UserGroup
+		if err := model.DB.First(&g, targetID).Error; err != nil {
+			dto.Fail(c, 404, "用户组不存在")
+			return
+		}
+		targetName = g.Name
+	default: // user
+		if targetID == 0 {
+			dto.Fail(c, 400, "请选择用户")
+			return
+		}
+		if targetID == x.user.ID {
+			dto.Fail(c, 400, "不能共享给自己")
+			return
+		}
+		var target model.User
+		if err := model.DB.Where("id = ? AND disabled = false", targetID).First(&target).Error; err != nil {
+			dto.Fail(c, 404, "目标用户不存在")
+			return
+		}
+		targetName = target.Username
+	}
+	p, d, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
+	if err != nil {
+		dto.Fail(c, 403, err.Error())
+		return
+	}
+	// 内置资源库（T:）仅管理员可见/可共享：非管理员即使持有海报读权限也不能把 T 共享给他人
+	if p.Type == "builtin" && x.user.Role != "admin" {
+		dto.Fail(c, 403, "内置资源库不能共享")
+		return
+	}
+	vp, err := fscore.Clean(in.Path)
+	if err != nil || vp == "" {
+		dto.Fail(c, 400, "请选择要共享的文件夹")
+		return
+	}
+	e, err := d.Stat(vp)
+	if err != nil {
+		dto.Fail(c, 404, "目录不存在")
+		return
+	}
+	if !e.IsDir {
+		dto.Fail(c, 400, "只能共享文件夹")
+		return
+	}
+	perm := in.Perm
+	if perm != "rw" {
+		perm = "ro"
+	}
+	// 整盘共享（path="/"）：根目录 Stat 名为 "/"，展示名改用策略名+盘符，如「本地磁盘 (D:)」
+	name := e.Name
+	if vp == "/" {
+		name = p.Name
+		if p.Letter != "" {
+			name += " (" + p.Letter + ":)"
+		}
+	}
+	// 去重：同范围同目标同目录只保留一条
+	var n int64
+	model.DB.Model(&model.UserShare{}).
+		Where("owner_id = ? AND target_type = ? AND target_id = ? AND policy_id = ? AND path = ?", x.user.ID, tt, targetID, in.PolicyID, vp).Count(&n)
+	if n > 0 {
+		dto.Fail(c, 400, "已共享给该范围")
+		return
+	}
+	us := model.UserShare{OwnerID: x.user.ID, TargetType: tt, TargetID: targetID, PolicyID: in.PolicyID, Path: vp, Name: name, Perm: perm}
+	if err := model.DB.Create(&us).Error; err != nil {
+		dto.Fail(c, 500, "创建共享失败")
+		return
+	}
+	middleware.Audit(c, "usershare", fmt.Sprintf("共享 %s 给 %s (%s)", vp, targetName, perm))
+	dto.OK(c, us)
+}
+
+// Mine 我共享出去的
+func (h *UserShareHandler) Mine(c *gin.Context) {
+	x := ctxOf(c)
+	var items []model.UserShare
+	model.DB.Where("owner_id = ?", x.user.ID).Order("id DESC").Find(&items)
+	dto.OK(c, h.decorate(items))
+}
+
+// shareVisibleWhere 三路可见性条件：共享给我本人 / 共享给我所在用户组 / 共享给所有人
+// （target_type 空串 = 历史数据，按 user 处理；AND 优先级高于 OR，括号已显式标注）
+func shareVisibleWhere(uid, gid uint) (string, []interface{}) {
+	return "(target_type = 'user' OR target_type = '') AND target_id = ? OR (target_type = 'group' AND target_id = ?) OR target_type = 'all'",
+		[]interface{}{uid, gid}
+}
+
+// WithMe 共享给我的（含共享给我所在用户组、共享给所有人的）
+func (h *UserShareHandler) WithMe(c *gin.Context) {
+	if !shareFeatureOn(c) {
+		return
+	}
+	x := ctxOf(c)
+	var items []model.UserShare
+	q, args := shareVisibleWhere(x.user.ID, x.user.GroupID)
+	model.DB.Where(q, args...).Order("id DESC").Find(&items)
+	dto.OK(c, h.decorate(items))
+}
+
+func (h *UserShareHandler) decorate(items []model.UserShare) []gin.H {
+	out := make([]gin.H, 0, len(items))
+	for _, s := range items {
+		var owner model.User
+		model.DB.Select("username, nickname").First(&owner, s.OwnerID)
+		tt := s.TargetType
+		if tt == "" {
+			tt = "user"
+		}
+		targetName := "所有人"
+		if tt == "user" {
+			var tu model.User
+			model.DB.Select("username").First(&tu, s.TargetID)
+			targetName = tu.Username
+		} else if tt == "group" {
+			var g model.UserGroup
+			model.DB.Select("name").First(&g, s.TargetID)
+			targetName = g.Name
+		}
+		out = append(out, gin.H{
+			"id": s.ID, "name": s.Name, "perm": s.Perm, "path": s.Path,
+			"targetType": tt, "targetName": targetName,
+			"ownerId": s.OwnerID, "owner": owner.Nickname, "ownerName": owner.Username,
+			"createdAt": s.CreatedAt,
+		})
+	}
+	return out
+}
+
+func (h *UserShareHandler) Cancel(c *gin.Context) {
+	x := ctxOf(c)
+	model.DB.Where("id = ? AND owner_id = ?", c.Param("id"), x.user.ID).Delete(&model.UserShare{})
+	dto.OK(c, nil)
+}
+
+// ---- 共享内容访问（被共享者视角） ----
+
+func (h *UserShareHandler) loadForTarget(c *gin.Context) (*model.UserShare, fscore.Driver, bool) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	return h.loadShareByID(c, uint(id))
+}
+
+// loadShareByID 按显式 id 加载共享（供 /office/config?shareId= 等非 :id 路由复用）
+func (h *UserShareHandler) loadShareByID(c *gin.Context, id uint) (*model.UserShare, fscore.Driver, bool) {
+	x := ctxOf(c)
+	var sh model.UserShare
+	q, args := shareVisibleWhere(x.user.ID, x.user.GroupID)
+	if err := model.DB.Where("id = ? AND ("+q+")", append([]interface{}{id}, args...)...).First(&sh).Error; err != nil {
+		dto.Fail(c, 404, "共享不存在或已取消")
+		return nil, nil, false
+	}
+	var p model.Policy
+	if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+		dto.Fail(c, 404, "存储已失效")
+		return nil, nil, false
+	}
+	if p.Status == "disabled" {
+		dto.Fail(c, 400, "存储已停用")
+		return nil, nil, false
+	}
+	// 共享内容属于创建者：必须用创建者的隔离目录解析
+	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.OwnerID))
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return nil, nil, false
+	}
+	return &sh, d, true
+}
+
+// full 计算 rel 相对共享根的绝对虚拟路径（防越界）
+func userShareFull(sh *model.UserShare, rel string) (string, bool) {
+	rel = strings.TrimPrefix(rel, "/")
+	if sh.Path == "/" {
+		// 整盘共享：Clean 已拒绝 ".." 穿越，任何规整后的绝对路径都在根内
+		full, err := fscore.Clean("/" + rel)
+		return full, err == nil
+	}
+	full, err := fscore.Clean(sh.Path + "/" + rel)
+	if err != nil {
+		return "", false
+	}
+	if full != sh.Path && !strings.HasPrefix(full, sh.Path+"/") {
+		return "", false
+	}
+	return full, true
+}
+
+// shareFeatureOn 消费端点（看共享）只受全局「内部共享」开关约束：
+// 共享目标由创建者显式指定（用户/组/所有人），被共享者本人的 usershare 权限
+// 只控制"发起共享"，不能反过来把自己被共享到的内容挡住（否则共享给访客永远不可见）
+func shareFeatureOn(c *gin.Context) bool {
+	if !model.AppEnabled("usershare") {
+		dto.Fail(c, 403, "该功能已被管理员停用")
+		return false
+	}
+	return true
+}
+
+// bumpUserShare 共享访问计数原子自增（共享审计展示用）：col = views | downloads
+func bumpUserShare(id uint, col string) {
+	model.DB.Model(&model.UserShare{}).Where("id = ?", id).
+		UpdateColumn(col, gorm.Expr(col+" + 1"))
+}
+
+// Info 共享根信息
+func (h *UserShareHandler) Info(c *gin.Context) {
+	if !shareFeatureOn(c) {
+		return
+	}
+	sh, _, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	var owner model.User
+	model.DB.Select("nickname, username").First(&owner, sh.OwnerID)
+	dto.OK(c, gin.H{"name": sh.Name, "perm": sh.Perm, "owner": owner.Nickname, "ownerName": owner.Username})
+}
+
+// List 列出共享目录内容（rel 相对共享根）
+func (h *UserShareHandler) List(c *gin.Context) {
+	if !shareFeatureOn(c) {
+		return
+	}
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	full, ok := userShareFull(sh, c.Query("rel"))
+	if !ok {
+		dto.Fail(c, 403, "路径越界")
+		return
+	}
+	entries, err := d.List(full)
+	if err != nil {
+		dto.Fail(c, 404, "目录不存在")
+		return
+	}
+	bumpUserShare(sh.ID, "views")
+	rootPrefix := sh.Path + "/"
+	items := make([]gin.H, 0, len(entries))
+	for _, e := range entries {
+		childFull, _ := fscore.Join(full, e.Name)
+		rel, _ := fscore.RelTo(sh.Path, childFull)
+		items = append(items, gin.H{
+			"name": e.Name, "isDir": e.IsDir, "size": e.Size, "modTime": e.ModTime,
+			"ext": e.Ext, "relPath": rel,
+		})
+	}
+	dto.OK(c, gin.H{"items": items, "perm": sh.Perm, "name": sh.Name, "rel": strings.TrimPrefix(c.Query("rel"), "/")})
+	_ = rootPrefix
+}
+
+// Raw 共享文件预览（inline 流式）
+func (h *UserShareHandler) Raw(c *gin.Context) {
+	if !shareFeatureOn(c) {
+		return
+	}
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	full, ok := userShareFull(sh, c.Query("rel"))
+	if !ok {
+		dto.FailHTTP(c, 403, "路径越界")
+		return
+	}
+	e, err := d.Stat(full)
+	if err != nil || e.IsDir {
+		dto.FailHTTP(c, 404, "文件不存在")
+		return
+	}
+	rc, err := d.Open(full)
+	if err != nil {
+		dto.FailHTTP(c, 404, "文件不存在")
+		return
+	}
+	bumpUserShare(sh.ID, "views")
+	defer rc.Close()
+	rc = wrapThrottle(rc, ctxOf(c).group.DownloadSpeedKB)
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(e.Name), urlEscape(e.Name)))
+	httpServe(c, e.Name, modTimeOf(rc), rc)
+}
+
+// Download 共享文件下载（文件直下 / 目录 zip）
+func (h *UserShareHandler) Download(c *gin.Context) {
+	if !shareFeatureOn(c) {
+		return
+	}
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	full, ok := userShareFull(sh, c.Query("rel"))
+	if !ok {
+		dto.FailHTTP(c, 403, "路径越界")
+		return
+	}
+	e, err := d.Stat(full)
+	if err != nil {
+		dto.FailHTTP(c, 404, "文件不存在")
+		return
+	}
+	bumpUserShare(sh.ID, "downloads")
+	if e.IsDir {
+		tmpZip := tempZipName()
+		defer osRemove(tmpZip)
+		if _, err := h.Site.Fs.BuildZip(d, []fscore.ZipItem{{Path: full}}, tmpZip, nil); err != nil {
+			dto.FailHTTP(c, 500, "打包失败")
+			return
+		}
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, urlEscape(e.Name+".zip")))
+		c.File(tmpZip)
+		return
+	}
+	rc, err := d.Open(full)
+	if err != nil {
+		dto.FailHTTP(c, 404, "文件不存在")
+		return
+	}
+	defer rc.Close()
+	rc = wrapThrottle(rc, ctxOf(c).group.DownloadSpeedKB)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, urlEscape(e.Name)))
+	httpServe(c, e.Name, modTimeOf(rc), rc)
+}
+
+// Mkdir 共享目录内新建文件夹（rw）
+func (h *UserShareHandler) Mkdir(c *gin.Context) {
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	if sh.Perm != "rw" {
+		dto.Fail(c, 403, "此共享为只读")
+		return
+	}
+	var in struct {
+		Rel  string `json:"rel"`
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	full, ok := userShareFull(sh, in.Rel)
+	if !ok {
+		dto.Fail(c, 403, "路径越界")
+		return
+	}
+	vp, err := fscore.Join(full, in.Name)
+	if err != nil {
+		dto.Fail(c, 400, "名称非法")
+		return
+	}
+	if err := d.Mkdir(vp); err != nil {
+		dto.Fail(c, 400, "创建失败："+err.Error())
+		return
+	}
+	dto.OK(c, nil)
+}
+
+// Upload 共享目录内上传（rw，multipart 直传）
+func (h *UserShareHandler) Upload(c *gin.Context) {
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	if sh.Perm != "rw" {
+		dto.Fail(c, 403, "此共享为只读")
+		return
+	}
+	fh, err := c.FormFile("file")
+	if err != nil {
+		dto.Fail(c, 400, "缺少文件")
+		return
+	}
+	full, ok := userShareFull(sh, c.PostForm("rel"))
+	if !ok {
+		dto.Fail(c, 403, "路径越界")
+		return
+	}
+	vp, err := fscore.Join(full, fh.Filename)
+	if err != nil {
+		dto.Fail(c, 400, "文件名非法")
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	}
+	defer f.Close()
+	if err := d.CreateFile(vp, f); err != nil {
+		dto.Fail(c, 500, "上传失败："+err.Error())
+		return
+	}
+	dto.OK(c, gin.H{"path": vp})
+}
+
+// Delete 共享内容删除（rw）
+func (h *UserShareHandler) Delete(c *gin.Context) {
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	if sh.Perm != "rw" {
+		dto.Fail(c, 403, "此共享为只读")
+		return
+	}
+	var in struct {
+		Rels []string `json:"rels" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	for _, rel := range in.Rels {
+		full, ok := userShareFull(sh, rel)
+		if !ok || full == sh.Path {
+			continue
+		}
+		_ = d.Delete(full)
+	}
+	dto.OK(c, nil)
+}

@@ -1,0 +1,14 @@
+{
+  "Name": "在线PS",
+  "Description": "在线PS",
+  "Code": "photopea",
+  "Version": "1.0.0",
+  "PluginType": "2",
+  "Category": "编程修图​",
+  "WebHook": "",
+  "LimitVersion": "1.0.0",
+  "IconUrl": "/api/webplugin/photopea/logo.png",
+  "Log": "首发",
+  "OpenExts": "",
+  "EditExts": "psd,ai,xd,sketch,xcf,raw,dds,jpg,jpeg,png,gif,svg,tiff"
+}

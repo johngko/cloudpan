@@ -1,0 +1,26 @@
+#!/bin/bash
+# CloudPan 构建脚本（Linux/macOS）
+set -e
+cd "$(dirname "$0")"
+
+# 纯 Go 构建（SQLite 驱动为 modernc 纯 Go 实现），便于跨发行版部署
+export CGO_ENABLED=0
+
+echo "[1/3] building frontend..."
+# 构建前对账：APPS 与注册表加载器一一对应（缺失会静默回落成记事本窗口）
+cd web && node scripts/check-app-registry.mjs && npm run build && cd ..
+# CAD 看图 webapp：工作区已装依赖时增量重建（源码 web/tools/cad-viewer/）
+if [ -d web/tools/cad-viewer/node_modules ]; then
+  (cd web/tools/cad-viewer && npm run build)
+fi
+
+echo "[2/3] embedding dist..."
+rm -rf server/internal/web/dist
+cp -r web/dist server/internal/web/dist
+# 保留 embed 占位（.gitignore 排除 dist 内容，占位文件保证空克隆也能 go build）
+touch server/internal/web/dist/.keep
+
+echo "[3/3] building..."
+cd server && go build -o cloudpan .
+
+echo "BUILD OK: server/cloudpan"
