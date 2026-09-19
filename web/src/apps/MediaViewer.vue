@@ -2,6 +2,11 @@
   <div class="app-root mv-root">
     <!-- 视频：ArtPlayer -->
     <div v-if="isVideo" class="mv-stage">
+      <div v-if="isVideo && transcodeAvailable" style="display:flex;justify-content:flex-end;padding:6px 10px 0">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
+          <input type="checkbox" :checked="transcodeOn" @change="toggleTranscode" />转码播放{{ transcodeHard ? "（优先硬件）" : "" }}
+        </label>
+      </div>
       <div ref="artEl" class="mv-art"></div>
     </div>
     <!-- 音乐：APlayer -->
@@ -34,6 +39,7 @@ import Artplayer from 'artplayer'
 import APlayer from 'aplayer'
 import 'aplayer/dist/APlayer.min.css'
 import { fsApi, rawUrl, settingsApi, coverUrl } from '../api/modules'
+import { useSession } from '../stores/session'
 import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps<{ winId: number; props: any }>()
@@ -47,7 +53,21 @@ const list = ref<any[]>(list0.some((x: any) => x.path === props.props?.path) ? l
 const idx = ref(list.value.findIndex((x: any) => x.path === props.props?.path))
 const current = computed(() => list.value[idx.value])
 const isVideo = computed(() => VIDEO_EXTS.includes((current.value?.ext || '').toLowerCase()))
-
+const transcodeOn = ref(false)
+// 站点开启视频转码（off/auto/sw）且 ffmpeg 可用时显示"转码播放"开关
+const transcodeAvailable = computed(() => {
+  const t: any = (useSession().site as any) || {}
+  return t.transcodeMode === 'auto' || t.transcodeMode === 'sw'
+})
+const transcodeHard = computed(() => (useSession().site as any)?.transcodeMode === 'auto')
+function transcodeUrl(): string {
+  return `/api/fs/transcode?policyId=${current.value.policyId}&path=${encodeURIComponent(current.value.path)}&t=${token || ''}`
+}
+function toggleTranscode() {
+  transcodeOn.value = !transcodeOn.value
+  building++
+  buildPlayer()
+}
 const artEl = ref<HTMLElement>()
 const apEl = ref<HTMLElement>()
 const hasLrc = ref(false)
@@ -232,7 +252,7 @@ async function build() {
     if (token !== building) return
     const opts: any = {
       container: artEl.value,
-      url: rawUrl(current.value.policyId, current.value.path),
+      url: transcodeOn.value ? transcodeUrl() : rawUrl(current.value.policyId, current.value.path),
       autoplay: true,
       volume: 0.8,
       theme: '#4cc2ff',

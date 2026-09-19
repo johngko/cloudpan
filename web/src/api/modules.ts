@@ -167,7 +167,8 @@ export const adminApi = {
   updateCheck: () => get<any>('/admin/update/check'),
   updateStart: () => post<any>('/admin/update/start'),
   updateStatus: () => get<any>('/admin/update/status'),
-  updateHistory: () => get<any[]>('/admin/update/history')
+  updateHistory: () => get<any[]>('/admin/update/history'),
+  transcodeProbe: () => get<any>('/admin/transcode/probe'),
 }
 
 // 分块上传

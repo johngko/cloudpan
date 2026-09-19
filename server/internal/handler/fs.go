@@ -96,6 +96,9 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 		"theme":            theme,
 		"demoShare":        demoShare,
 		"wallpaperCatalog": wpCatalog,
+		// 视频转码（CAD/媒体播放器"转码播放"开关的依据）：off/auto/sw + ffmpeg 是否可用
+		"transcodeMode":   s["video_transcode"],
+		"transcodeReady":  probeTranscode(false).ffmpeg,
 	})
 }
 

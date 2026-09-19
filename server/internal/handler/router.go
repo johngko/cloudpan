@@ -77,6 +77,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/fs/global-search", middleware.AppGate("global_search"), site.GlobalSearch)
 		ug.GET("/fs/properties", site.Properties)
 		ug.GET("/fs/raw", site.Raw)
+		ug.GET("/fs/transcode", site.Transcode)
 		// 外部壁纸同源代理（SSRF 段检查 + 20MB 上限，见 handler/wallpaper.go）
 		ug.GET("/fs/wallpaper", site.Wallpaper)
 		ug.GET("/fs/download", site.Download)
@@ -248,6 +249,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 		ag.GET("/settings", ad.SettingsGet)
 		ag.PUT("/settings", ad.SettingsSet)
+		ag.GET("/transcode/probe", ad.AdminTranscodeProbe)
 
 		// 系统版本更新（检查/下载/自重启/历史）
 		upd := &UpdateHandler{Site: site}

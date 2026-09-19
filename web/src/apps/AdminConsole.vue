@@ -393,6 +393,18 @@
               </div>
             </div>
             <div class="ac-set-row">
+              <div class="ac-set-lbl"><b>视频转码</b><span>浏览器播放不了的编码（HEVC 等）按需转码；auto=优先实测可用的硬件编码器，无 GPU 自动回落软编</span></div>
+              <div style="display: flex; gap: 8px; align-items: center">
+                <select class="input" v-model="settings.video_transcode" style="width: 200px">
+                  <option value="off">关闭（原盘直出）</option>
+                  <option value="auto">自动（优先硬件编码）</option>
+                  <option value="sw">强制软件编码</option>
+                </select>
+                <button class="mini-btn" @click="probeTranscode" :disabled="tcProbing">{{ tcProbing ? '检测中…' : '重新检测编码器' }}</button>
+                <span v-if="tcInfo" style="font-size: 12px; color: var(--text-3)">{{ tcInfo }}</span>
+              </div>
+            </div>
+            <div class="ac-set-row">
               <div class="ac-set-lbl"><b>SMTP 账号</b><span>登录账号与密码（授权码）</span></div>
               <div style="display: flex; gap: 8px">
                 <input class="input" v-model="settings.notify_email_user" style="width: 220px" placeholder="noreply@example.com" />
@@ -1040,6 +1052,7 @@ async function loadAll() {
       appDefs.value = await appsApi.list()
       policies.value = await adminApi.policies()
       settings.value = await adminApi.settings()
+      if (!settings.value.video_transcode) settings.value.video_transcode = 'off'
       allShares.value = (await adminApi.shares(1, 100)).items
       allUserShares.value = (await adminApi.userShares(1, 200)).items
       tasks.value = await adminApi.tasks()
@@ -1226,6 +1239,18 @@ function pollAuth() {
 function stopAuthPoll() { if (authPoll) { clearInterval(authPoll); authPoll = null } }
 function stopQr() { stopAuthPoll(); qrImg.value = ''; authMsg.value = '' }
 function closePolicy() { stopQr(); policyShow.value = false }
+const tcProbing = ref(false)
+const tcInfo = ref('')
+async function probeTranscode() {
+  tcProbing.value = true
+  try {
+    const r: any = await adminApi.transcodeProbe()
+    tcInfo.value = r.ffmpeg
+      ? `ffmpeg ${r.version}｜可用编码器: ${r.working.length ? r.working.join(', ') : '无'}`
+      : '未检测到 ffmpeg'
+  } catch (e: any) { tcInfo.value = '检测失败: ' + (e.message || e) }
+  finally { tcProbing.value = false }
+}
 async function saveSettings() {
   try {
     await adminApi.settingsSet(settings.value)
