@@ -10,7 +10,7 @@
    - 通知中心：屏幕右侧贴边
    - 强调色 #1F6EE7（DDE 25 默认活动色），DTK 高亮 #0081FF
    ============================================================ */
-.theme-deepin {
+html.theme-deepin {
   --shell-top: 0px;
   --shell-bottom: 48px;
   --shell-left: 0px;
@@ -222,6 +222,8 @@
 .dde-ctrl.close:hover { background: #FF0000; color: #fff; }
 
 /* ============ 桌面（图标左上网格，同真实 DDE） ============ */
+.theme-deepin .desktop-icons { bottom: calc(var(--shell-bottom) + 18px); }
+
 .theme-deepin .desk-icon.selected {
   background: rgba(31,110,231,0.22);
   border-color: rgba(31,110,231,0.45);

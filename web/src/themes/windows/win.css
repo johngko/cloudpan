@@ -8,7 +8,7 @@
   src: url('/fonts/dos.ttf');
 }
 
-.theme-win12 {
+html.theme-win12 {
   /* 屏幕保留区 = 浮动 dock（40px 高 + 底部 10px）；与 index.ts geometry 一致 */
   --shell-top: 0px;
   --shell-bottom: 50px;
@@ -229,7 +229,7 @@
   transition: filter 0.25s;
 }
 .theme-win12 .desktop-icons {
-  position: absolute; top: 8px; left: 0; right: 0; bottom: var(--shell-bottom);
+  position: absolute; top: 8px; left: 0; right: 0; bottom: calc(var(--shell-bottom) + 8px);
   display: flex; flex-direction: column; flex-wrap: wrap; align-content: flex-start;
   justify-content: flex-start; gap: 0;
 }

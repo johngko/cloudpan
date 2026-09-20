@@ -3,7 +3,7 @@
    设计语言：顶部菜单栏 + 底部放大 Dock + Launchpad + 红绿灯窗口、
    不透明窗口、SF 字体、squircle 图标、大模糊毛玻璃
    ============================================================ */
-.theme-macos {
+html.theme-macos {
   --shell-top: 24px;
   --shell-bottom: 78px;
   --shell-left: 0px;
@@ -211,8 +211,8 @@
 /* ============ 桌面（macOS：图标左下，向上堆叠） ============ */
 .theme-macos .desktop-icons {
   /* 上下双向约束：图标过多时换列而不是顶穿菜单栏 */
-  top: 34px; bottom: calc(var(--shell-bottom) + 10px); left: 10px; right: 96px;
-  flex-direction: column-reverse;
+  top: 34px; bottom: calc(var(--shell-bottom) + 14px); left: 10px; right: 96px;
+  flex-direction: column;
 }
 .theme-macos .desk-icon { width: 76px; }
 .theme-macos .desk-icon .lbl { font-size: 11.5px; -webkit-line-clamp: 1; }
