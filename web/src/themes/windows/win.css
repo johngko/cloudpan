@@ -559,9 +559,10 @@ html.theme-win12 {
 }
 
 /* ============ 搜索窗（1:1：600×594 居中，输入+页签+列表+详情） ============ */
+/* width/left 用 min/max 收敛：窄视口（手机/小窗）下面板贴边全量入屏，选项不裁切 */
 .w12-search {
-  height: 594px; max-height: calc(100% - 120px); width: 600px;
-  left: calc(50% - 300px); padding: 15px; transform: translateY(660px); flex-direction: column;
+  height: 594px; max-height: calc(100% - 120px); width: min(600px, 100vw - 16px);
+  left: max(8px, calc(50% - 300px)); padding: 15px; transform: translateY(660px); flex-direction: column;
 }
 .w12-search .w12-input { padding: 6px 8px 6px 30px; font-size: 14.5px; }
 .w12-search-tabs { display: flex; margin-top: 25px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -603,6 +604,12 @@ html.theme-win12 {
 }
 .w12-sv-opt:active { transform: scale(0.97); }
 .w12-sv-opt:hover { background-color: var(--w12-hover-half); }
+/* 窄屏：列表与详情竖排（列表先滚，详情占下半），避免 250px 列表把详情挤没 */
+@media (max-width: 640px) {
+  .w12-search-ans { flex-direction: column; }
+  .w12-search-list { width: auto; margin-right: 0; padding-right: 0; flex: 1 1 auto; min-height: 0; }
+  .w12-search-view { margin: 2px 0 0 0; flex: none; max-height: 45%; }
+}
 
 /* ============ 控制中心（1:1：350×250，3×2 快启 + 亮度滑杆） ============ */
 .w12-ctrl { width: 350px; height: 250px; padding: 10px; transform: translateY(320px); flex-direction: column; }
@@ -694,8 +701,8 @@ html.theme-win12 {
 
 /* ============ 小组件面板（1:1：1000×600，左小组件右新闻） ============ */
 .w12-widgets {
-  height: 600px; max-height: calc(90% - 50px); width: 1000px;
-  left: calc(50% - 500px); padding: 10px 0; transform: translateY(660px);
+  height: 600px; max-height: calc(90% - 50px); width: min(1000px, 100vw - 16px);
+  left: max(8px, calc(50% - 500px)); padding: 10px 0; transform: translateY(660px);
 }
 .w12-widgets > .w12-wg-half { width: calc(50% - 0.5px); padding: 0 10px; display: flex; flex-direction: column; min-width: 0; }
 .w12-widgets > .hr { width: 1px; height: calc(100% - 20px); margin-top: 10px; background-color: var(--w12-hover-b); flex: none; }

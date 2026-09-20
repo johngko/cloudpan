@@ -62,6 +62,8 @@
         <div v-else-if="kw && tab === '应用' && !appHits.length" class="w12-search-empty">未找到相关应用</div>
         <div v-else-if="kw && tab === '设置' && !settingsHits.length" class="w12-search-empty">未找到相关设置</div>
         <div v-else-if="tab === '网页' && !kw" class="w12-search-empty">输入关键词，用内置浏览器搜索网页</div>
+        <div v-else-if="!kw && tab === '应用'" class="w12-search-empty">输入关键词，搜索应用</div>
+        <div v-else-if="!kw && (tab === '文档' || tab === '文件夹' || tab === '照片')" class="w12-search-empty">输入关键词，搜索文件</div>
       </div>
       <div class="w12-search-view" :class="{ on: !!sel }">
         <template v-if="sel && sel.kind === 'file'">
