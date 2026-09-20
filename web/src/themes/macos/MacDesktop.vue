@@ -9,6 +9,9 @@
       </div>
     </div>
 
+    <!-- 桌面天气卡（右上角；mac.css --shell-top:24px 使其落在菜单栏下方） -->
+    <WeatherWidget />
+
     <!-- 窗口层 -->
     <!-- 多窗口必须用 TransitionGroup：Transition 只渲染第一个子节点，第二个窗口会被吞掉 -->
     <TransitionGroup name="win-anim">
@@ -37,6 +40,7 @@ import { useDesktopIcons } from '../../stores/apps'
 import { wallpaperClass } from '../../assets/wallpapers'
 import MacWindowFrame from './MacWindowFrame.vue'
 import MacMenuBar from './MacMenuBar.vue'
+import WeatherWidget from '../../shell/WeatherWidget.vue'
 import MacDock from './MacDock.vue'
 import MacLaunchpad from './MacLaunchpad.vue'
 import MacLock from './MacLock.vue'

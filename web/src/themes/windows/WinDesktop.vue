@@ -9,6 +9,9 @@
       </div>
     </div>
 
+    <!-- 桌面天气卡（右上角；DOM 先于窗口层 → 被窗口盖住、盖住图标） -->
+    <WeatherWidget />
+
     <!-- 窗口层 -->
     <!-- 多窗口必须用 TransitionGroup：Transition 只渲染第一个子节点，第二个窗口会被吞掉 -->
     <TransitionGroup name="win-anim">
@@ -38,6 +41,7 @@ import { fsApi } from '../../api/modules'
 import { wallpaperClass } from '../../assets/wallpapers'
 import WinWindowFrame from './WinWindowFrame.vue'
 import WinTaskBar from './WinTaskBar.vue'
+import WeatherWidget from '../../shell/WeatherWidget.vue'
 import WinLock from './WinLock.vue'
 import ContextMenu from '../../shell/ContextMenu.vue'
 import DialogHost from '../../shell/DialogHost.vue'

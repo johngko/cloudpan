@@ -9,6 +9,9 @@
       </div>
     </div>
 
+    <!-- 桌面天气卡（右上角；Deepin 无顶部面板，top=12px） -->
+    <WeatherWidget />
+
     <!-- 窗口层 -->
     <!-- 多窗口必须用 TransitionGroup：Transition 只渲染第一个子节点，第二个窗口会被吞掉 -->
     <TransitionGroup name="win-anim">
@@ -36,6 +39,7 @@ import { useDesktopIcons } from '../../stores/apps'
 import { wallpaperClass } from '../../assets/wallpapers'
 import DeepinWindowFrame from './DeepinWindowFrame.vue'
 import DeepinDock from './DeepinDock.vue'
+import WeatherWidget from '../../shell/WeatherWidget.vue'
 import DeepinLauncher from './DeepinLauncher.vue'
 import DeepinLock from './DeepinLock.vue'
 import ContextMenu from '../../shell/ContextMenu.vue'
