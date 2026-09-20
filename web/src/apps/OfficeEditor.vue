@@ -1,8 +1,8 @@
 <template>
   <div class="app-root">
     <div class="app-toolbar">
+      <!-- 文件名不在此重复显示：窗口标题栏已有（DS 编辑器顶栏也会显示文档名） -->
       <AppIcon name="office" :size="16" />
-      <span style="font-size: 12.5px; color: var(--text-2)">{{ props.props?.name }}</span>
       <div style="flex: 1"></div>
 
       <!-- 编辑模式切换 -->
