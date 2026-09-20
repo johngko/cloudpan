@@ -640,23 +640,56 @@ html.theme-win12 {
 .w12-range:active .slider-btn { border-width: 6px; }
 
 /* ============ 日历面板（1:1：350×450，35px 时钟 + 周一始日历） ============ */
-.w12-datebox { width: 350px; height: 450px; padding: 10px; transform: translateY(520px); flex-direction: column; }
+.w12-datebox { width: 380px; height: 500px; padding: 10px; transform: translateY(600px); flex-direction: column; }
 .w12-db-tit { padding: 3px 5px; }
 .w12-db-time { font-size: 35px; line-height: 50px; height: 50px; color: var(--w12-text); font-weight: 400; font-variant-numeric: tabular-nums; }
 .w12-db-date { margin-left: 5px; font-size: 13.5px; color: var(--w12-text); }
+.w12-db-lunar { margin: 2px 0 0 5px; font-size: 12px; color: var(--w12-text2); }
+.w12-db-fest { margin-left: 6px; font-weight: 600; }
+.w12-db-fest.holiday { color: #d65a4a; }
+.w12-db-fest.work { color: #4a7fd6; }
+.w12-db-fest.fest { color: #d69a4a; }
+.w12-db-fest.jieqi { color: #5a9a5a; }
+.w12-db-wx { margin: 7px 0 0 5px; font-size: 12.5px; color: var(--w12-text2); }
 .w12-db-hr { width: 100%; height: 1px; background: #afafaf50; margin: 8px 0; border: none; }
 .w12-db-cont { width: 100%; flex-grow: 1; }
 .w12-db-head { width: 100%; display: flex; }
-.w12-db-head p { width: 46.5px; text-align: center; font-size: 13px; color: var(--w12-text2); }
+.w12-db-head p { width: calc(100% / 7); text-align: center; font-size: 13px; color: var(--w12-text2); }
 .w12-db-body { display: flex; flex-wrap: wrap; margin-top: 5px; }
 .w12-db-body p, .w12-db-body span {
-  width: 46.5px; height: 46.5px; border-radius: 50%; text-align: center;
-  padding-top: 10px; font-size: 13.5px; color: var(--w12-text);
+  width: calc(100% / 7); height: 46.5px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 13.5px; color: var(--w12-text);
 }
+.w12-db-body b { font-weight: 400; line-height: 1.25; }
+.w12-db-body i {
+  font-style: normal; font-size: 9.5px; line-height: 1.2; color: var(--w12-text2);
+  max-width: 96%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.w12-db-body i.holiday { color: #d65a4a; font-weight: 600; }
+.w12-db-body i.work { color: #4a7fd6; font-weight: 600; }
+.w12-db-body i.fest { color: #d69a4a; font-weight: 600; }
+.w12-db-body i.jieqi { color: #5a9a5a; font-weight: 600; }
 .w12-db-body p { cursor: default; transition: 80ms; }
 .w12-db-body p:hover { background-color: var(--w12-hover); }
 .w12-db-body p:active { opacity: 0.7; }
 .w12-db-body p.today { background: linear-gradient(120deg, var(--theme-1), var(--theme-2)); color: #eeeeee; }
+.w12-db-body p.today i { color: #dceeff; }
+
+/* 桌面天气卡（win12）：与 w12-panel 同源的浅色玻璃（变量已含 dark 适配） */
+.theme-win12 .wx-widget {
+  background: var(--w12-bg50);
+  -webkit-backdrop-filter: saturate(4) contrast(0.8) blur(70px);
+  backdrop-filter: saturate(4) contrast(0.8) blur(70px);
+  border: 1.5px solid #99999950;
+  box-shadow: 3px 3px 20px 1px var(--w12-shadow);
+  color: var(--w12-text);
+}
+.theme-win12 .wxw-refresh { background: var(--w12-hover); color: var(--w12-text); }
+.theme-win12 .wxw-refresh:hover { background: var(--w12-hover-half); }
+.theme-win12 .wxw-sel { background: var(--w12-hover); color: var(--w12-text); }
+.theme-win12 .wxw-sel option { color: var(--w12-text); }
+.theme-win12 .wxw-fallback button { background: var(--w12-hover); color: var(--w12-text); }
 
 /* ============ 小组件面板（1:1：1000×600，左小组件右新闻） ============ */
 .w12-widgets {

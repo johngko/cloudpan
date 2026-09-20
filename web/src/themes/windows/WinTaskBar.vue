@@ -164,7 +164,7 @@ function positionPanel(p: PanelId) {
   const el = (p === 'ctrl' ? (ctrlBtn.value as any)?.$el : (dateBtn.value as any)?.$el) as HTMLElement | null
   const btn = el?.querySelector('button') || el
   const r = (btn as HTMLElement)?.getBoundingClientRect()
-  const W = 350
+  const W = p === 'datebox' ? 380 : 350
   const left = r ? Math.max(10, Math.min(window.innerWidth - W - 10, r.left + r.width / 2 - W / 2)) : window.innerWidth - W - 20
   if (p === 'ctrl') ctrlLeft.value = left
   else dateLeft.value = left
