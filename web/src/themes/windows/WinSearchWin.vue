@@ -20,12 +20,14 @@
             <AppIcon :name="a.icon" :size="25" /><span class="nm">{{ a.name }}</span>
           </div>
         </template>
-        <!-- 文件（全部/文档/文件夹/照片，按当前页签过滤） -->
+        <!-- 文件（全部/文档/文件夹/照片，按当前页签过滤）：
+             有关键词=搜索命中；无关键字=各盘顶层首屏（浏览态），小字标注来源盘 -->
         <template v-if="isFileTab && shownFiles.length">
           <div class="w12-search-sec">文件</div>
-          <div v-for="(f, i) in shownFiles" :key="f.path" class="w12-search-item"
+          <div v-for="(f, i) in shownFiles" :key="f.policyId + '|' + f.path" class="w12-search-item"
             :class="{ on: sel && sel.kind === 'file' && sel.idx === i }" @click="selFile(f, i)">
-            <img :src="fileIcon(f)" /><span class="nm">{{ f.name }}</span><small v-if="f.isDir">文件夹</small>
+            <img :src="fileIcon(f)" /><span class="nm">{{ f.name }}</span>
+            <small v-if="!kw && f.policyName">{{ f.policyName }}</small><small v-else-if="f.isDir">文件夹</small>
           </div>
         </template>
         <!-- 设置（静态设置页深链） -->
@@ -44,26 +46,14 @@
             <span class="nm">在浏览器中搜索“{{ kw }}”</span>
           </div>
         </template>
-        <!-- 推荐（仅无关键词的全部页签，与 1:1 演示一致） -->
-        <template v-if="!kw && tab === '全部'">
-          <div class="w12-search-sec" style="line-height: 24px">推荐</div>
-          <div class="w12-search-item" @click="openApp({ id: 'settings', name: '设置', icon: 'settings' })">
-            <AppIcon name="settings" :size="25" /><span class="nm">设置</span>
-          </div>
-          <div class="w12-search-item" @click="openApp({ id: 'explorer', name: '文件资源管理器', icon: 'explorer' })">
-            <AppIcon name="explorer" :size="25" /><span class="nm">文件资源管理器</span>
-          </div>
-          <div class="w12-search-item" @click="openApp({ id: 'browser', name: '浏览器', icon: 'browser' })">
-            <AppIcon name="browser" :size="25" /><span class="nm">浏览器</span>
-          </div>
-        </template>
+        <!-- 空态：区分"加载中 / 无结果"，避免面板空白 -->
         <div v-if="kw && isFileTab && searching" class="w12-search-empty">正在搜索...</div>
+        <div v-else-if="!kw && isFileTab && recentLoading" class="w12-search-empty">正在读取文件...</div>
+        <div v-else-if="!kw && isFileTab && !recentLoading && !shownFiles.length" class="w12-search-empty">此类型下暂无文件</div>
         <div v-else-if="kw && isFileTab && !searching && !shownFiles.length && !(tab === '全部' && appHits.length)" class="w12-search-empty">未找到相关结果</div>
         <div v-else-if="kw && tab === '应用' && !appHits.length" class="w12-search-empty">未找到相关应用</div>
         <div v-else-if="kw && tab === '设置' && !settingsHits.length" class="w12-search-empty">未找到相关设置</div>
         <div v-else-if="tab === '网页' && !kw" class="w12-search-empty">输入关键词，用内置浏览器搜索网页</div>
-        <div v-else-if="!kw && tab === '应用'" class="w12-search-empty">输入关键词，搜索应用</div>
-        <div v-else-if="!kw && (tab === '文档' || tab === '文件夹' || tab === '照片')" class="w12-search-empty">输入关键词，搜索文件</div>
       </div>
       <div class="w12-search-view" :class="{ on: !!sel }">
         <template v-if="sel && sel.kind === 'file'">
@@ -106,7 +96,12 @@ const kw = ref('')
 const tab = ref('全部')
 const tabs = ['全部', '应用', '文档', '网页', '设置', '文件夹', '照片']
 const fileHits = ref<any[]>([])
-const appHits = ref<any[]>([])
+// 无关键字浏览：各盘顶层首屏（后端 kind=browse），开面板时预取一次，页签切换仅客户端过滤
+const recentHits = ref<any[]>([])
+const recentLoading = ref(false)
+let recentSeq = 0
+// 初始即全量应用：watch(q) 只在 q 变化时触发，挂载时不触发——否则无关键字态应用区恒空
+const appHits = ref<any[]>(visibleApps())
 const searching = ref(false)
 const sel = ref<null | { kind: 'file' | 'app'; item: any; idx: number }>(null)
 const inputEl = ref<HTMLInputElement>()
@@ -119,12 +114,14 @@ const FILE_TABS = new Set(['全部', '文档', '文件夹', '照片'])
 const isFileTab = computed(() => FILE_TABS.has(tab.value))
 const DOC_EXTS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf', 'txt', 'md', 'csv', 'rtf', 'wps', 'epub', 'mobi', 'log', 'json', 'xml']
 const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'heic', 'tif', 'tiff', 'avif']
+// 有关键词=搜索命中；无关键字=浏览源（各盘顶层首屏），按当前页签过滤
 const shownFiles = computed(() => {
-  if (!fileHits.value.length) return []
-  if (tab.value === '文档') return fileHits.value.filter(f => DOC_EXTS.includes((f.ext || '').toLowerCase()))
-  if (tab.value === '照片') return fileHits.value.filter(f => IMG_EXTS.includes((f.ext || '').toLowerCase()))
-  if (tab.value === '文件夹') return fileHits.value.filter(f => f.isDir)
-  return fileHits.value
+  const src = q.value ? fileHits.value : recentHits.value
+  if (!src.length) return []
+  if (tab.value === '文档') return src.filter(f => DOC_EXTS.includes((f.ext || '').toLowerCase()))
+  if (tab.value === '照片') return src.filter(f => IMG_EXTS.includes((f.ext || '').toLowerCase()))
+  if (tab.value === '文件夹') return src.filter(f => f.isDir)
+  return src
 })
 
 // 设置页深链（与 SettingsApp 侧边栏一致）
@@ -150,19 +147,45 @@ const settingsHits = computed(() => {
   return areas.filter(s => s.name.toLowerCase().includes(v) || s.kws.some(k => k.includes(v)))
 })
 
+// 无关键字=列出全部应用（Win11「应用」页签语义），有关键词=按名/id 过滤
 function searchApps(v: string) {
-  appHits.value = v ? visibleApps().filter(a => a.name.toLowerCase().includes(v) || a.id.includes(v)) : []
+  appHits.value = v ? visibleApps().filter(a => a.name.toLowerCase().includes(v) || a.id.includes(v)) : visibleApps()
+}
+
+// 无关键字浏览源：各盘顶层首屏（深度≤3），一次预取后各文件页签客户端过滤
+function loadRecent() {
+  if (recentHits.value.length || recentLoading.value) return
+  recentLoading.value = true
+  const seq = ++recentSeq
+  fsApi.globalSearch('', 'browse').then((r: any[]) => {
+    if (seq !== recentSeq) return
+    recentHits.value = (r || []).slice(0, 60)
+    // 浏览态也给出右侧详情（与搜索态一致：默认选中第一项）；用户已手动选中则不覆盖
+    if (!kw.value.trim() && FILE_TABS.has(tab.value) && recentHits.value.length && !sel.value) {
+      const first = shownFiles.value[0] || recentHits.value[0]
+      sel.value = { kind: 'file', item: first, idx: shownFiles.value.indexOf(first) }
+    }
+  }).catch(() => { if (seq === recentSeq) recentHits.value = [] })
+    .finally(() => { if (seq === recentSeq) recentLoading.value = false })
 }
 
 watch(q, v => {
   searchApps(v)
   if (v && isFileTab.value && !searching.value && !fileHits.value.length) onInput()
+  else if (!v && isFileTab.value) loadRecent()
 })
 
-// 切换页签：需要文件结果但还没搜过（如先在「应用」页签输入）则补搜
+// 切换页签：有关键词且还没搜过则补搜；无关键字则确保浏览源就绪并让详情跟随新页签
 watch(tab, () => {
   const v = kw.value.trim()
-  if (!v) return
+  if (!v) {
+    if (FILE_TABS.has(tab.value)) {
+      loadRecent()
+      const first = shownFiles.value[0]
+      sel.value = first ? { kind: 'file', item: first, idx: 0 } : null
+    }
+    return
+  }
   sel.value = null
   if (FILE_TABS.has(tab.value) && !searching.value && !fileHits.value.length) onInput()
 })
@@ -226,5 +249,8 @@ function fileIcon(f: any): string {
   return '/icons/win12/files/txt.png'
 }
 
-onMounted(() => nextTick(() => inputEl.value?.focus()))
+onMounted(() => {
+  nextTick(() => inputEl.value?.focus())
+  loadRecent() // 预取浏览源：不输词直接点页签时立即可见内容
+})
 </script>

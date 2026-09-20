@@ -71,7 +71,7 @@ export const fsApi = {
   crossMove: (dstPolicyId: number, dstDir: string, items: { policyId: number; path: string }[]) => post('/fs/cross-move', { dstPolicyId, dstDir, items }),
   remove: (policyId: number, paths: string[]) => post('/fs/delete', { policyId, paths }),
   search: (policyId: number, keyword: string, path = '/') => get<FileItem[]>(`/fs/search?policyId=${policyId}&keyword=${encodeURIComponent(keyword)}&path=${encodeURIComponent(path)}`),
-  globalSearch: (q: string) => get<any[]>(`/fs/global-search?q=${encodeURIComponent(q)}`),
+  globalSearch: (q: string, kind?: string) => get<any[]>(`/fs/global-search?q=${encodeURIComponent(q)}${kind ? `&kind=${kind}` : ''}`),
   properties: (policyId: number, path: string) => get<any>(`/fs/properties?policyId=${policyId}&path=${encodeURIComponent(path)}`),
   dlink: (policyId: number, path: string, expireHours: number) => get<{ url: string; expireAt: number; permanent: boolean; name: string; size: number }>(`/fs/dlink?policyId=${policyId}&path=${encodeURIComponent(path)}&expireHours=${expireHours}`),
   readText: (policyId: number, path: string) => get<{ content: string }>(`/fs/text?policyId=${policyId}&path=${encodeURIComponent(path)}`),

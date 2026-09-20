@@ -1092,29 +1092,73 @@ func (h *SiteHandler) Search(c *gin.Context) {
 func (h *SiteHandler) GlobalSearch(c *gin.Context) {
 	x := ctxOf(c)
 	kw := strings.TrimSpace(c.Query("q"))
-	if kw == "" {
-		dto.OK(c, []gin.H{})
-		return
-	}
 	var list []model.Policy
 	model.DB.Where("status != ?", "disabled").Order("letter").Find(&list)
 	out := make([]gin.H, 0, 32)
-	for _, p := range list {
+	// 总上限 200；push 满时返回 false 让调用方提前收手
+	push := func(p *model.Policy, it fscore.Entry) bool {
+		out = append(out, gin.H{
+			"policyId": p.ID, "letter": p.Letter, "policyName": p.Name, "policyType": p.Type,
+			"name": it.Name, "isDir": it.IsDir, "size": it.Size, "modTime": it.ModTime,
+			"ext": it.Ext, "path": it.Path,
+		})
+		return len(out) < 200
+	}
+	if kw == "" {
+		// 无关键字浏览（kind=browse）：搜索面板不输词时的各页签内容源——
+		// 采集各盘顶层首屏（深度 ≤3，命中上限即返回）：本地盘即时，
+		// 云盘通常每盘只花一次 List（根目录条目已够上限）
+		if c.Query("kind") != "browse" {
+			dto.OK(c, out)
+			return
+		}
+		for i := range list {
+			p := &list[i]
+			if x.user.Role != "admin" && !x.group.CanUsePolicy(p.ID) {
+				continue
+			}
+			d, err := h.Fs.DriverFor(p, x.user)
+			if err != nil {
+				continue
+			}
+			var walk func(vp string, depth int)
+			walk = func(vp string, depth int) {
+				if depth > 3 {
+					return
+				}
+				items, err := d.List(vp)
+				if err != nil {
+					return
+				}
+				for _, it := range items {
+					child, jerr := fscore.Join(vp, it.Name)
+					if jerr == nil {
+						it.Path = child
+						if !push(p, it) {
+							return
+						}
+					}
+					if it.IsDir && jerr == nil {
+						walk(child, depth+1)
+					}
+				}
+			}
+			walk("/", 0)
+		}
+		dto.OK(c, out)
+		return
+	}
+	for i := range list {
+		p := &list[i]
 		if x.user.Role != "admin" && !x.group.CanUsePolicy(p.ID) {
 			continue
 		}
-		d, err := h.Fs.DriverFor(&p, x.user)
+		d, err := h.Fs.DriverFor(p, x.user)
 		if err != nil {
 			continue
 		}
-		hits := h.Fs.Search(d, "/", kw, 30)
-		for _, it := range hits {
-			out = append(out, gin.H{
-				"policyId": p.ID, "letter": p.Letter, "policyName": p.Name, "policyType": p.Type,
-				"name": it.Name, "isDir": it.IsDir, "size": it.Size, "modTime": it.ModTime,
-				"ext": it.Ext, "path": it.Path,
-			})
-			if len(out) >= 200 {
+		for _, it := range h.Fs.Search(d, "/", kw, 30) {
+			if !push(p, it) {
 				dto.OK(c, out)
 				return
 			}
