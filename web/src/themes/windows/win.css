@@ -676,8 +676,9 @@ html.theme-win12 {
 .w12-db-body p.today { background: linear-gradient(120deg, var(--theme-1), var(--theme-2)); color: #eeeeee; }
 .w12-db-body p.today i { color: #dceeff; }
 
-/* 桌面天气卡（win12）：与 w12-panel 同源的浅色玻璃（变量已含 dark 适配） */
-.theme-win12 .wx-widget {
+/* 桌面天气卡（win12）：与 w12-panel 同源的浅色玻璃（变量已含 dark 适配）。
+   选择器双写类名提高特异性：组件 scoped 基础样式为 .wxw-*(data-v)，同特异性下后注入者胜 */
+.theme-win12 .wx-widget.wx-widget {
   background: var(--w12-bg50);
   -webkit-backdrop-filter: saturate(4) contrast(0.8) blur(70px);
   backdrop-filter: saturate(4) contrast(0.8) blur(70px);
@@ -685,10 +686,10 @@ html.theme-win12 {
   box-shadow: 3px 3px 20px 1px var(--w12-shadow);
   color: var(--w12-text);
 }
-.theme-win12 .wxw-refresh { background: var(--w12-hover); color: var(--w12-text); }
-.theme-win12 .wxw-refresh:hover { background: var(--w12-hover-half); }
-.theme-win12 .wxw-sel { background: var(--w12-hover); color: var(--w12-text); }
-.theme-win12 .wxw-sel option { color: var(--w12-text); }
+.theme-win12 .wxw-refresh.wxw-refresh { background: var(--w12-hover); color: var(--w12-text); }
+.theme-win12 .wxw-refresh.wxw-refresh:hover { background: var(--w12-hover-half); }
+.theme-win12 .wxw-sel.wxw-sel { background: var(--w12-hover); color: var(--w12-text); }
+.theme-win12 .wxw-sel.wxw-sel option { color: var(--w12-text); }
 .theme-win12 .wxw-fallback button { background: var(--w12-hover); color: var(--w12-text); }
 
 /* ============ 小组件面板（1:1：1000×600，左小组件右新闻） ============ */
