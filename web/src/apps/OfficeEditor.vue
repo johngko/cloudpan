@@ -25,9 +25,9 @@
       <button class="tool-btn" @click="download"><AppIcon name="download" :size="15"/>下载</button>
     </div>
 
-    <!-- ONLYOFFICE 在线编辑 -->
+    <!-- ONLYOFFICE 在线编辑（placeholder id 带 winId：多开时 DocsAPI 按 id 挂载，固定 id 会全挂进首个窗口） -->
     <div v-show="mode === 'ds'" style="flex: 1; position: relative">
-      <div id="cp-office-placeholder" style="position: absolute; inset: 0"></div>
+      <div :id="'cp-office-ph-' + winId" style="position: absolute; inset: 0"></div>
     </div>
 
     <!-- PDF 内嵌预览（v-if：非 PDF 模式不得挂载——iframe 加载 docx 等不可渲染类型会触发浏览器下载） -->
@@ -476,7 +476,7 @@ async function initDs() {
     const wantMode = (isShared.value && props.props?.perm !== 'rw') ? 'view' : (props.props.mode || 'edit')
     const d = await get<any>(`/office/config?${qs}&mode=${wantMode}`)
     await loadScript(d.documentServer + '/web-apps/apps/api/documents/api.js')
-    editor = new (window as any).DocsAPI.DocEditor('cp-office-placeholder', {
+    editor = new (window as any).DocsAPI.DocEditor('cp-office-ph-' + props.winId, {
       ...d.config,
       width: '100%',
       height: '100%',

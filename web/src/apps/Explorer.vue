@@ -529,7 +529,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useWindows } from '../stores/windows'
 import { useSession } from '../stores/session'
 import { useAppState } from '../stores/appstate'
@@ -551,7 +550,6 @@ const props = defineProps<{ winId: number; props: any }>()
 const store = useWindows()
 const session = useSession()
 const apps = useAppState()
-const router = useRouter()
 // 离线下载/终端等无权限功能：入口整体隐藏（不显示禁用态），与「无权限功能完全隐藏」原则一致
 const canOffline = computed(() => canUseOffline())
 // 在终端中打开 = 本地终端（服务器 shell），仅管理员；普通用户的终端仅限 SSH 连自己的服务器
@@ -1074,15 +1072,12 @@ function openSharedItem(f: any) {
   if (!sp) return
   const ext = (f.ext || '').toLowerCase()
   if (OFFICE_EXTS.includes(ext)) {
-    // 配置了 Document Server：整页编辑器（Cloudreve 模式，完整功能区）；PDF 走内嵌查看；未配置回退桌面窗口
-    if (session.site.officeConfigured && ext !== 'pdf') {
-      router.push(`/office?shareId=${sp.shareId}&rel=${encodeURIComponent(sp.rel)}`)
-    } else {
-      store.open('officeeditor', {
-        shareId: sp.shareId, rel: sp.rel, name: f.name, size: f.size, ext,
-        perm: currentShare.value?.perm || 'ro'
-      }, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
-    }
+    // 桌面窗口内嵌打开（配置了 Document Server 时窗口内即完整 ONLYOFFICE 编辑器，
+    // 关闭仅关窗不刷新页面；/office 整页仅保留给公开分享链接）
+    store.open('officeeditor', {
+      shareId: sp.shareId, rel: sp.rel, name: f.name, size: f.size, ext,
+      perm: currentShare.value?.perm || 'ro'
+    }, { title: f.name + ' - Office', icon: 'office', w: 1240, h: 780 })
     return
   }
   const previewExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a', 'pdf']
@@ -1120,13 +1115,9 @@ async function openItem(f: FileItem) {
   } else if (ext === 'drawio' && apps.isAvailable('flowchart')) {
     store.open('flowchart', p, { title: f.name + ' - 流程图', icon: 'flowchart', w: 1080, h: 700 })
   } else if (OFFICE_EXTS.includes(ext)) {
-    // 配置了 Document Server：整页 ONLYOFFICE 编辑器（Cloudreve 模式：撑满整页 + 完整功能区，
-    // 自己账号打开与分享链接打开同一形态）；PDF 走内嵌查看；未配置回退桌面窗口静态预览
-    if (session.site.officeConfigured && ext !== 'pdf') {
-      router.push(`/office?policyId=${pid}&path=${encodeURIComponent(f.path)}`)
-    } else {
-      store.open('officeeditor', p, { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 })
-    }
+    // 桌面窗口内嵌打开（配置了 Document Server 时窗口内即完整 ONLYOFFICE 编辑器，
+    // 关闭仅关窗不刷新页面；/office 整页仅保留给公开分享链接）
+    store.open('officeeditor', p, { title: f.name + ' - Office', icon: 'office', w: 1240, h: 780 })
   } else if (TEXT_EXTS.includes(ext) || !ext) {
     store.open('notepad', p, { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 })
   } else if (['eml', 'mht', 'mhtml'].includes(ext) && apps.isAvailable('eml_viewer')) {
@@ -1205,21 +1196,13 @@ function openWith(f: FileItem, app: 'mediaviewer' | 'notepad' | 'officeeditor' |
     } else if (!withList.policyId) {
       withList.policyId = pid
     }
-    // 配置了 Document Server：与双击一致进整页 ONLYOFFICE 编辑器（Cloudreve 模式）；
-    // 桌面窗口静态兜底仅在未配置 DS 时使用
-    if (session.site.officeConfigured && ext !== 'pdf') {
-      if (onSharedDrive.value) {
-        const sp = sharedPathParse(f.path)
-        if (sp) { router.push(`/office?shareId=${sp.shareId}&rel=${encodeURIComponent(sp.rel)}`); return }
-      }
-      if (pid) { router.push(`/office?policyId=${pid}&path=${encodeURIComponent(f.path)}`); return }
-    }
+    // 与双击一致：桌面窗口内嵌打开（配置 DS 时窗口内即完整 ONLYOFFICE 编辑器）
   }
   const p = withList
   const map: Record<string, { title: string; icon: string; w: number; h: number }> = {
     mediaviewer: { title: f.name + ' - 媒体播放器', icon: 'media', w: 880, h: 580 },
     notepad: { title: f.name + ' - 记事本', icon: 'notepad', w: 780, h: 560 },
-    officeeditor: { title: f.name + ' - Office', icon: 'office', w: 1100, h: 720 },
+    officeeditor: { title: f.name + ' - Office', icon: 'office', w: 1240, h: 780 },
     archiveviewer: { title: f.name + ' - 压缩包浏览器', icon: 'archive', w: 1000, h: 620 },
     mindmap: { title: f.name + ' - 思维导图', icon: 'mindmap', w: 1080, h: 700 },
     whiteboard: { title: f.name + ' - 白板', icon: 'whiteboard', w: 1080, h: 700 },

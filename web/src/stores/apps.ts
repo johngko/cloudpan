@@ -28,7 +28,7 @@ export const APPS: AppDef[] = [
   { id: 'browser', name: '浏览器', icon: 'browser', w: 1100, h: 700, desktop: true, pinned: true, feature: 'browser' },
   // imageviewer（图片查看器）已下线：图片打开统一走 picasa
   { id: 'mediaviewer', name: '媒体播放器', icon: 'media', w: 880, h: 580 },
-  { id: 'officeeditor', name: 'Office 编辑器', icon: 'office', w: 1100, h: 720, feature: 'office' },
+  { id: 'officeeditor', name: 'Office 编辑器', icon: 'office', w: 1240, h: 780, feature: 'office' },
   { id: 'archiveviewer', name: '压缩包浏览器', icon: 'archive', w: 1000, h: 620, feature: 'archive_view' },
   // 创意文档五件套（系统功能：管理员开关 + 组分配，不可自装）
   { id: 'mindmap', name: '思维导图', icon: 'mindmap', w: 1080, h: 700, feature: 'mindmap' },
