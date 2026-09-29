@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
+
+// 测试账号口令从环境变量读取（不要提交口令字面量到仓库）
+if (!process.env.E2E_PASS) { console.error('[e2e] 未设置 E2E_PASS 环境变量（测试账号口令）'); process.exit(2) }
 const BASE = 'http://127.0.0.1:18322';
 const out = {};
-const login = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'cptest', password: 'cptest-temp-2026' }) }).then(r => r.json());
+const login = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'cptest', password: process.env.E2E_PASS }) }).then(r => r.json());
 const T = login.data.token, H = { Authorization: 'Bearer ' + T };
 out.tokenUid = JSON.parse(atob(T.split('.')[1])).uid;
 

@@ -1,4 +1,7 @@
 import { chromium } from '/www/wwwhdd/www.johngko.com/multimedia-platform/node_modules/playwright-core/index.mjs';
+
+// 测试账号口令从环境变量读取（不要提交口令字面量到仓库）
+if (!process.env.E2E_PASS) { console.error('[e2e] 未设置 E2E_PASS 环境变量（测试账号口令）'); process.exit(2) }
 const BASE = 'http://127.0.0.1:18322';
 const EV = '/www/wwwhdd/cloudpan/docs/test-evidence';
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--disable-gpu', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'], timeout: 60000 });
@@ -10,7 +13,7 @@ await page.waitForFunction(() => location.hash.includes('login') || location.has
 await page.getByText('使用账号登录').first().click();
 await page.waitForTimeout(800);
 await page.locator('input').first().fill('cptest');
-await page.locator('input[type="password"]').first().fill('cptest-temp-2026');
+await page.locator('input[type="password"]').first().fill(process.env.E2E_PASS);
 await page.getByRole('button', { name: /登录|登 录/ }).first().click();
 await page.waitForFunction(() => location.hash.includes('desktop'), null, { timeout: 20000 });
 await page.waitForTimeout(1500);
