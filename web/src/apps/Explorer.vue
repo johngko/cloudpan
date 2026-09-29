@@ -168,21 +168,15 @@
 
       <!-- 主区：文件列表视图 -->
       <div v-else ref="fileArea" style="flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column" @mousedown="onAreaMouseDown">
-        <div v-if="viewMode === 'grid'" class="file-grid">
-          <div v-for="f in sortedItems" :key="f.path + (f.letter || '')" class="file-item" :class="{ selected: selSet.has(f.path) }" :data-path="f.path"
-            draggable="true"
-            @mousedown="onItemDown(f, $event)" @dblclick="openItem(f)" @contextmenu.stop.prevent="onItemCtx(f, $event)"
-            @dragstart="onItemDrag(f, $event)" @dragover.prevent @drop.prevent.stop="onDropTo(f, $event)">
-            <input type="checkbox" class="f-check" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="toggleCheck(f)" :title="selSet.has(f.path) ? '取消选择' : '选择'" />
-            <span v-if="(f as any).letter" class="g-badge">{{ (f as any).letter }}</span>
-            <div class="f-ico">
-              <img v-if="isThumb(f)" :src="thumbUrl(f)" class="f-thumb" draggable="false" />
-              <AppIcon v-else :name="iconOf(f)" :size="46" />
-            </div>
-            <div class="f-name"><span v-if="editing[f.path]" class="editing-dot" :title="'正在编辑：' + editing[f.path]"></span>{{ f.name }}</div>
-          </div>
+        <div v-if="viewMode === 'grid'" class="file-grid" :class="{ virtual: virtualGrid }" ref="gridEl" @scroll.passive="onViewScroll">
+          <div v-if="virtualGrid && gridPadTop" class="vt-pad" :style="{ height: gridPadTop + 'px' }"></div>
+          <FileGrid :items="gridItems" :sel-set="selSet" :editing="editing"
+            :icon-of="iconOf" :is-thumb="isThumb" :thumb-url="thumbUrl" :name-parts="nameParts"
+            @item-down="onItemDown" @item-open="openItem" @item-ctx="onItemCtx"
+            @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" />
+          <div v-if="virtualGrid && gridPadBottom" class="vt-pad" :style="{ height: gridPadBottom + 'px' }"></div>
         </div>
-        <div v-else class="file-list">
+        <div v-else class="file-list" :class="{ virtual: virtualList }" ref="listEl" @scroll.passive="onViewScroll">
           <table>
             <thead>
               <tr>
@@ -194,21 +188,23 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="f in sortedItems" :key="f.path" :data-path="f.path" :class="{ selected: selSet.has(f.path) }" draggable="true"
-                @mousedown="onItemDown(f, $event)" @dblclick="openItem(f)" @contextmenu.stop.prevent="onItemCtx(f, $event)"
-                @dragstart="onItemDrag(f, $event)" @dragover.prevent @drop.prevent.stop="onDropTo(f, $event)">
-                <td style="width: 34px; text-align: center"><input type="checkbox" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="toggleCheck(f)" /></td>
-                <td><div style="display: flex; align-items: center; gap: 10px">
-                  <AppIcon :name="iconOf(f)" :size="19" /><span>{{ f.name }}</span>
-                  <span v-if="editing[f.path]" class="editing-badge" :title="'正在编辑：' + editing[f.path]"><span class="editing-dot"></span>编辑中</span>
-                  <AppIcon v-if="f.starred" name="starFill" :size="13" />
-                </div></td>
-                <td style="color: var(--text-3)">{{ fmtTime(f.modTime) }}</td>
-                <td style="color: var(--text-3)">{{ f.isDir ? '文件夹' : (f.ext ? f.ext.toUpperCase() + ' 文件' : '文件') }}</td>
-                <td style="text-align: right; color: var(--text-3)">{{ f.isDir ? '' : fmt(f.size) }}</td>
-              </tr>
+              <!-- 窗口化：上占位行（高度=被折叠掉的行，撑住滚动条总高） -->
+              <tr v-if="virtualList && listWin.padTop" class="vpad" :style="{ height: listWin.padTop + 'px' }"><td :colspan="5"></td></tr>
+              <FileList :items="listItems" :sel-set="selSet" :editing="editing"
+                :icon-of="iconOf" :name-parts="nameParts" :fmt="fmt" :fmt-time="fmtTime"
+                @item-down="onItemDown" @item-open="openItem" @item-ctx="onItemCtx"
+                @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" />
+              <!-- 窗口化：下占位行 -->
+              <tr v-if="virtualList && listWin.padBottom" class="vpad" :style="{ height: listWin.padBottom + 'px' }"><td :colspan="5"></td></tr>
             </tbody>
           </table>
+        </div>
+        <!-- 搜索中骨架：盖在列表上，避免旧结果滞留造成「没反应」的错觉 -->
+        <div v-if="searchSkel" class="search-skel" aria-hidden="true">
+          <div v-for="i in 7" :key="i" class="skel-row">
+            <span class="skel-ico"></span>
+            <span class="skel-bar" :style="{ width: (38 + (i * 9) % 46) + '%' }"></span>
+          </div>
         </div>
         <div v-if="!sortedItems.length && !loading" class="empty-hint">
           <AppIcon :name="keyword ? 'search' : 'folderPlain'" :size="48" />
@@ -298,7 +294,7 @@
         <div v-if="encBusy" class="row" style="font-size: 12.5px; color: var(--text-2)">
           <AppIcon name="refresh" :size="13" style="vertical-align: -2px" /> {{ encProgress || '正在准备…' }}
         </div>
-        <div v-if="shareLink" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
+        <div v-if="shareLink" class="row" style="background: var(--accent-weak); border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
           {{ shareLink }}
         </div>
         <div class="actions">
@@ -365,7 +361,7 @@
             <option :value="0">永久</option>
           </select>
         </div>
-        <div v-if="dlUrl" class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12px; word-break: break-all; user-select: text">
+        <div v-if="dlUrl" class="row" style="background: var(--accent-weak); border-radius: 6px; padding: 10px; font-size: 12px; word-break: break-all; user-select: text">
           {{ dlUrl }}
         </div>
         <div v-if="dlUrl" style="font-size: 11.5px; color: var(--text-3); margin-top: -6px">
@@ -446,7 +442,7 @@
             <div v-for="t in odTasks" :key="t.id" class="od-item">
               <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px">
                 <span class="od-name" :title="odTaskName(t)">{{ odTaskName(t) }}</span>
-                <span class="od-status" :style="t.status === 'error' ? 'color: var(--danger)' : t.status === 'finished' ? 'color: #2e9e5b' : ''">
+                <span class="od-status" :style="t.status === 'error' ? 'color: var(--danger)' : t.status === 'finished' ? 'color: var(--success)' : ''">
                   {{ odStatus(t.status) }}{{ t.status === 'processing' ? ' ' + t.progress + '%' : '' }}
                 </span>
               </div>
@@ -528,7 +524,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useWindows } from '../stores/windows'
 import { useSession } from '../stores/session'
 import { useAppState } from '../stores/appstate'
@@ -537,13 +533,26 @@ import { useClipboard } from '../stores/ui'
 import { useTransfer } from '../stores/transfer'
 import { fsApi, shareApi, officeApi, type Policy, type FileItem } from '../api/modules'
 import { rawUrl, downloadUrl } from '../api/modules'
-import { get as aget, post as apost, del as adel } from '../api/http'
+import { get as aget, post as apost } from '../api/http'
 import { useContextMenu } from '../stores/ui'
 import { useUiDialog, useToast } from '../stores/dialog'
 import { userShareApi } from '../api/modules'
 import { collectDropFiles } from '../utils/drop'
 import { createEncryptedShare } from '../utils/shareEncrypt'
 import { copyText } from '../utils/clipboard'
+import { sortEntries, nextSort } from './explorer/sortEntries'
+import type { TaskItem } from '../api/modules'
+import { uniqueName, batchRename } from './explorer/fileNames'
+import { joinPath, sharedPathParse } from './explorer/paths'
+import { fileIcon } from './explorer/fileIcons'
+import { ARCHIVE_EXTS, IMG_EXTS } from './explorer/exts'
+import { newTab, activeIdxAfterClose, recordHistory, backTarget, fwdTarget, parentPath, type ExplorerTab } from './explorer/tabs'
+import { nextSelection, toggleInSet, isAllSelected } from './explorer/selection'
+import { computeWindow, VIRTUAL_THRESHOLD } from './explorer/virtualWindow'
+import { splitHighlight } from './explorer/highlight'
+import { newEntries, blankMenu, itemMenu, policyMenu } from './explorer/menus'
+import FileGrid from './explorer/FileGrid.vue'
+import FileList from './explorer/FileList.vue'
 import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps<{ winId: number; props: any }>()
@@ -569,16 +578,9 @@ const loading = ref(false)
 const selSet = ref(new Set<string>())
 const selectedDrive = ref(0)
 
-// ---- 多标签（每个标签页保存：盘符路径/搜索/视图/前进后退历史） ----
-interface Tab {
-  policyId: number | null
-  path: string
-  keyword: string
-  globalMode: boolean
-  viewMode: 'grid' | 'list'
-  history: string[]
-  fwdStack: string[]
-}
+// ---- 多标签（每个标签页保存：盘符路径/搜索/视图/前进后退历史）----
+// 结构定义与历史语义的纯逻辑见 ./explorer/tabs
+type Tab = ExplorerTab
 const tabs = ref<Tab[]>([])
 const activeIdx = ref(0)
 const activeTab = computed<Tab>(() => tabs.value[activeIdx.value] || tabs.value[0])
@@ -603,7 +605,7 @@ const history = computed<string[]>(() => activeTab.value?.history ?? [])
 const fwdStack = computed<string[]>(() => activeTab.value?.fwdStack ?? [])
 
 function addTab(policyId: number | null = null, p = '/') {
-  tabs.value.push({ policyId, path: p, keyword: '', globalMode: false, viewMode: 'grid', history: [], fwdStack: [] })
+  tabs.value.push(newTab(policyId, p))
   activeIdx.value = tabs.value.length - 1
   selSet.value = new Set()
   load()
@@ -616,9 +618,9 @@ function switchTab(i: number) {
 }
 function closeTab(i: number) {
   tabs.value.splice(i, 1)
-  if (!tabs.value.length) { store.close(props.winId); return }
-  if (i < activeIdx.value) activeIdx.value--
-  else if (i === activeIdx.value && activeIdx.value >= tabs.value.length) activeIdx.value = tabs.value.length - 1
+  const next = activeIdxAfterClose(tabs.value.length, i, activeIdx.value)
+  if (next === null) { store.close(props.winId); return }
+  activeIdx.value = next
   load()
 }
 function tabTitle(t: Tab): string {
@@ -640,25 +642,12 @@ function tabTitle(t: Tab): string {
 const sortMode = ref<'name' | 'size' | 'modTime' | 'type'>('name')
 const sortDir = ref<'asc' | 'desc'>('asc')
 function setSort(m: 'name' | 'size' | 'modTime' | 'type') {
-  if (sortMode.value === m) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
-  else { sortMode.value = m; sortDir.value = 'asc' }
+  const next = nextSort({ mode: sortMode.value, dir: sortDir.value }, m)
+  sortMode.value = next.mode
+  sortDir.value = next.dir
 }
-const sortedItems = computed(() => {
-  const arr = [...items.value]
-  const dir = sortDir.value === 'asc' ? 1 : -1
-  arr.sort((a, b) => {
-    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
-    let r = 0
-    switch (sortMode.value) {
-      case 'size': r = a.size - b.size; break
-      case 'modTime': r = a.modTime - b.modTime; break
-      case 'type': r = (a.ext || '').localeCompare(b.ext || '') || a.name.localeCompare(b.name, 'zh-CN'); break
-      default: r = a.name.localeCompare(b.name, 'zh-CN')
-    }
-    return r * dir
-  })
-  return arr
-})
+// 排序纯逻辑见 ./explorer/sortEntries（文件夹恒在前，方向只作用于同类型内部）
+const sortedItems = computed(() => sortEntries(items.value, sortMode.value, sortDir.value))
 
 const localPolicies = computed(() => policies.value.filter(p => p.type === 'local'))
 // 共享虚拟盘已在「此电脑」顶部独立成区（+ 侧栏固定项），不能再混进云盘分组，
@@ -709,13 +698,19 @@ onMounted(async () => {
     addTab(null, '/')
   }
   window.addEventListener('cp-refresh-explorer', onRefreshEvent)
+  window.addEventListener('cp-refresh-shared', onRefreshShared)
   window.addEventListener('keydown', onKey)
   startEditPoll()
+  bindVirtual()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('cp-refresh-explorer', onRefreshEvent)
+  window.removeEventListener('cp-refresh-shared', onRefreshShared)
   window.removeEventListener('keydown', onKey)
   if (editTimer) window.clearInterval(editTimer)
+  if (editScrollTimer) clearTimeout(editScrollTimer)
+  if (skelTimer) clearTimeout(skelTimer)
+  if (vwRO) vwRO.disconnect()
 })
 
 // 标签页状态（打开的盘/路径/视图/搜索词/前进后退栈）持久化到窗口 store，
@@ -734,6 +729,13 @@ function onRefreshEvent(e: any) {
     const isChild = d.path && d.path !== cur && (d.path.startsWith(cur === '/' ? '/' : cur + '/'))
     if (!d.path || d.path === cur || isChild) refresh()
   }
+}
+
+// 共享盘上传完成（上传泵派发）：只刷新对应共享的视图，避免误刷自己盘的目录
+function onRefreshShared(e: any) {
+  const sid = e.detail?.shareId
+  if (!sid || sid !== sharedCtx.value?.shareId) return
+  load()
 }
 
 // ---- 预览窗格（cloudreve / 可道云风格） ----
@@ -783,7 +785,11 @@ function onKey(e: KeyboardEvent) {
   if (ctrl && (k === 'x' || k === 'X')) { e.preventDefault(); cutSel(); return }
   if (ctrl && (k === 'v' || k === 'V')) { e.preventDefault(); pasteSel(); return }
   if (ctrl && (k === 'f' || k === 'F')) { e.preventDefault(); searchInput.value?.focus(); return }
+  // Ctrl+Shift+N 新建文件夹（Windows 习惯）
+  if (ctrl && e.shiftKey && (k === 'n' || k === 'N')) { e.preventDefault(); newItem('folder'); return }
   if (e.altKey && (k === 'p' || k === 'P')) { e.preventDefault(); togglePreview(); return }
+  // Alt+Enter 属性（须排在下面的 Enter 之前：Alt+Enter 的 key 也是 Enter）
+  if (e.altKey && k === 'Enter' && selPaths.value.length === 1) { e.preventDefault(); showProps(selPaths.value[0]); return }
   if (k === 'Enter' && selPaths.value.length) {
     e.preventDefault()
     const f = items.value.find(i => i.path === selPaths.value[selPaths.value.length - 1])
@@ -851,11 +857,6 @@ async function loadStars() {
   try { sharedWithMe.value = await userShareApi.withMe() } catch { sharedWithMe.value = [] }
 }
 
-function sharedPathParse(p: string): { shareId: number; rel: string } | null {
-  const m = /^\/s(\d+)(?:\/(.*))?$/.exec(p)
-  return m ? { shareId: Number(m[1]), rel: m[2] || '' } : null
-}
-
 function openSharedDrive() {
   if (!activeTab.value) addTab(SHARED_POLICY, '/')
   activeTab.value.policyId = SHARED_POLICY
@@ -876,33 +877,32 @@ function openPolicyId(pid: number, p: string) {
   keyword.value = ''
   load()
 }
+// 历史/前进栈都挂在当前标签内（纯逻辑见 ./explorer/tabs）
 function pushHistory(p: string) {
   const t = activeTab.value
-  t.history.push(p)
-  if (t.history.length > 60) t.history.shift()
-  t.fwdStack.length = 0
+  if (t) recordHistory(t.history, t.fwdStack, p)
 }
 function back() {
-  // 栈里存的是“到达过的路径”（含当前），栈顶可能就是当前路径——先跳过，
-  // 否则第一次按后退会原地不动（弹出当前路径后 path 不变）
-  while (history.value.length && history.value[history.value.length - 1] === path.value) history.value.pop()
-  if (!history.value.length) return
-  const cur = history.value.pop()!
-  fwdStack.value.push(path.value)
+  const t = activeTab.value
+  if (!t) return
+  const cur = backTarget(t.history, path.value)
+  if (cur === null) return
+  t.fwdStack.push(path.value)
   path.value = cur
   load()
 }
 function fwd() {
-  if (!fwdStack.value.length) return
-  const next = fwdStack.value.pop()!
-  history.value.push(path.value)
+  const t = activeTab.value
+  if (!t) return
+  const next = fwdTarget(t.fwdStack)
+  if (next === null) return
+  t.history.push(path.value)
   path.value = next
   load()
 }
 function goUp() {
   if (path.value === '/') return
-  const up = path.value.slice(0, path.value.lastIndexOf('/')) || '/'
-  goto(up)
+  goto(parentPath(path.value))
 }
 function goto(p: string) {
   if (!currentPolicy.value) return
@@ -984,6 +984,23 @@ function refresh() {
 // 当前列表是否来自搜索结果（用于清空关键词时恢复目录列表）
 const searching = ref(false)
 
+// 搜索命中高亮：切分逻辑在 ./explorer/highlight（纯逻辑 + 单测）。
+// 非搜索态直接返回整段（同一个 <template> 渲染，不会多出 DOM），
+// 所以「搜索态高亮」对普通浏览零影响。
+function nameParts(name: string) {
+  return searching.value ? splitHighlight(name, keyword.value) : [{ t: name, hit: false }]
+}
+
+// 搜索中骨架：延迟 150ms 才显示 —— 本地搜索常常几十毫秒就回来了，
+// 立刻显示会一闪而过，比没有更糟
+const searchSkel = ref(false)
+let skelTimer: ReturnType<typeof setTimeout> | undefined
+watch([loading, searching], () => {
+  clearTimeout(skelTimer)
+  if (loading.value && searching.value) skelTimer = setTimeout(() => { searchSkel.value = true }, 150)
+  else searchSkel.value = false
+}, { immediate: true })
+
 // 搜索竞态防护：快速输入时丢弃过期响应
 let searchSeq = 0
 async function doSearch() {
@@ -1030,34 +1047,17 @@ function toggleGlobal() {
 }
 
 // ---- 选择 ----
+// 选择语义纯逻辑见 ./explorer/selection（右键保持整组 / Ctrl 切换 / Shift 区间）
 function onItemDown(f: FileItem, e: MouseEvent) {
-  if (e.button === 2) {
-    if (!selSet.value.has(f.path)) { selSet.value = new Set([f.path]) }
-    return
-  }
-  if (e.ctrlKey) {
-    const s = new Set(selSet.value)
-    s.has(f.path) ? s.delete(f.path) : s.add(f.path)
-    selSet.value = s
-  } else if (e.shiftKey && selPaths.value.length) {
-    const last = selPaths.value[selPaths.value.length - 1]
-    const i1 = sortedItems.value.findIndex(x => x.path === last)
-    const i2 = sortedItems.value.findIndex(x => x.path === f.path)
-    const [a, b] = i1 < i2 ? [i1, i2] : [i2, i1]
-    selSet.value = new Set(sortedItems.value.slice(a, b + 1).map(x => x.path))
-  } else {
-    selSet.value = new Set([f.path])
-  }
+  const next = nextSelection(selSet.value, sortedItems.value.map(x => x.path), {
+    path: f.path, button: e.button, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey
+  })
+  if (next) selSet.value = next
 }
 
 // ---- 复选框多选（Windows 11 资源管理器同款叠加勾选） ----
-function toggleCheck(f: FileItem) {
-  const s = new Set(selSet.value)
-  s.has(f.path) ? s.delete(f.path) : s.add(f.path)
-  selSet.value = s
-}
-const allSelected = computed(() =>
-  sortedItems.value.length > 0 && sortedItems.value.every(f => selSet.value.has(f.path)))
+function toggleCheck(f: FileItem) { selSet.value = toggleInSet(selSet.value, f.path) }
+const allSelected = computed(() => isAllSelected(sortedItems.value.map(x => x.path), selSet.value))
 function toggleAll() {
   selSet.value = allSelected.value
     ? new Set()
@@ -1137,21 +1137,41 @@ const TEXT_EXTS = ['txt', 'md', 'json', 'js', 'ts', 'vue', 'go', 'py', 'java', '
 const OFFICE_EXTS = ['docx', 'doc', 'odt', 'rtf', 'xlsx', 'xls', 'ods', 'pptx', 'ppt', 'odp', 'pdf']
 // 压缩包（压缩包浏览器在线查看/解压；功能未开启时回落下载）。
 // 单独 .gz/.bz2/.xz（非 tar 族）无目录表不可浏览，仍走下载/解压
-const ARCHIVE_EXTS = ['zip', '7z', 'rar', 'tar', 'tgz', 'tbz2', 'txz']
+// 扩展名清单与图标映射共用（见 ./explorer/exts）
 // 新建创意文档模板（思维导图/白板/流程图，写入即带最小可编辑骨架）
 const MINDMAP_TEMPLATE = JSON.stringify({ root: { data: { text: '中心主题' }, children: [] }, theme: { template: 'avocado', config: {} }, layout: 'logicalStructure', config: {}, view: null }, null, 2)
 const WHITEBOARD_TEMPLATE = JSON.stringify({ type: 'excalidraw', version: 2, source: 'cloudpan', elements: [], appState: { viewBackgroundColor: '#ffffff', gridSize: null }, files: {} })
 const DRAWIO_TEMPLATE = '<mxfile host="CloudPan" agent="CloudPan" version="24.7.7" type="device">\n  <diagram id="page1" name="第 1 页">\n    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">\n      <root>\n        <mxCell id="0"/>\n        <mxCell id="1" parent="0"/>\n      </root>\n    </mxGraphModel>\n  </diagram>\n</mxfile>'
 
-// ---- 实时协作「正在编辑」徽章：30s 批量只读查询当前目录 Office 文件的协作状态 ----
+// ---- 实时协作「正在编辑」徽章：30s 批量只读查询 Office 文件的协作状态 ----
 // 只读查询不把自己登记为编辑者；编辑者由整页编辑器的 20s 心跳维护（90s 无心跳视为离开）
+//
+// 降载：以前是「当前目录全部 Office 文件」整批上报，万级目录就是万级条目的 POST。
+// 现在只查「当前渲染窗口内 + 选中」的条目 —— 窗口化开启时窗口只有几十项；
+// 小目录本就全量渲染，窗口=全量，行为不变。结果按项「合并」而非整体替换：
+// 窗口外的条目保留上一次查到的徽章，避免滚动时徽章忽隐忽现。
 const editing = ref<Record<string, string>>({}) // path -> "张三、李四"
 let editTimer: number | undefined
 const EDIT_EXTS = OFFICE_EXTS.filter(x => x !== 'pdf') // pdf 不进 DS 协作
+
+/** 本轮要查的路径集合：当前渲染窗口（未窗口化时=全量）+ 选中项，去重 */
+function editPollPaths(): string[] {
+  const set = new Set<string>()
+  for (const f of (virtualGrid.value ? gridItems.value : virtualList.value ? listItems.value : sortedItems.value)) set.add(f.path)
+  for (const p of selPaths.value) set.add(p)
+  return Array.from(set)
+}
+
 async function pollEditing() {
   if (!apps.isAvailable('office')) { editing.value = {}; return }
-  const files = sortedItems.value.filter(f => !f.isDir && EDIT_EXTS.includes(f.ext || ''))
-  if (!files.length) { editing.value = {}; return }
+  const byPath = new Map(sortedItems.value.map(f => [f.path, f]))
+  const files = editPollPaths()
+    .map(p => byPath.get(p))
+    .filter((f): f is FileItem => !!f && !f.isDir && EDIT_EXTS.includes(f.ext || ''))
+  // 合并：先保留旧结果，只更新本轮查到的项，并清掉已不在当前目录的键
+  const out: Record<string, string> = { ...editing.value }
+  for (const p of Object.keys(out)) if (!byPath.has(p)) delete out[p]
+  if (!files.length) { editing.value = out; return }
   try {
     const items = files.map(f => {
       const sp = onSharedDrive.value ? sharedPathParse(f.path) : null
@@ -1160,13 +1180,13 @@ async function pollEditing() {
         : { key: f.path, policyId: currentPolicy.value?.id, path: f.path }
     })
     const r = await officeApi.statusBatch(items)
-    const out: Record<string, string> = {}
     for (const f of files) {
       const names = r[f.path]?.editors?.map(e => e.name).filter(Boolean)
       if (names?.length) out[f.path] = names.join('、')
+      else delete out[f.path] // 本轮查过且没人编辑 → 清掉（含编辑者已离开的情况）
     }
     editing.value = out
-  } catch { editing.value = {} }
+  } catch { /* 网络异常保留上一次状态 */ }
 }
 function startEditPoll() {
   pollEditing()
@@ -1262,42 +1282,9 @@ function buildOpenWith(f: FileItem) {
   return items
 }
 
-function iconOf(f: FileItem) {
-  // Win12 主题：按扩展名用 Windows 标准文件图标
-  if (session.osTheme === 'win12') {
-    if (f.isDir) return 'fileFolder'
-    const e = (f.ext || '').toLowerCase()
-    if (['docx', 'doc'].includes(e)) return 'fileWord'
-    if (['xlsx', 'xls'].includes(e)) return 'fileExcel'
-    if (['pptx', 'ppt'].includes(e)) return 'filePpt'
-    if (e === 'pdf') return 'filePdf'
-    if (['smm', 'xmind'].includes(e)) return 'fileMindmap'
-    if (e === 'excalidraw') return 'fileWhiteboard'
-    if (e === 'drawio') return 'fileFlowchart'
-    if (ARCHIVE_EXTS.includes(e)) return 'fileZip'
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(e)) return 'fileImg'
-    if (['dxf', 'dwg'].includes(e)) return 'cad'
-    if (['mp4', 'webm', 'mkv', 'avi', 'mov'].includes(e)) return 'fileVidio'
-    if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(e)) return 'fileMusic'
-    if (['exe', 'msi', 'bat', 'ps1'].includes(e)) return 'fileExe'
-    if (['txt', 'md', 'log', 'ini', 'json', 'xml', 'js', 'ts', 'go', 'py', 'c', 'cpp', 'h', 'sh', 'css', 'html', 'yml', 'yaml', 'toml'].includes(e)) return 'fileTxt'
-    return 'file'
-  }
-  if (f.isDir) return 'folder'
-  const e = (f.ext || '').toLowerCase()
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(e)) return 'image'
-  if (['mp4', 'webm', 'mkv', 'avi', 'mov'].includes(e)) return 'media'
-  if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(e)) return 'media'
-  if (['dxf', 'dwg'].includes(e)) return 'cad'
-  if (['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'pdf'].includes(e)) return 'office'
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(e)) return 'archive'
-  if (['smm', 'xmind'].includes(e)) return 'mindmap'
-  if (e === 'excalidraw') return 'whiteboard'
-  if (e === 'drawio') return 'flowchart'
-  return 'file'
-}
+// 图标映射纯逻辑见 ./explorer/fileIcons（按主题分两套映射）
+function iconOf(f: FileItem) { return fileIcon(f, session.osTheme) }
 // ---- 内部拖拽移动 + 图片缩略图 ----
-const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']
 function onItemDrag(f: FileItem, e: DragEvent) {
   if (!e.dataTransfer) return
   // Windows 习惯：拖动多选中的某一项时，整组选中项一起移动
@@ -1327,11 +1314,8 @@ const NEW_TPL: Record<NewKind, { base: string; ext: string; template?: string }>
 async function newItem(kind: NewKind) {
   if (!currentPolicy.value || onSharedDrive.value || readOnly.value) return
   const t = NEW_TPL[kind]
-  let final = t.base + t.ext
   // 重名自动加序号（Windows 同款格式，含空格）：新建文件夹 (2)、新建文本文档 (2).txt
-  const names = new Set(items.value.map(x => x.name))
-  let i = 2
-  while (names.has(final)) { final = `${t.base} (${i})${t.ext}`; i++ }
+  const final = uniqueName(t.base, t.ext, items.value.map(x => x.name))
   try {
     if (kind === 'folder') await fsApi.mkdir(currentPolicy.value.id, path.value, final)
     else await fsApi.writeText(currentPolicy.value.id, joinPath(path.value, final), t.template || '')
@@ -1366,15 +1350,18 @@ function startUpload(files: File[]) {
   transfer.panel(true)
   toast.success(`已加入 ${files.length} 个文件到上传队列`)
 }
-// 工具栏「新建」下拉（Windows 资源管理器同款）；创意文档项按系统功能门控
+// 「新建」条目：工具栏下拉与空白右键共用（创意文档项按系统功能门控）
+function buildNewItems() {
+  return newEntries({
+    mindmap: apps.isAvailable('mindmap'),
+    whiteboard: apps.isAvailable('whiteboard'),
+    flowchart: apps.isAvailable('flowchart'),
+    onNew: newItem
+  })
+}
+// 工具栏「新建」下拉（Windows 资源管理器同款）
 function newMenu(e: MouseEvent) {
-  ctx.show(e.clientX, e.clientY + 6, [
-    { label: '文件夹', icon: 'folder', onClick: () => newItem('folder') },
-    { label: '文本文档', icon: 'notepad', onClick: () => newItem('text') },
-    ...(apps.isAvailable('mindmap') ? [{ label: '思维导图', icon: 'mindmap', onClick: () => newItem('mindmap') }] : []),
-    ...(apps.isAvailable('whiteboard') ? [{ label: '白板', icon: 'whiteboard', onClick: () => newItem('whiteboard') }] : []),
-    ...(apps.isAvailable('flowchart') ? [{ label: '流程图', icon: 'flowchart', onClick: () => newItem('flowchart') }] : [])
-  ])
+  ctx.show(e.clientX, e.clientY + 6, buildNewItems())
 }
 function onFilePicked(e: Event) {
   const input = e.target as HTMLInputElement
@@ -1410,15 +1397,14 @@ async function droppedFiles(e: DragEvent): Promise<File[]> {
   for (const d of r.files) (d.file as any).__cpRel = d.rel
   return r.files.map(d => d.file)
 }
-// 共享盘（可写共享）内的上传：走 /shared/:id/upload 直传（扁平，与 SharedBrowser 一致）
-async function sharedUploadFiles(files: File[]) {
+// 共享盘（可写共享）内的上传：走统一上传泵（分片 + 秒传 + 断点续传 + 重试 + 进度面板），
+// 服务端把落盘属主记为共享创建者（占创建者配额）；大文件不再受单次直传限制
+function sharedUploadFiles(files: File[]) {
   const c = sharedCtx.value
   if (!c || !files.length) return
-  for (const f of files) {
-    await userShareApi.upload(c.shareId, c.rel, f)
-  }
-  toast.success('上传完成')
-  load()
+  transfer.addFiles(0, c.rel, files, c.shareId)
+  transfer.panel(true)
+  toast.success(`已加入 ${files.length} 个文件到上传队列`)
 }
 const sharedFileInput = ref<HTMLInputElement>()
 function sharedPickFiles() {
@@ -1484,17 +1470,16 @@ async function onDropTo(f: FileItem, e: DragEvent) {
   if (e.dataTransfer.files.length || e.dataTransfer.items?.length) {
     if (readOnly.value) { toast.error('该用户组为只读，仅可查看和下载'); return }
     if (onSharedDrive.value) {
-      // 可写共享：拖入共享文件夹 → /shared/:id/upload（扁平上传，与共享应用一致）
+      // 可写共享：拖入共享文件夹 → 统一上传泵（分片+秒传+续传），落盘进共享创建者目录
       if (!inWritableShare.value || !f.isDir) { toast.error('此共享为只读，不能上传'); return }
       const sp = sharedPathParse(f.path)
       if (!sp) return
       const r = await collectDropFiles(e.dataTransfer)
       if (r.problems.length) toast.error(`部分拖入内容读取失败：${r.problems[0]}`)
-      try {
-        for (const d of r.files) await userShareApi.upload(sp.shareId, sp.rel, d.file)
-        toast.success(`已上传 ${r.files.length} 个文件到「${f.name}」`)
-        load()
-      } catch (err: any) { toast.error(err.message) }
+      if (!r.files.length) return
+      transfer.addFiles(0, sp.rel, r.files.map(d => d.file), sp.shareId)
+      transfer.panel(true)
+      toast.success(`已加入 ${r.files.length} 个文件到「${f.name}」的队列`)
       return
     }
     // 外部文件/文件夹拖入文件夹 → 上传到该文件夹（保留目录结构）
@@ -1679,40 +1664,16 @@ const brCase = ref<'lower' | 'upper' | 'lowername' | 'uppername'>('lowername')
 const brBusy = ref(false)
 const brDone = ref(0)
 
-// 拆 文件名/扩展名（扩展名含点，无扩展名时 ext 为空）
-function splitName(name: string): { base: string; ext: string } {
-  const i = name.lastIndexOf('.')
-  if (i <= 0) return { base: name, ext: '' }
-  return { base: name.slice(0, i), ext: name.slice(i) }
-}
-
+// 批量重命名：纯逻辑见 ./explorer/fileNames(batchRename)，这里只做 ref → 参数的适配
 function brTransform(it: FileItem, n: number): string {
-  const { base, ext } = splitName(it.name)
-  switch (brMode.value) {
-    case 'replace': {
-      if (!brFind.value) return it.name
-      const newBase = base.split(brFind.value).join(brRepl.value)
-      return newBase + ext
-    }
-    case 'prefix': return (brText.value || '') + it.name
-    case 'suffix': {
-      if (!brText.value) return it.name
-      return base + brText.value + ext
-    }
-    case 'seq': {
-      const fmt = brSeqFmt.value || '{n}'
-      const m = fmt.match(/\{n(?::(\d+))?\}/)
-      const num = m ? String(n + 1).padStart(parseInt(m[1] || '1', 10), '0') : String(n + 1)
-      return it.name.replace(/\{n(?::\d+)?\}/g, num)
-    }
-    case 'case': {
-      if (brCase.value === 'lower') return it.name.toLowerCase()
-      if (brCase.value === 'upper') return it.name.toUpperCase()
-      if (brCase.value === 'lowername') return base.toLowerCase() + ext
-      return base.toUpperCase() + ext
-    }
-  }
-  return it.name
+  return batchRename(it.name, n, {
+    mode: brMode.value,
+    find: brFind.value,
+    repl: brRepl.value,
+    text: brText.value,
+    seqFmt: brSeqFmt.value,
+    caseMode: brCase.value
+  })
 }
 
 const brPreview = computed(() => {
@@ -1790,7 +1751,7 @@ function offlineDlg() {
 watch(odShow, v => { if (!v) clearInterval(odTimer) })
 onBeforeUnmount(() => clearInterval(odTimer))
 async function loadOdTasks() {
-  try { odTasks.value = (await aget('/offline')).slice(0, 8) } catch {}
+  try { odTasks.value = (await aget<TaskItem[]>('/offline')).slice(0, 8) } catch {}
 }
 async function addOffline() {
   if (!odUrl.value || !currentPolicy.value) return
@@ -1801,9 +1762,6 @@ async function addOffline() {
     odName.value = ''
     loadOdTasks()
   } catch (e: any) { toast.error(e.message) }
-}
-async function cancelOd(t: any) {
-  try { await adel('/offline/' + t.id); loadOdTasks() } catch (e: any) { toast.error(e.message) }
 }
 function odTaskName(t: any) {
   try { const p = JSON.parse(t.props); return p.rtName || p.name || p.url } catch { return t.props }
@@ -2022,6 +1980,102 @@ function testDl() { window.open(dlUrl.value) }
 // 空白处：此电脑根视图 = 查看/刷新/粘贴(禁用)/属性，不允许新建；
 //         磁盘/文件夹内部 = 查看/排序方式/刷新/粘贴/新建/在终端打开/属性
 
+// ---- 大文件夹窗口化渲染（虚拟滚动） ----
+// 仅当条目数超过阈值时启用；小目录仍全量渲染，DOM 结构与样式与改动前完全一致。
+// 交互面无损：框选本就用视口坐标只命中所见条目、拖拽取自身元素、选择/打开全走数据，
+// 上下占位高度撑住滚动条总高，故滚动位置与坐标语义不变。
+const gridEl = ref<HTMLElement>()
+const listEl = ref<HTMLElement>()
+const vwTop = ref(0)
+const vwViewport = ref(0)
+const vwCols = ref(1)
+const vwRowH = ref(0)
+const vwListRowH = ref(0)
+
+const virtualGrid = computed(() => viewMode.value === 'grid' && sortedItems.value.length > VIRTUAL_THRESHOLD)
+const virtualList = computed(() => viewMode.value === 'list' && sortedItems.value.length > VIRTUAL_THRESHOLD)
+
+// 与 base.css 的 .file-grid 保持一致（项宽/间距/内边距），用于按容器宽度推算列数
+const GRID_ITEM_W = 100
+const GRID_GAP = 4
+const GRID_PAD = 10
+// 固定行高的兜底值（与下方 .virtual 的 CSS 一致）：首次渲染即按它窗口化，
+// 避免「先全渲染 3000 项再收敛」；真实值由 measureView 从 DOM 量得后自动修正
+const GRID_ROW_H_FALLBACK = 108 // 104 项高 + 4 间距
+const LIST_ROW_H_FALLBACK = 34
+const VIEWPORT_FALLBACK = 800
+
+/** 量取当前视图容器的列数/行高/可视高度/滚动位置 */
+function measureView() {
+  if (viewMode.value === 'grid') {
+    const el = gridEl.value
+    if (!el) return
+    const inner = el.clientWidth - GRID_PAD * 2
+    vwCols.value = Math.max(1, Math.floor((inner + GRID_GAP) / (GRID_ITEM_W + GRID_GAP)))
+    const item = el.querySelector('.file-item') as HTMLElement | null
+    if (item) vwRowH.value = item.offsetHeight + GRID_GAP
+    vwViewport.value = el.clientHeight
+    vwTop.value = el.scrollTop
+  } else {
+    const el = listEl.value
+    if (!el) return
+    vwCols.value = 1
+    const row = el.querySelector('tbody tr:not(.vpad)') as HTMLElement | null
+    if (row) vwListRowH.value = row.offsetHeight
+    vwViewport.value = el.clientHeight
+    vwTop.value = el.scrollTop
+  }
+}
+
+const gridWin = computed(() => computeWindow({
+  total: sortedItems.value.length, windowed: virtualGrid.value,
+  scrollTop: vwTop.value, viewportH: vwViewport.value || VIEWPORT_FALLBACK,
+  rowH: vwRowH.value || GRID_ROW_H_FALLBACK, perRow: vwCols.value
+}))
+const listWin = computed(() => computeWindow({
+  total: sortedItems.value.length, windowed: virtualList.value,
+  scrollTop: vwTop.value, viewportH: vwViewport.value || VIEWPORT_FALLBACK,
+  rowH: vwListRowH.value || LIST_ROW_H_FALLBACK, perRow: 1
+}))
+const gridItems = computed(() => virtualGrid.value ? sortedItems.value.slice(gridWin.value.start, gridWin.value.end) : sortedItems.value)
+const listItems = computed(() => virtualList.value ? sortedItems.value.slice(listWin.value.start, listWin.value.end) : sortedItems.value)
+// 网格占位：用「跨整行的占位元素」而不是容器 padding。
+// 关键坑：容器是 border-box，padding 一旦超过自身高度就会把滚动容器本身撑高（不再内部滚动、
+// 内容被外层 overflow:hidden 裁掉），实测把 clientHeight 从 453 撑到 38792。故窗口化时
+// 取消容器纵向内边距，留白交给占位元素承担。
+const gridPadTop = computed(() => (virtualGrid.value ? GRID_PAD + gridWin.value.padTop : 0))
+const gridPadBottom = computed(() => (virtualGrid.value ? GRID_PAD + gridWin.value.padBottom : 0))
+
+let vwRaf = 0
+function onViewScroll() {
+  if (vwRaf) return
+  vwRaf = requestAnimationFrame(() => { vwRaf = 0; measureView() })
+}
+let vwRO: ResizeObserver | null = null
+/** 容器换了（切视图/换盘/换目录）就重新绑定测量：先量一次，再随尺寸变化量 */
+function bindVirtual() {
+  nextTick(() => {
+    const el = viewMode.value === 'grid' ? gridEl.value : listEl.value
+    if (vwRO) { vwRO.disconnect(); vwRO = null }
+    measureView()
+    if (el && typeof ResizeObserver !== 'undefined') {
+      vwRO = new ResizeObserver(() => measureView())
+      vwRO.observe(el)
+    }
+  })
+}
+// 切视图 / 换盘 / 换目录 → 重新绑定（含滚动值重取，避免带上一个目录的残留）
+watch([viewMode, () => currentPolicy.value?.id, () => path.value], () => bindVirtual())
+// 滚动停下后补查一次「正在编辑」：轮询只看窗口，滚到新区域需要立刻补上徽章
+// （300ms 防抖：拖动滚动条时不至于每帧发请求；空窗口/无 office 文件时函数自身直接返回）
+let editScrollTimer: ReturnType<typeof setTimeout> | undefined
+watch(vwTop, () => {
+  clearTimeout(editScrollTimer)
+  editScrollTimer = setTimeout(pollEditing, 300)
+})
+// 条目到齐后再量一次行高（固定行高的 CSS 只在窗口化时生效，量到真实值即修正兜底常数）
+watch(() => sortedItems.value.length, () => { if (virtualGrid.value || virtualList.value) nextTick(measureView) })
+
 // ---- 橡皮筋框选（Windows 拖拽多选） ----
 const fileArea = ref<HTMLElement>()
 const boxSel = ref<null | { x: number; y: number; w: number; h: number }>(null)
@@ -2070,167 +2124,70 @@ function onAreaMouseDown(e: MouseEvent) {
 }
 
 function onBlankCtx(e: MouseEvent) {
-  if (!currentPolicy.value) {
-    ctx.show(e.clientX, e.clientY, [
-      {
-        label: '查看', icon: 'grid', children: [
-          { label: '大图标', checked: viewMode.value === 'grid', onClick: () => (viewMode.value = 'grid') },
-          { label: '详细信息', checked: viewMode.value === 'list', onClick: () => (viewMode.value = 'list') }
-        ]
-      },
-      { label: '刷新', icon: 'refresh', onClick: refresh },
-      { separator: true },
-      { label: '粘贴', icon: 'paste', disabled: true },
-      { separator: true },
-      { label: '属性', icon: 'info', onClick: () => store.open('settings') }
-    ])
-    return
-  }
-  const shared = onSharedDrive.value
-  const blankMenu: any[] = [
-    {
-      label: '查看', icon: 'grid', children: [
-        { label: '大图标', checked: viewMode.value === 'grid', onClick: () => (viewMode.value = 'grid') },
-        { label: '详细信息', checked: viewMode.value === 'list', onClick: () => (viewMode.value = 'list') }
-      ]
-    },
-    {
-      label: '排序方式', icon: 'list', children: [
-        { label: '名称', checked: sortMode.value === 'name', onClick: () => (sortMode.value = 'name') },
-        { label: '大小', checked: sortMode.value === 'size', onClick: () => (sortMode.value = 'size') },
-        { label: '修改时间', checked: sortMode.value === 'modTime', onClick: () => (sortMode.value = 'modTime') },
-        { label: '类型', checked: sortMode.value === 'type', onClick: () => (sortMode.value = 'type') }
-      ]
-    },
-    { label: '刷新', icon: 'refresh', onClick: refresh },
-    { separator: true }
-  ]
-  if (shared) {
-    if (inWritableShare.value) {
-      blankMenu.push(
-        { label: '新建文件夹', icon: 'folder', onClick: () => sharedMkdir(sharedCtx.value!.rel) },
-        { label: '上传文件…', icon: 'upload', onClick: sharedPickFiles },
-        { separator: true }
-      )
+  const noPolicy = !currentPolicy.value
+  const menu = blankMenu({
+    noPolicy,
+    shared: onSharedDrive.value,
+    writable: inWritableShare.value,
+    readOnly: readOnly.value,
+    viewGrid: viewMode.value === 'grid',
+    sortMode: sortMode.value,
+    hasClip: !!clip.mode,
+    canOffline: canOffline.value,
+    canTerminal: canTerminal.value,
+    newItems: buildNewItems(),
+    on: {
+      setView: v => (viewMode.value = v),
+      setSort: m => setSort(m),
+      refresh,
+      paste: pasteSel,
+      sharedMkdir: () => sharedMkdir(sharedCtx.value!.rel),
+      sharedPickFiles,
+      pickFiles,
+      pickFolder,
+      offline: offlineDlg,
+      terminal: () => store.open('terminal', { policyId: currentPolicy.value!.id, path: path.value }, { title: '终端' }),
+      props: noPolicy ? () => store.open('settings') : () => showProps(path.value)
     }
-  } else {
-    blankMenu.push(
-      { label: '粘贴', icon: 'paste', onClick: pasteSel, disabled: !clip.mode || readOnly.value },
-      { separator: true },
-      {
-        label: '新建', icon: 'plus', disabled: readOnly.value, children: [
-          { label: '文件夹', icon: 'folder', onClick: () => newItem('folder') },
-          { label: '文本文档', icon: 'notepad', onClick: () => newItem('text') },
-          ...(apps.isAvailable('mindmap') ? [{ label: '思维导图', icon: 'mindmap', onClick: () => newItem('mindmap') }] : []),
-          ...(apps.isAvailable('whiteboard') ? [{ label: '白板', icon: 'whiteboard', onClick: () => newItem('whiteboard') }] : []),
-          ...(apps.isAvailable('flowchart') ? [{ label: '流程图', icon: 'flowchart', onClick: () => newItem('flowchart') }] : [])
-        ]
-      },
-      {
-        label: '上传', icon: 'upload', disabled: readOnly.value, children: [
-          { label: '上传文件…', icon: 'upload', onClick: pickFiles },
-          { label: '上传文件夹…', icon: 'folder', onClick: pickFolder }
-        ]
-      },
-      ...(canOffline.value ? [
-        { label: '离线下载到此', icon: 'cloud', onClick: offlineDlg }
-      ] : []),
-      ...(canTerminal.value ? [
-        {
-          label: '在终端中打开', icon: 'terminal',
-          onClick: () => store.open('terminal', { policyId: currentPolicy.value!.id, path: path.value }, { title: '终端' })
-        }
-      ] : []),
-      { separator: true },
-      { label: '属性', icon: 'info', onClick: () => showProps(path.value) }
-    )
-  }
-  ctx.show(e.clientX, e.clientY, blankMenu)
+  })
+  ctx.show(e.clientX, e.clientY, menu)
 }
 function onItemCtx(f: FileItem, e: MouseEvent) {
   onItemDown(f, e)
-  const starred = !!f.starred
-  const shared = onSharedDrive.value
-  // 共享盘内：只保留 打开/路径/下载（+ 可写共享的 新建/上传/删除）
-  if (shared) {
-    const menu: any[] = [
-      { label: f.isDir ? '打开' : '预览/打开', icon: 'fwd', onClick: () => openItem(f) },
-      { label: '复制路径', icon: 'link', onClick: () => copyPath(f.path) },
-      { label: f.isDir ? '下载 (zip)' : '下载', icon: 'download', onClick: downloadSel }
-    ]
-    if (inWritableShare.value) {
-      menu.push(
-        { separator: true },
-        ...(f.isDir ? [{ label: '新建文件夹', icon: 'folder', onClick: () => sharedMkdir(sharedPathParse(f.path)?.rel || '') }] : []),
-        { label: '删除', icon: 'trash', danger: true, onClick: deleteSel }
-      )
+  const multi = selPaths.value.length > 1
+  const menu = itemMenu({
+    f,
+    multi,
+    multiCount: selPaths.value.length,
+    shared: onSharedDrive.value,
+    writable: inWritableShare.value,
+    readOnly: readOnly.value,
+    guest: session.isGuest,
+    canSharePub: canSharePub.value,
+    canShareUser: canShareUser.value,
+    allowArchive: !!group.value.allowArchive,
+    hasClip: !!clip.mode,
+    on: {
+      open: () => openItem(f),
+      openWith: () => buildOpenWith(f),
+      copyPath: () => copyPath(f.path),
+      download: downloadSel,
+      share: shareSel,
+      shareUser: shareUserSel,
+      dlink: dlinkSel,
+      toggleStar: () => toggleStar(f),
+      cut: cutSel,
+      copy: copySel,
+      pasteInto: pasteInto(f),
+      rename: renameSel,
+      archive: archiveSel,
+      extract: extractSel,
+      del: deleteSel,
+      props: () => showProps(multi ? selPaths.value[0] : f.path),
+      sharedMkdir: () => sharedMkdir(sharedPathParse(f.path)?.rel || '')
     }
-    ctx.show(e.clientX, e.clientY, menu)
-    return
-  }
-
-  if (selPaths.value.length > 1) {
-    // 多选（Windows：只保留批量操作）
-    ctx.show(e.clientX, e.clientY, [
-      { label: `下载 ${selPaths.value.length} 项`, icon: 'download', onClick: downloadSel },
-      { label: '剪切', icon: 'cut', onClick: cutSel, disabled: readOnly.value },
-      { label: '复制', icon: 'copy', onClick: copySel, disabled: readOnly.value },
-      { separator: true },
-      // 「压缩」功能被组禁用时整体隐藏（不再显示禁用态）
-      ...(group.value.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: readOnly.value }] : []),
-      { label: '删除', icon: 'trash', danger: true, onClick: deleteSel, disabled: readOnly.value },
-      { separator: true },
-      { label: '属性', icon: 'info', onClick: () => showProps(selPaths.value[0]) }
-    ])
-    return
-  }
-
-  if (f.isDir) {
-    ctx.show(e.clientX, e.clientY, [
-      { label: '打开', icon: 'fwd', onClick: () => openItem(f) },
-      { label: '复制路径', icon: 'link', onClick: () => copyPath(f.path) },
-      { label: '下载 (zip)', icon: 'download', onClick: downloadSel },
-      ...(canSharePub.value ? [{ label: '分享', icon: 'share2', onClick: shareSel }] : []),
-      ...(canShareUser.value ? [{ label: '共享…', icon: 'user', onClick: shareUserSel }] : []),
-      { separator: true },
-      // 游客为共享账号：收藏是共享状态，入口隐藏（后端 GuestReadOnly 兜底）
-      ...(session.isGuest ? [] : [{ label: starred ? '取消收藏' : '收藏到快速访问', icon: starred ? 'star' : 'starFill', onClick: () => toggleStar(f) }]),
-      { label: '剪切', icon: 'cut', onClick: cutSel, disabled: readOnly.value },
-      { label: '复制', icon: 'copy', onClick: copySel, disabled: readOnly.value },
-      { label: '粘贴到内部', icon: 'paste', onClick: pasteInto(f), disabled: !clip.mode || readOnly.value },
-      { label: '重命名', icon: 'rename', onClick: renameSel, disabled: readOnly.value },
-      { separator: true },
-      // 「压缩」功能被组禁用时整体隐藏（不再显示禁用态）
-      ...(group.value.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: readOnly.value }] : []),
-      { label: '删除', icon: 'trash', danger: true, onClick: deleteSel, disabled: readOnly.value },
-      { separator: true },
-      { label: '属性', icon: 'info', onClick: () => showProps(f.path) }
-    ])
-    return
-  }
-
-  ctx.show(e.clientX, e.clientY, [
-    { label: '打开', icon: 'fwd', onClick: () => openItem(f) },
-    { label: '打开方式', icon: 'openwith', children: buildOpenWith(f) },
-    { label: '复制路径', icon: 'link', onClick: () => copyPath(f.path) },
-    { label: '下载', icon: 'download', onClick: downloadSel },
-    ...(canSharePub.value ? [{ label: '分享', icon: 'share', onClick: shareSel }] : []),
-    { label: '提取直链', icon: 'link', onClick: dlinkSel },
-    { separator: true },
-    ...(session.isGuest ? [] : [{ label: starred ? '取消收藏' : '收藏到快速访问', icon: starred ? 'star' : 'starFill', onClick: () => toggleStar(f) }]),
-    { label: '剪切', icon: 'cut', onClick: cutSel, disabled: readOnly.value },
-    { label: '复制', icon: 'copy', onClick: copySel, disabled: readOnly.value },
-    { label: '重命名', icon: 'rename', onClick: renameSel, disabled: readOnly.value },
-    { separator: true },
-    ...(f.ext?.toLowerCase() === 'zip' || /\.(tar|tgz|tbz2|gz)$/i.test(f.name || '')
-      ? (group.value.allowArchive ? [{ label: '解压到当前目录', icon: 'archive', onClick: extractSel, disabled: readOnly.value }] : [])
-      : []),
-    // 「压缩」功能被组禁用时整体隐藏（不再显示禁用态）
-    ...(group.value.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: archiveSel, disabled: readOnly.value }] : []),
-    { label: '删除', icon: 'trash', danger: true, onClick: deleteSel, disabled: readOnly.value },
-    { separator: true },
-    { label: '属性', icon: 'info', onClick: () => showProps(f.path) }
-  ])
+  })
+  ctx.show(e.clientX, e.clientY, menu)
 }
 
 // 解压到当前目录（zip 右键）
@@ -2271,23 +2228,17 @@ function pasteInto(f: FileItem) {
   }
 }
 function onPolicyCtx(p: Policy, e: MouseEvent) {
-  const menu: any[] = [
-    { label: '打开', icon: 'fwd', onClick: () => openPolicy(p) },
-    // 整盘共享：把该磁盘根目录（含全部子目录）共享给指定用户/组/所有人
-    ...(canShareUser.value ? [
-      { label: '共享整个磁盘…', icon: 'share', onClick: () => sharePolicyRoot(p) }
-    ] : []),
-    ...(canTerminal.value ? [
-      {
-        label: '在终端中打开', icon: 'terminal',
-        onClick: () => store.open('terminal', { policyId: p.id, path: '/' }, { title: '终端' })
-      }
-    ] : [])
-  ]
-  if (session.user?.role === 'admin') {
-    menu.push({ separator: true })
-    menu.push({ label: '管理存储', icon: 'admin', onClick: () => store.open('admin') })
-  }
+  const menu = policyMenu({
+    isAdmin: session.user?.role === 'admin',
+    canShareUser: canShareUser.value,
+    canTerminal: canTerminal.value,
+    on: {
+      open: () => openPolicy(p),
+      shareRoot: () => sharePolicyRoot(p),
+      terminal: () => store.open('terminal', { policyId: p.id, path: '/' }, { title: '终端' }),
+      admin: () => store.open('admin')
+    }
+  })
   ctx.show(e.clientX, e.clientY, menu)
 }
 async function toggleStar(f: FileItem) {
@@ -2298,7 +2249,6 @@ async function toggleStar(f: FileItem) {
 }
 
 // ---- 工具 ----
-function joinPath(a: string, b: string) { return (a === '/' ? '' : a) + '/' + b }
 function baseName(p: string) { return p.slice(p.lastIndexOf('/') + 1) }
 // 使用率：按后端按角色算好的 totalBytes（管理员=分区大小，普通用户=本人配额）。
 // 总容量未知/不限量时返回 -1，进度条中性显示、不报红（修复旧版硬编码 10GB 导致大盘误红）。
@@ -2374,37 +2324,17 @@ function fmtTime(ms: number) {
   font-size: 13px; cursor: pointer; color: var(--text-2);
 }
 .side-item:hover { background: var(--hover-b); color: var(--text); }
-.side-item.active { background: #3b91d825; color: var(--text); }
+.side-item.active { background: var(--accent-weak); color: var(--text); }
 .side-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sel-rect { position: absolute; border: 1px solid var(--theme-2); background: #3b91d825; z-index: 100; }
+.sel-rect { position: absolute; border: 1px solid var(--theme-2); background: var(--accent-weak); z-index: 100; }
 .rubber-band {
   position: absolute; border: 1px solid var(--theme-2);
-  background: rgba(59,145,216,0.14); border-radius: 2px; z-index: 60; pointer-events: none;
+  background: var(--accent-weak); border-radius: 2px; z-index: 60; pointer-events: none;
 }
-.g-badge {
-  position: absolute; top: 6px; left: 8px; z-index: 2;
-  background: linear-gradient(135deg, var(--theme-1), var(--theme-2));
-  color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px;
-}
-/* 实时协作「正在编辑」徽章（绿点 + 悬停提示协作者名单） */
-.editing-dot {
-  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  background: #4caf50; box-shadow: 0 0 5px rgba(76, 175, 80, 0.85);
-  vertical-align: middle;
-}
-.f-name .editing-dot { margin-right: 5px; }
-.editing-badge {
-  display: inline-flex; align-items: center; gap: 5px; flex: none;
-  font-size: 11px; color: #4caf50;
-}
-/* Win11 叠加复选框：悬停或选中时显示 */
-.f-check {
-  position: absolute; top: 6px; right: 8px; z-index: 3; width: 17px; height: 17px;
-  margin: 0; cursor: pointer; opacity: 0; transition: opacity 0.1s; accent-color: var(--theme-2);
-}
-.file-item:hover .f-check, .file-item.selected .f-check { opacity: 1; }
-.file-list td input[type="checkbox"], .file-list th input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--theme-2); cursor: pointer; }
-.tool-btn.global-on { color: var(--theme-2); background: #3b91d820; }
+/* 条目级样式（角标/编辑徽章/复选框/缩略图/高亮）已随条目迁到
+   ./explorer/FileGrid.vue 与 FileList.vue —— 本组件是 scoped，跨组件选择器够不着 */
+.file-list th input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--theme-2); cursor: pointer; }
+.tool-btn.global-on { color: var(--theme-2); background: var(--accent-weak); }
 .od-sep { height: 1px; background: var(--stroke-b); margin: 14px -6px 10px; }
 .od-list { max-height: 220px; overflow: auto; }
 .od-item { padding: 7px 2px; border-bottom: 1px solid var(--hover-b); }
@@ -2415,7 +2345,6 @@ function fmtTime(ms: number) {
 .file-list thead th:hover { color: var(--text); background: var(--hover-b); }
 .file-list thead th.sort-active { color: var(--theme-2); }
 .sort-arrow { font-size: 10px; }
-.f-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .preview-pane { width: 244px; flex: none; border-left: 1px solid var(--stroke); padding: 14px; overflow: auto; background: var(--card); }
 .pp-head { font-size: 12px; color: var(--text-3); margin-bottom: 10px; }
 .pp-thumb { height: 132px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; background: var(--bg50); border-radius: 8px; overflow: hidden; }
@@ -2435,7 +2364,7 @@ function fmtTime(ms: number) {
   background: var(--card); transition: background 0.12s, border-color 0.12s, transform 0.12s;
 }
 .drive-card:hover { background: var(--hover-b); transform: translateY(-1px); }
-.drive-card.sel { background: #3b91d822; border-color: #3b91d855; }
+.drive-card.sel { background: var(--accent-weak); border-color: #3b91d855; }
 .drive-name {
   font-size: 13.5px; font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -2447,7 +2376,36 @@ function fmtTime(ms: number) {
   background: linear-gradient(90deg, var(--theme-1), var(--theme-2));
   transition: width 0.3s;
 }
-.drive-bar-fill.full { background: #e74c3c; }
+.drive-bar-fill.full { background: var(--danger); }
 .drive-sub { font-size: 11px; color: var(--text-3); }
+
+/* 搜索中骨架（.fileArea 内绝对定位，盖住旧结果；自身不参与鼠标交互） */
+.search-skel {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  padding: 16px 20px; display: flex; flex-direction: column; gap: 13px;
+  background: var(--bg70);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  animation: skel-in 0.12s ease;
+}
+.skel-row { display: flex; align-items: center; gap: 12px; }
+.skel-ico { width: 22px; height: 22px; border-radius: 4px; flex: none; }
+.skel-bar { height: 10px; border-radius: 5px; }
+.skel-ico, .skel-bar {
+  background: linear-gradient(90deg, var(--hover-b) 25%, color-mix(in srgb, var(--text-3) 20%, transparent) 37%, var(--hover-b) 63%);
+  background-size: 400% 100%;
+  animation: skel-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes skel-shimmer { from { background-position: 100% 0 } to { background-position: 0 0 } }
+@keyframes skel-in { from { opacity: 0 } to { opacity: 1 } }
+
+/* 大文件夹窗口化：行高必须固定，窗口计算才成立。
+   只挂在 .virtual 上 —— 普通目录（≤ 阈值）不套用，渲染与样式与改动前一致 */
+.file-grid.virtual { padding-top: 0; padding-bottom: 0; }
+/* 占位元素：跨整行（auto-fill 的整行），不参与鼠标交互 */
+.file-grid .vt-pad { grid-column: 1 / -1; pointer-events: none; }
+/* 占位行：不显示内容、不响应鼠标、不参与 hover 高亮 */
+.file-list .vpad { pointer-events: none; }
+.file-list .vpad td { padding: 0; border: none; }
+.file-list .vpad:hover td { background: transparent; }
 </style>
 /* ZTESTMARKERQWX 9f3a */
