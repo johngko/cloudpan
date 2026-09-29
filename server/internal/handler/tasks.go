@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
 	"cloudpan/internal/dto"
 	"cloudpan/internal/fscore"
@@ -55,12 +53,14 @@ func (p *TaskPool) sweepLoop() {
 	fscore.PruneAll()
 	p.sweepRecycle()
 	p.sweepGuestWorkspace()
+	sweepNotifications()
 	hours := 0
 	t := time.NewTicker(1 * time.Hour)
 	for range t.C {
 		hours++
 		p.sweepUploads()
 		p.sweepGuestWorkspace()
+		sweepNotifications()
 		if hours%6 == 0 {
 			fscore.PruneAll()
 			p.sweepRecycle()
@@ -217,7 +217,7 @@ func (p *TaskPool) sweepGuestWorkspace() {
 
 	if freed > 0 {
 		model.DB.Model(&model.User{}).Where("id = ?", gu.ID).
-			UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes - ?, 0)", freed))
+			UpdateColumn("used_bytes", quotaExpr(-freed))
 	}
 }
 
@@ -287,7 +287,7 @@ func (p *TaskPool) sweepRecycle() {
 			// 退款对象是文件属主（管理员代删他户文件时回到属主头上，而非删除者）
 			if item.Size > 0 {
 				model.DB.Model(&model.User{}).Where("id = ?", recycleRefundID(&item)).
-					UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes - ?, 0)", item.Size))
+					UpdateColumn("used_bytes", quotaExpr(-item.Size))
 			}
 			model.DB.Delete(&item)
 		}
@@ -488,7 +488,8 @@ func (p *TaskPool) runOffline(t *model.Task) error {
 		if model.DB.First(&u, t.UserID).Error == nil {
 			var g model.UserGroup
 			if model.DB.First(&g, u.GroupID).Error == nil {
-				if limit, limited := effectiveQuotaBytes(&u, &g); limited && u.UsedBytes+total > limit {
+				if quotaExceeded(&u, &g, total) {
+					limit, _ := effectiveQuotaBytes(&u, &g)
 					return fmt.Errorf("超出配额（已用 %dMB / 上限 %dMB），未开始下载", u.UsedBytes>>20, limit>>20)
 				}
 			}
@@ -545,7 +546,7 @@ func (p *TaskPool) runOffline(t *model.Task) error {
 	}
 	// 配额记账：离线下载落盘内容计入用户用量
 	model.DB.Model(&model.User{}).Where("id = ?", t.UserID).
-		UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes + ?, 0)", written))
+		UpdateColumn("used_bytes", quotaExpr(written))
 	return nil
 }
 
@@ -640,7 +641,8 @@ func (p *TaskPool) runCompress(t *model.Task) error {
 	if model.DB.First(&u, t.UserID).Error == nil {
 		var g model.UserGroup
 		if model.DB.First(&g, u.GroupID).Error == nil {
-			if limit, limited := effectiveQuotaBytes(&u, &g); limited && u.UsedBytes+archSize > limit {
+			if quotaExceeded(&u, &g, archSize) {
+				limit, _ := effectiveQuotaBytes(&u, &g)
 				return fmt.Errorf("超出配额（已用 %dMB / 上限 %dMB），压缩结果未保存", u.UsedBytes>>20, limit>>20)
 			}
 		}
@@ -726,7 +728,8 @@ func (p *TaskPool) runDecompress(t *model.Task) error {
 		if model.DB.First(&g, u.GroupID).Error != nil {
 			return nil
 		}
-		if limit, limited := effectiveQuotaBytes(&u, &g); limited && u.UsedBytes+total > limit {
+		if quotaExceeded(&u, &g, total) {
+			limit, _ := effectiveQuotaBytes(&u, &g)
 			return fmt.Errorf("超出配额（已用 %dMB / 上限 %dMB），解压未开始", u.UsedBytes>>20, limit>>20)
 		}
 		return nil
@@ -812,7 +815,7 @@ func (p *TaskPool) uniqueArchiveName(d fscore.Driver, dir, name string) (string,
 func (p *TaskPool) accountQuota(t *model.Task, bytes *int64) {
 	if *bytes > 0 {
 		model.DB.Model(&model.User{}).Where("id = ?", t.UserID).
-			UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes + ?, 0)", *bytes))
+			UpdateColumn("used_bytes", quotaExpr(*bytes))
 	}
 }
 
@@ -917,5 +920,3 @@ func parseUintParam(c *gin.Context, key string) uint {
 	return uint(v)
 }
 
-var _ = context.Background
-var _ = time.Now

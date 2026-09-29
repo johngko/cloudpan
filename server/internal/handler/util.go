@@ -64,4 +64,3 @@ func lastIndexByte(s string, b byte) int {
 
 func endsWith(s, suffix string) bool { return strings.HasSuffix(s, suffix) }
 
-var _ = time.Now

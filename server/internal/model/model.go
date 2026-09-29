@@ -172,6 +172,9 @@ func BackfillHashCopies() {
 type UploadSession struct {
 	ID           string `gorm:"size:40;primaryKey" json:"id"`
 	UserID       uint   `json:"userId"`
+	// OwnerID 落盘属主：共享盘上传（写入共享创建者的目录）= 共享创建者 ID；
+	// 0 = 普通上传，落盘属主就是 UserID 本人。合并时按它解析存储驱动与配额。
+	OwnerID      uint   `json:"ownerId"`
 	PolicyID     uint   `json:"policyId"`
 	ParentPath   string `gorm:"size:512" json:"parentPath"`
 	Name         string `gorm:"size:255" json:"name"`

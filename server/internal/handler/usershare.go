@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -106,7 +107,7 @@ func (h *UserShareHandler) Create(c *gin.Context) {
 		dto.Fail(c, 403, err.Error())
 		return
 	}
-	// 内置资源库（T:）仅管理员可见/可共享：非管理员即使持有海报读权限也不能把 T 共享给他人
+	// 内置资源库（builtin，如 T:）仅管理员可见/可共享：非管理员一律不能把内置库共享给他人
 	if p.Type == "builtin" && x.user.Role != "admin" {
 		dto.Fail(c, 403, "内置资源库不能共享")
 		return
@@ -466,6 +467,16 @@ func (h *UserShareHandler) Upload(c *gin.Context) {
 		dto.Fail(c, 400, "文件名非法")
 		return
 	}
+	// 覆盖同名文件、落盘、秒传台账一致性统一由 LocalDriver.CreateFile 负责
+	// （覆盖前摘掉旧内容的副本记录 + 边写边算哈希登记新内容），调用点不再自行实现
+	//
+	// 配额：共享盘写入落在「共享创建者」的隔离目录里（用的是创建者的盘），
+	// 因此按创建者的配额预检并计入创建者的用量；超额则拒绝，不让被共享者把创建者的空间写爆
+	owner := userOfID(sh.OwnerID)
+	add := fh.Size - existingSize(d, vp)
+	if !ownerQuotaPrecheck(c, owner, add) {
+		return
+	}
 	f, err := fh.Open()
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
@@ -476,7 +487,135 @@ func (h *UserShareHandler) Upload(c *gin.Context) {
 		dto.Fail(c, 500, "上传失败："+err.Error())
 		return
 	}
+	// 原子提交：预检与落盘之间仍可能被其他写入挤爆配额，这里以条件更新兜底，超限回滚刚落盘的文件
+	if owner != nil {
+		x := ctxOf(c)
+		if !commitQuotaUpload(c, x, owner, add) {
+			if phys, perr := fscore.PhysicalOf(d, vp); perr == nil {
+				fscore.HashPathGone(phys)
+				_ = os.Remove(phys)
+			}
+			return
+		}
+	}
 	dto.OK(c, gin.H{"path": vp})
+}
+
+// UploadInit 共享盘「分片」上传的初始化（rw）。
+//
+// 与普通上传共用同一条链路：本接口只建会话，之后客户端直接复用
+// /api/upload/chunk/:sid/:idx、/api/upload/complete、/api/upload/:sid/status、DELETE /api/upload/:sid
+// （这些端点按会话归属鉴权，上传者即会话属主）。
+// 唯一区别是会话里记下「落盘属主 = 共享创建者」：合并时按创建者的隔离目录落盘、计入创建者的配额，
+// 于是大文件也能走分片 + 秒传 + 断点续传 + 重试，而不是单次 FormData 直传。
+func (h *UserShareHandler) UploadInit(c *gin.Context) {
+	sh, d, ok := h.loadForTarget(c)
+	if !ok {
+		return
+	}
+	if sh.Perm != "rw" {
+		dto.Fail(c, 403, "此共享为只读")
+		return
+	}
+	var in struct {
+		Rel       string `json:"rel"`
+		Name      string `json:"name" binding:"required"`
+		Size      int64  `json:"size"`
+		ChunkSize int64  `json:"chunkSize"`
+		Hash      string `json:"hash"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	// 与普通上传同一套约束：单文件 20GB 上限、分片尺寸收敛到 [1KB, 64MB]
+	if in.Size < 0 || in.Size > 20<<30 {
+		dto.Fail(c, 400, "文件大小非法（上限 20GB）")
+		return
+	}
+	if in.ChunkSize < 1<<10 || in.ChunkSize > 64<<20 {
+		in.ChunkSize = 8 << 20
+	}
+	if sn, err := fscore.SanitizeName(in.Name); err != nil {
+		dto.Fail(c, 400, err.Error())
+		return
+	} else {
+		in.Name = sn
+	}
+	full, ok := userShareFull(sh, in.Rel)
+	if !ok {
+		dto.Fail(c, 403, "路径越界")
+		return
+	}
+	vp, err := fscore.Join(full, in.Name)
+	if err != nil {
+		dto.Fail(c, 400, "文件名非法")
+		return
+	}
+	x := ctxOf(c)
+	owner := userOfID(sh.OwnerID)
+	// 活跃会话上限（与普通上传一致）：防并发会话把 upload_tmp 写爆
+	var act int64
+	model.DB.Model(&model.UploadSession{}).
+		Where("user_id = ? AND status IN ?", x.user.ID, []string{"uploading", "merging"}).Count(&act)
+	if act >= 10 {
+		dto.Fail(c, 429, "进行中的上传会话过多（上限 10），请等待先前上传完成")
+		return
+	}
+	// 配额预检：按共享创建者（落盘属主）的配额
+	if !ownerQuotaPrecheck(c, owner, in.Size-existingSize(d, vp)) {
+		return
+	}
+	sess, received, instant, err := h.Site.Fs.InitUpload(x.user.ID, sh.OwnerID, sh.PolicyID, full, in.Name, in.Size, in.ChunkSize, in.Hash)
+	if err != nil {
+		dto.Fail(c, 500, err.Error())
+		return
+	}
+	if instant {
+		var p model.Policy
+		if err := model.DB.First(&p, sh.PolicyID).Error; err != nil {
+			dto.Fail(c, 400, "存储策略不存在")
+			return
+		}
+		up := &UploadHandler{Site: h.Site}
+		up.instantUpload(c, x, owner, &p, d, vp, full, in.Name, in.Hash, in.Size)
+		return
+	}
+	progress := 0
+	if sess.TotalChunks > 0 {
+		progress = int(float64(len(received)) / float64(sess.TotalChunks) * 100)
+	}
+	touchUploadTask(x.user.ID, uploadTaskProps{SID: sess.ID, Name: sess.Name, Parent: sess.ParentPath, Size: sess.Size, Phase: "chunk"}, progress)
+	dto.OK(c, gin.H{
+		"instant": false, "sessionId": sess.ID, "chunkSize": sess.ChunkSize,
+		"totalChunks": sess.TotalChunks, "received": received,
+	})
+}
+
+// ownerQuotaPrecheck 共享盘写入的配额预检：按落盘目录属主（= 共享创建者）的配额判定。
+// 未限制配额（QuotaMB=0 / 跟随的组不限量）时放行；超限时写 403 并给属主发站内通知。
+// 提示语点名"共享创建者"，避免被共享者看到一串数字却不知道是谁的空间满了。
+func ownerQuotaPrecheck(c *gin.Context, owner *model.User, add int64) bool {
+	if owner == nil || add <= 0 {
+		return true
+	}
+	var u model.User
+	if err := model.DB.Select("id", "quota_mb", "group_id", "used_bytes").First(&u, owner.ID).Error; err != nil {
+		return true
+	}
+	var g model.UserGroup
+	if u.GroupID > 0 {
+		if err := model.DB.First(&g, u.GroupID).Error; err != nil {
+			return true
+		}
+	}
+	limit, limited := effectiveQuotaBytes(&u, &g)
+	if !limited || u.UsedBytes+add <= limit {
+		return true
+	}
+	NotifyQuotaExceeded(u.ID, limit>>20, u.UsedBytes)
+	dto.Fail(c, 403, fmt.Sprintf("共享创建者的存储空间已满：已用 %dMB / 上限 %dMB", u.UsedBytes>>20, limit>>20))
+	return false
 }
 
 // Delete 共享内容删除（rw）
@@ -496,12 +635,40 @@ func (h *UserShareHandler) Delete(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
+	var released int64
 	for _, rel := range in.Rels {
 		full, ok := userShareFull(sh, rel)
 		if !ok || full == sh.Path {
 			continue
 		}
+		// 释放量必须在删除前统计；目录要算递归总大小（Size 只是目录项自身大小），
+		// 否则退款不足、创建者用量只会涨不会落
+		if e, serr := d.Stat(full); serr == nil {
+			sz := e.Size
+			if e.IsDir {
+				if s2, e2 := entryBytes(d, full); e2 == nil {
+					sz = s2
+				}
+			}
+			released += sz
+		}
+		// 共享删除是永久删除：须一并清理版本记录与物理版本文件（与 /fs/delete 同一语义）。
+		// 否则版本文件成为不可达垃圾，且其副本记录会让秒传索引永远无法释放
+		// （索引保留指向用户已看不到、也删不掉的 .versions 文件）。
+		if vp, err := fscore.Clean(full); err == nil {
+			if e, serr := d.Stat(full); serr == nil {
+				if e.IsDir {
+					fscore.PurgeDirVersions(sh.PolicyID, vp)
+				} else {
+					fscore.DeleteVersions(sh.PolicyID, vp)
+				}
+			}
+		}
 		_ = d.Delete(full)
+	}
+	// 上传时计入的是共享创建者的用量，删除同样退还给创建者（对称记账）
+	if released > 0 {
+		addQuota(sh.OwnerID, -released)
 	}
 	dto.OK(c, nil)
 }

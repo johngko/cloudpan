@@ -43,9 +43,10 @@ var guestWriteAllow = map[string]bool{
 	"/api/offline":       true, // POST 创建任务
 	"/api/offline/:id":   true, // DELETE 取消任务
 	// 显式 rw 共享目录
-	"/api/shared/:id/mkdir":  true,
-	"/api/shared/:id/upload": true,
-	"/api/shared/:id/delete": true,
+	"/api/shared/:id/mkdir":       true,
+	"/api/shared/:id/upload":      true,
+	"/api/shared/:id/upload/init": true, // 共享盘分片上传（分片/完成/状态复用 /api/upload/ 前缀白名单）
+	"/api/shared/:id/delete":      true,
 }
 
 // 前缀白名单（动态路径：/api/upload/chunk/:sid/:idx 等）

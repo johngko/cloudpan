@@ -354,12 +354,10 @@ func (h *ShareHandler) saveShareCopy(sd, dd fscore.Driver, src, dstDir string) e
 		return fmt.Errorf("打开文件失败 %s: %w", src, err)
 	}
 	defer rc.Close()
-	hasher := sha256.New()
-	if err := dd.CreateFile(dst, io.TeeReader(rc, hasher)); err != nil {
+	// 台账（覆盖前摘旧行 + 落地登记）由 LocalDriver.CreateFile 统一负责。
+	// 目标名由 uniqueName 生成、不会覆盖已有文件
+	if err := dd.CreateFile(dst, rc); err != nil {
 		return fmt.Errorf("写入目标失败 %s: %w", dst, err)
-	}
-	if phys, perr := fscore.PhysicalOf(dd, dst); perr == nil {
-		h.Site.Fs.RegisterHash(hex.EncodeToString(hasher.Sum(nil)), e.Size, phys)
 	}
 	return nil
 }

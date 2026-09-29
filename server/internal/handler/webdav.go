@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -252,4 +251,3 @@ func RegisterDav(r *gin.Engine, svc *fscore.Service) {
 	})
 }
 
-var _ = path.Join

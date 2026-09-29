@@ -280,3 +280,32 @@ func hashPassword(pwd string) string {
 	b, _ := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	return string(b)
 }
+
+// MyLogs 当前用户自己的操作记录（只读）。
+// 用途：设置页「操作记录」——把审计日志的可见范围开放到本人，
+// 严格按 user_id 过滤，任何情况下都不返回他人记录（管理员查全量走 /api/admin/logs）。
+func (h *AuthHandler) MyLogs(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	if u == nil {
+		dto.Fail(c, 401, "未登录")
+		return
+	}
+	var in dto.PageIn
+	_ = c.ShouldBindQuery(&in)
+	offset, limit := in.Normalize()
+	q := model.DB.Model(&model.AuditLog{}).Where("user_id = ?", u.ID)
+	if in.Keyword != "" {
+		q = q.Where("action LIKE ? OR detail LIKE ?", "%"+in.Keyword+"%", "%"+in.Keyword+"%")
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		dto.Fail(c, 500, "查询失败")
+		return
+	}
+	var items []model.AuditLog
+	if err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&items).Error; err != nil {
+		dto.Fail(c, 500, "查询失败")
+		return
+	}
+	dto.OK(c, dto.PageOut{Total: total, Items: items})
+}

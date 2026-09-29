@@ -1,6 +1,8 @@
 package fscore
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -299,6 +301,10 @@ func (d *LocalDriver) CreateFile(p string, r io.Reader) error {
 	if err := os.MkdirAll(filepath.Dir(phys), 0o755); err != nil {
 		return err
 	}
+	// 覆盖写入：先摘掉旧内容的副本记录（目标不存在时为无操作）。必须在写入前摘，
+	// 否则旧行会残留在同一 phys_path 上，台账变成"旧哈希指向新内容"——等长内容时
+	// 秒传会把错误字节发给别人（解压覆盖同名文件即可触发）。
+	HashPathGone(phys)
 	// rename-in 原子替换：先写同目录临时文件再改名覆盖目标（借鉴 Cloudreve「写入即产生新 blob」）。
 	// 避免 os.Create 就地截断：① 并发读者（下载/预览）不会读到写一半的文件；② 崩溃时目标保留旧内容；
 	// ③ 目标若是版本文件的硬链接，替换目录项不影响版本原件。
@@ -308,7 +314,12 @@ func (d *LocalDriver) CreateFile(p string, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	_, werr := io.Copy(f, r)
+	// 边写边算哈希：本地盘每个物理副本都要入账。台账只在这里与分块合并/秒传落盘三处写入，
+	// 调用点无需各自重复登记（解压/压缩/离线下载/Office 回写曾因漏登记而与物理副本不一致：
+	// 副本还在盘上，索引却以为"最后一个副本已消失"而提前释放，同内容再也无法秒传）。
+	hasher := sha256.New()
+	cr := &countingReader{r: io.TeeReader(r, hasher)}
+	_, werr := io.Copy(f, cr)
 	cerr := f.Close()
 	if werr != nil || cerr != nil {
 		_ = os.Remove(tmp)
@@ -325,7 +336,21 @@ func (d *LocalDriver) CreateFile(p string, r io.Reader) error {
 		_ = os.Remove(tmp)
 		return err
 	}
+	logLedgerErr("登记落盘索引", "", RegisterHash(hex.EncodeToString(hasher.Sum(nil)), cr.n, phys))
 	return nil
+}
+
+// countingReader 统计实际写入字节数（登记台账需要与落盘内容严格一致的 size：
+// 登记的 size 只要与实际不符，下一次对账就会把这行当悬空副本清掉）
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 func (d *LocalDriver) DirectURL(p string) (string, error) { return "", nil }

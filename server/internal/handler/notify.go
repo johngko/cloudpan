@@ -12,6 +12,7 @@ import (
 	"net/smtp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -65,7 +66,7 @@ func (h *notifyHub) publish(userID uint, n *model.Notification) {
 	}
 }
 
-// Notify 给用户写入一条站内通知（低频路径同步调用；每用户仅保留最近 200 条），并广播给 SSE 订阅者
+// Notify 给用户写入一条站内通知（低频路径同步调用；每用户仅保留最近 notifyKeep 条），并广播给 SSE 订阅者
 func Notify(userID uint, typ, title, content string, refID uint) {
 	if userID == 0 || model.DB == nil {
 		return
@@ -75,13 +76,47 @@ func Notify(userID uint, typ, title, content string, refID uint) {
 	if err := model.DB.Create(n).Error; err != nil {
 		return
 	}
-	var ids []uint
-	model.DB.Model(&model.Notification{}).Where("user_id = ?", userID).Order("id DESC").Limit(200).Pluck("id", &ids)
-	if len(ids) > 0 {
-		model.DB.Where("user_id = ? AND id NOT IN ?", userID, ids).Delete(&model.Notification{})
+	// 裁剪移出请求路径：每 notifyTrimEvery 条触发一次异步裁剪，另有 sweepLoop 每小时全局兜底。
+	// 原先每条通知都同步跑「Pluck 200 个 id + NOT IN 删除」两次往返，通知风暴时 DB 压力成倍。
+	if atomic.AddInt64(&notifySeq, 1)%notifyTrimEvery == 0 {
+		uid := userID
+		go func() {
+			defer func() { _ = recover() }()
+			trimNotifications(uid)
+		}()
 	}
 	hub.publish(userID, n)
 	dispatchOutbound(userID, n)
+}
+
+// 每用户保留的通知条数
+const notifyKeep = 200
+
+// notifyTrimEvery 每写入 N 条通知触发一次异步裁剪（or 由 sweepNotifications 兜底）
+const notifyTrimEvery = 20
+
+var notifySeq int64
+
+// trimNotifications 把某用户的通知裁剪到最近 notifyKeep 条
+func trimNotifications(userID uint) {
+	var ids []uint
+	model.DB.Model(&model.Notification{}).Where("user_id = ?", userID).Order("id DESC").Limit(notifyKeep).Pluck("id", &ids)
+	if len(ids) > 0 {
+		model.DB.Where("user_id = ? AND id NOT IN ?", userID, ids).Delete(&model.Notification{})
+	}
+}
+
+// sweepNotifications 全局兜底裁剪：只处理超出保留条数的用户（sweepLoop 每小时调用）
+func sweepNotifications() {
+	var uids []uint
+	model.DB.Model(&model.Notification{}).
+		Select("user_id").
+		Group("user_id").
+		Having("COUNT(*) > ?", notifyKeep).
+		Pluck("user_id", &uids)
+	for _, uid := range uids {
+		trimNotifications(uid)
+	}
 }
 
 // ---- 通知外发（webhook / 邮件）：Notify() 单点触发，异步尽力而为，失败只打日志 ----

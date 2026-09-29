@@ -57,6 +57,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 	ug := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
 	{
 		ug.GET("/auth/me", auth.Me)
+		ug.GET("/audit/mine", auth.MyLogs) // 只读：本人操作记录（按 user_id 严格过滤）
 		ug.PUT("/users/me", auth.UpdateMe)
 		ug.PUT("/users/me/password", auth.ChangePassword)
 		ug.PUT("/users/me/webdav-password", auth.SetWebdavPassword)
@@ -173,10 +174,9 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/shared/:id/download", ush.Download)
 		ug.POST("/shared/:id/mkdir", middleware.AppGate("usershare"), ush.Mkdir)
 		ug.POST("/shared/:id/upload", middleware.AppGate("usershare"), ush.Upload)
+		// 共享盘分片上传：仅初始化需要共享上下文；分片/完成/状态/取消复用 /upload/* （按会话归属鉴权）
+		ug.POST("/shared/:id/upload/init", middleware.AppGate("usershare"), ush.UploadInit)
 		ug.POST("/shared/:id/delete", middleware.AppGate("usershare"), ush.Delete)
-
-		// 海报应用专属：内置资源库（T:）策略信息——T 盘对非管理员不进盘列表，
-		// 应用经此取 policyId 后走通用 fs 只读接口（按「海报」功能门控）
 
 		// 系统功能清单（应用中心数据源）
 		ug.GET("/apps", site.AppList)
@@ -273,8 +273,5 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ag.DELETE("/usershares/:id", ad.UserShareCancel)
 
 		ag.POST("/apps/:key/toggle", ad.AppToggle)
-
-		// 海报资源库管理（管理员）：内置库上传/删除（绕过 fs 只读层，直接写物化目录+重建清单）、
-		// 查看任意用户的海报资源（作品/素材/模板，用户间互相隔离仅管理员可见）
 	}
 }

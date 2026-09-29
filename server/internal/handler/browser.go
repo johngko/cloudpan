@@ -338,7 +338,9 @@ func (h *BrowserHandler) Proxy(c *gin.Context) {
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			pt := c.Query("pt")
 			if pt == "" {
-				pt = h.proxyToken(middleware.CurrentUser(c).ID)
+				if u := middleware.CurrentUser(c); u != nil {
+					pt = h.proxyToken(u.ID)
+				}
 			}
 			html := toUTF8(body, ct, string(body))
 			if len(body) > browserMaxHTML {

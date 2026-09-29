@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"cloudpan/internal/model"
@@ -14,12 +15,19 @@ import (
 // 版本按"策略 + 虚拟路径"关联，重命名/移动时随文件迁移（MigrateVersions）
 // 保留策略来自用户所属用户组：KeepVersions（保留最近 N 版，-1 不限）、VersionRetentionDays（保留天数，0 永久）
 
+// 版本号分配互斥：MAX(version)+1 是「先查后写」，并发覆盖同一文件会算出相同版本号，
+// 后写者覆盖前者的 vN_ 文件。版本保存是低频路径，用进程内互斥串行化分配即可
+// （不引入 DB 唯一约束，避免存量数据迁移风险）。
+var versionAllocMu sync.Mutex
+
 // SaveVersion 目标文件被覆盖前，将其归档为历史版本
 func SaveVersion(policyID, userID uint, vp, physTarget string) bool {
 	fi, err := os.Stat(physTarget)
 	if err != nil || !fi.Mode().IsRegular() {
 		return false
 	}
+	versionAllocMu.Lock()
+	defer versionAllocMu.Unlock()
 	// 版本号取当前最大值 +1，保证单调递增（旧版本被清理后不会与残留编号冲突）
 	var maxVer int
 	model.DB.Model(&model.FileVersion{}).

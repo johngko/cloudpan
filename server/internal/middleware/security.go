@@ -117,7 +117,7 @@ func SecurityHeaders() gin.HandlerFunc {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		// vendor 页面（mindmap host.html / pdfjs viewer / drawio / poster）需要被主应用窗口
+		// vendor 页面（mindmap host.html / pdfjs viewer / drawio）需要被主应用窗口
 		// 以同源 iframe 嵌入，frame-ancestors 放宽为 'self'（仍禁止跨站嵌入防点击劫持）；
 		// 其余页面保持 'none' + XFO DENY。
 		if frameableVendorPath(c.Request.URL.Path) {

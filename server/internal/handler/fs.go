@@ -20,12 +20,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // 注册 webp 解码器
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"cloudpan/internal/config"
 	"cloudpan/internal/dto"
@@ -41,14 +43,43 @@ type SiteHandler struct {
 	ZipTmp  string
 }
 
+// ---- 站点设置（TTL 缓存） ----
+// 站点设置是全站热读：公开站点信息、转码开关、WebDAV 门控、通知外发都取它，
+// 每次 DB.Find 全表扫在高频请求下纯属浪费。30s TTL + 管理端写入后显式失效。
+var (
+	siteSettingsMu  sync.RWMutex
+	siteSettingsMap map[string]string
+	siteSettingsAt  time.Time
+)
+
+const siteSettingsTTL = 30 * time.Second
+
 func GetSiteSettings() map[string]string {
+	siteSettingsMu.RLock()
+	if siteSettingsMap != nil && time.Since(siteSettingsAt) < siteSettingsTTL {
+		m := siteSettingsMap
+		siteSettingsMu.RUnlock()
+		return m
+	}
+	siteSettingsMu.RUnlock()
+
 	m := map[string]string{}
 	var rows []model.SiteSetting
 	model.DB.Find(&rows)
 	for _, r := range rows {
 		m[r.Key] = r.Value
 	}
+	siteSettingsMu.Lock()
+	siteSettingsMap, siteSettingsAt = m, time.Now()
+	siteSettingsMu.Unlock()
 	return m
+}
+
+// InvalidateSiteSettings 管理端写入站点设置后立即失效缓存，否则最长 30s 仍读到旧值
+func InvalidateSiteSettings() {
+	siteSettingsMu.Lock()
+	siteSettingsAt = time.Time{}
+	siteSettingsMu.Unlock()
 }
 
 // ---- 公开站点信息（无需登录） ----
@@ -109,9 +140,8 @@ func (h *SiteHandler) Policies(c *gin.Context) {
 	model.DB.Where("status != ?", "disabled").Order("letter").Find(&list)
 	out := make([]model.Policy, 0, len(list))
 	for _, p := range list {
-		// 内置资源库（T:）不进入非管理员的资源管理器盘列表：
-		// 它是海报应用的素材来源，应用内经 /api/poster/builtin/policy 专属接口取策略，
-		// 不暴露为普通用户可浏览的盘
+		// 内置资源库（builtin，如 T:）不对非管理员暴露为可浏览的盘：
+		// 它是内置应用的素材来源，只应经对应应用自己的只读接口访问
 		if x.user.Role != "admin" && p.Type == "builtin" {
 			continue
 		}
@@ -498,6 +528,18 @@ func effectiveQuotaBytes(u *model.User, g *model.UserGroup) (int64, bool) {
 	return 0, false
 }
 
+// quotaExceeded 配额判定的**唯一判定式**：无增量（或负增量）直接放行；
+// 受配额限制且「已用 + 本次增量 > 上限」才算超限。
+// 单独抽出来的原因：同一判定原本在 checkQuota、上传预检、离线/BT 下载、压缩、解压等处各抄一份，
+// 改一处就漏一处。各调用点现在只保留自己的文案/通知，判定统一走这里。
+func quotaExceeded(u *model.User, g *model.UserGroup, add int64) bool {
+	if add <= 0 {
+		return false
+	}
+	limit, limited := effectiveQuotaBytes(u, g)
+	return limited && u.UsedBytes+add > limit
+}
+
 // checkQuota 增容操作前的配额预检（未限制配额时直接放行），不通过时已写入 403 响应
 func checkQuota(c *gin.Context, x ctx3, add int64) bool {
 	if add <= 0 {
@@ -507,15 +549,19 @@ func checkQuota(c *gin.Context, x ctx3, add int64) bool {
 	if err := model.DB.First(&u, x.user.ID).Error; err != nil {
 		return true
 	}
-	limit, limited := effectiveQuotaBytes(&u, x.group)
-	if !limited {
+	if !quotaExceeded(&u, x.group, add) {
 		return true
 	}
-	if u.UsedBytes+add > limit {
-		dto.Fail(c, 403, fmt.Sprintf("超出配额：已用 %dMB / 上限 %dMB", u.UsedBytes>>20, limit>>20))
-		return false
-	}
-	return true
+	limit, _ := effectiveQuotaBytes(&u, x.group)
+	dto.Fail(c, 403, fmt.Sprintf("超出配额：已用 %dMB / 上限 %dMB", u.UsedBytes>>20, limit>>20))
+	return false
+}
+
+// quotaExpr 用量增减表达式（跨方言）：`used_bytes + delta`，下限钳到 0。
+// 不可用 MySQL 专有的 GREATEST()——SQLite（内置默认库）没有该函数，
+// 会让「清空回收站退款 / 归档等落盘记账」整条 UPDATE 报错，用量只增不减。
+func quotaExpr(delta int64) clause.Expr {
+	return gorm.Expr("CASE WHEN used_bytes + ? < 0 THEN 0 ELSE used_bytes + ? END", delta, delta)
 }
 
 // addQuota 记录用量增减（负值下限为 0，与既有记账惯用法一致）
@@ -524,7 +570,7 @@ func addQuota(userID uint, delta int64) {
 		return
 	}
 	model.DB.Model(&model.User{}).Where("id = ?", userID).
-		UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes + ?, 0)", delta))
+		UpdateColumn("used_bytes", quotaExpr(delta))
 }
 
 // quotaAccountOwner 上传落盘文件的配额属主：本地盘按物理路径一级目录定位
@@ -677,6 +723,7 @@ func uniqueName(d fscore.Driver, dir, name string) (string, error) {
 }
 
 // crossCopyEntry 将 src（位于 sd）递归复制到 dd 的 dstDir 下；目标同名自动加 (1)
+// 台账（覆盖前摘旧行 + 落地登记）由 LocalDriver.CreateFile 统一负责，此处不再重复处理
 func crossCopyEntry(sd, dd fscore.Driver, src, dstDir string) error {
 	e, err := sd.Stat(src)
 	if err != nil {
@@ -1050,6 +1097,7 @@ func (h *SiteHandler) WriteText(c *gin.Context) {
 	}
 	// 版本管理：目标文件已存在时，覆盖前归档旧版本（与上传/Office 覆盖路径一致）
 	if p.Type == "local" {
+		// 覆盖前归档旧版本；新内容的台账登记由 LocalDriver.CreateFile 负责
 		if phys, err := fscore.PhysicalOf(d, vp); err == nil {
 			fscore.SaveVersion(in.PolicyID, x.user.ID, vp, phys)
 		}
@@ -1060,12 +1108,7 @@ func (h *SiteHandler) WriteText(c *gin.Context) {
 	}
 	if add != 0 {
 		model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
-			UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes + ?, 0)", add))
-	}
-	if p.Type == "local" {
-		if phys, err := fscore.PhysicalOf(d, vp); err == nil {
-			h.Fs.RegisterHash(sha256Hex(in.Content), int64(len(in.Content)), phys)
-		}
+			UpdateColumn("used_bytes", quotaExpr(add))
 	}
 	touchPolicyUsage(p.ID) // 文本保存改变文件大小
 	middleware.Audit(c, "write", p.Name+":"+vp)
@@ -1295,26 +1338,58 @@ func (h *SiteHandler) serveThumb(c *gin.Context, x ctx3, d fscore.Driver, rc fsc
 		h.serveRawStream(c, rc, name)
 		return
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
+	thumbBytes, derr := decodeScaledJPEG(data, 480)
+	if derr == errImageTooLarge {
+		// 超大图：解码后位图可达数百 MB，直接回退原流、不生成缩略图
+		h.serveRawStream(c, rc, name)
+		return
+	}
+	if derr != nil {
 		// 解码失败（可能是伪装扩展名）：回退原流，不落缓存
 		c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(name), urlEscape(name)))
 		c.Header("Cache-Control", "no-cache")
 		http.ServeContent(c.Writer, c.Request, name, time.UnixMilli(e.ModTime), bytes.NewReader(data))
 		return
 	}
-	out := &bytes.Buffer{}
-	if err := jpeg.Encode(out, scaleImage(img, 480), &jpeg.Options{Quality: 82}); err != nil {
-		h.serveRawStream(c, rc, name)
-		return
-	}
-	if err := os.WriteFile(cachePath, out.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(cachePath, thumbBytes, 0o644); err != nil {
 		// 落盘失败也不影响本次响应
 	}
 	pruneThumbs(h.Fs.ThumbDir, 5000)
 	c.Header("Content-Type", "image/jpeg")
 	c.Header("Cache-Control", "public, max-age=86400")
-	c.Data(http.StatusOK, "image/jpeg", out.Bytes())
+	c.Data(http.StatusOK, "image/jpeg", thumbBytes)
+}
+
+// thumbMaxPixels 缩略图解码像素上限：超过则放弃生成缩略图。
+// 一个 20MB 的 JPEG 可能是 6000 万像素以上，解码后位图可达数百 MB，多请求叠加会 OOM。
+const thumbMaxPixels = 60000000
+
+// thumbDecodeSlots 同时在解码的图片数上限（内存闸）：解码→缩放→编码全程占槽
+var thumbDecodeSlots = make(chan struct{}, 2)
+
+var errImageTooLarge = errors.New("图片过大，跳过缩略图")
+
+// decodeScaledJPEG 受限解码并缩放编码为 JPEG：
+// 先按文件头探明尺寸拒绝超大图（避免解码后才 OOM），再用并发闸限制同时在解码的图片数。
+func decodeScaledJPEG(data []byte, targetW int) ([]byte, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if int64(cfg.Width)*int64(cfg.Height) > thumbMaxPixels {
+		return nil, errImageTooLarge
+	}
+	thumbDecodeSlots <- struct{}{}
+	defer func() { <-thumbDecodeSlots }()
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	out := &bytes.Buffer{}
+	if err := jpeg.Encode(out, scaleImage(img, targetW), &jpeg.Options{Quality: 82}); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
 // serveRawStream 无缩略图语义时的原流输出（inline + no-cache）
@@ -1891,7 +1966,7 @@ func (h *SiteHandler) RecyclePurge(c *gin.Context) {
 		// 退款对象是文件属主（管理员代删他户文件时回到属主头上，而非删除者）
 		if item.Size > 0 {
 			model.DB.Model(&model.User{}).Where("id = ?", recycleRefundID(&item)).
-				UpdateColumn("used_bytes", gorm.Expr("GREATEST(used_bytes - ?, 0)", item.Size))
+				UpdateColumn("used_bytes", quotaExpr(-item.Size))
 		}
 		model.DB.Delete(&item)
 	}

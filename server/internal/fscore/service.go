@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,6 +21,8 @@ import (
 	"time"
 
 	"golang.org/x/text/encoding"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"cloudpan/internal/model"
 )
@@ -32,6 +35,10 @@ type Service struct {
 	ZipTmp     string // zip 解压临时区（流式解压用，避免整包读入内存）
 	mu         sync.Mutex
 	drivers    map[string]*cachedDriver
+	// chunkLocks 分片记账按会话加锁（sid → *sync.Mutex）。
+	// 不能复用 mu：mu 同时守着驱动缓存，原先任一会话的分片记账会阻塞
+	// 所有会话的 DriverFor/Invalidate，把上传变成全局串行。
+	chunkLocks sync.Map
 }
 
 func NewService(tmpDir, recycleDir, thumbDir, zipTmp string) *Service {
@@ -85,6 +92,10 @@ func (s *Service) lookupHash(hash string, size int64) *model.FileHash {
 	if err != nil {
 		return nil
 	}
+	// 目录/特殊文件不能作为秒传源（否则会被当成"内容已存在"直接硬链接成文件）
+	if !fi.Mode().IsRegular() {
+		return nil
+	}
 	// 源文件被损坏（大小不符）时视为索引失效，走正常上传流程自愈
 	if fi.Size() != fh.Size {
 		return nil
@@ -110,7 +121,7 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 		return err
 	}
 	if os.Link(fh.SourcePath, physTarget) == nil {
-		RegisterCopy(fh.Hash, physTarget)
+		logLedgerErr("登记秒传副本", fh.Hash, RegisterCopy(fh.Hash, physTarget))
 		return nil
 	}
 	in, err := os.Open(fh.SourcePath)
@@ -125,7 +136,7 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	if err == nil {
-		RegisterCopy(fh.Hash, physTarget)
+		logLedgerErr("登记秒传副本", fh.Hash, RegisterCopy(fh.Hash, physTarget))
 	}
 	return err
 }
@@ -138,65 +149,107 @@ func (s *Service) InstantPut(fh *model.FileHash, physTarget string, userID uint,
 // 只要还有任意副本存活，索引就保留、秒传继续可用；
 // 最后一个副本物理消失时索引才删除，文件数据也在此时真正释放（硬链接数归零）。
 
-// RegisterHash 登记内容索引与本次落盘的物理副本（新内容定稿时：分块上传完成 / 文本写入）
-func (s *Service) RegisterHash(hash string, size int64, phys string) {
+// RegisterHash 登记内容索引与本次落盘的物理副本（新内容定稿时：分块上传完成 / 文本写入）。
+// 索引与副本行的写入包在同一个事务里：任一步失败整体回滚，避免出现
+// "有索引无副本行"或"有副本行无索引"的漂移（AGENTS.md §3 秒传台账不变量）。
+// 包级函数：本地驱动的落盘路径（LocalDriver.CreateFile）也要调用，不能挂在 Service 上。
+func RegisterHash(hash string, size int64, phys string) error {
 	if hash == "" || size <= 0 || phys == "" {
-		return
+		return nil
 	}
-	var fh model.FileHash
-	if err := model.DB.Where("hash = ?", hash).First(&fh).Error; err != nil {
-		model.DB.Create(&model.FileHash{Hash: hash, Size: size, SourcePath: phys, RefCount: 1})
-	} else if fi, e := os.Stat(fh.SourcePath); e != nil || fi.Size() != size {
-		// 已有源损坏/消失时用本次落盘的新源替换
-		model.DB.Model(&fh).Updates(map[string]interface{}{"source_path": phys, "size": size})
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var fh model.FileHash
+		if e := tx.Where("hash = ?", hash).First(&fh).Error; e != nil {
+			if ce := tx.Create(&model.FileHash{Hash: hash, Size: size, SourcePath: phys, RefCount: 1}).Error; ce != nil {
+				return ce
+			}
+		} else if fi, se := os.Stat(fh.SourcePath); se != nil || fi.Size() != size {
+			// 已有源损坏/消失时用本次落盘的新源替换
+			if ue := tx.Model(&fh).Updates(map[string]interface{}{"source_path": phys, "size": size}).Error; ue != nil {
+				return ue
+			}
+		}
+		return upsertHashCopyTx(tx, hash, phys)
+	})
+	if err != nil {
+		return err
 	}
-	upsertHashCopy(hash, phys)
-	reconcileHash(hash)
+	return reconcileHash(hash)
 }
 
-// RegisterCopy 登记一个新物理副本（秒传落盘 / 版本恢复等，内容已有索引）
-func RegisterCopy(hash, phys string) {
+// RegisterCopy 登记一个新物理副本（秒传落盘 / 版本恢复等，内容已有索引）。
+// 单条 upsert 幂等：并发同内容登记同名路径时靠唯一索引吞掉冲突，不再"先查后写"。
+func RegisterCopy(hash, phys string) error {
 	if hash == "" || phys == "" {
-		return
+		return nil
 	}
-	upsertHashCopy(hash, phys)
-	reconcileHash(hash)
+	if err := upsertHashCopy(hash, phys); err != nil {
+		return err
+	}
+	return reconcileHash(hash)
 }
 
-func upsertHashCopy(hash, phys string) {
-	var n int64
-	model.DB.Model(&model.FileHashCopy{}).Where("hash = ? AND phys_path = ?", hash, phys).Count(&n)
-	if n == 0 {
-		model.DB.Create(&model.FileHashCopy{Hash: hash, PhysPath: phys})
-	}
+func upsertHashCopy(hash, phys string) error { return upsertHashCopyTx(model.DB, hash, phys) }
+
+func upsertHashCopyTx(tx *gorm.DB, hash, phys string) error {
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&model.FileHashCopy{Hash: hash, PhysPath: phys}).Error
 }
 
 // reconcileHash 按存活副本对账：0 副本 → 删整条索引；
 // 否则更新 RefCount，源失效时改指任一存活副本；顺带清理物理已不存在的悬空副本行
-func reconcileHash(hash string) {
+func reconcileHash(hash string) error {
 	var fh model.FileHash
 	if err := model.DB.Where("hash = ?", hash).First(&fh).Error; err != nil {
-		model.DB.Where("hash = ?", hash).Delete(&model.FileHashCopy{}) // 防御：无索引的孤儿副本行
-		return
+		// 防御：无索引的孤儿副本行
+		return model.DB.Where("hash = ?", hash).Delete(&model.FileHashCopy{}).Error
 	}
 	var copies []model.FileHashCopy
-	model.DB.Where("hash = ?", hash).Find(&copies)
-	alive := copies[:0]
-	for _, c := range copies {
-		if fi, err := os.Stat(c.PhysPath); err == nil && fi.Mode().IsRegular() && fi.Size() == fh.Size {
-			alive = append(alive, c)
-			continue
-		}
-		model.DB.Delete(&model.FileHashCopy{}, c.ID)
+	if err := model.DB.Where("hash = ?", hash).Find(&copies).Error; err != nil {
+		return err
 	}
-	if len(alive) == 0 {
-		model.DB.Delete(&model.FileHash{}, fh.ID)
+	var dangling []uint
+	for _, c := range copies {
+		if fi, err := os.Stat(c.PhysPath); err != nil || !fi.Mode().IsRegular() || fi.Size() != fh.Size {
+			dangling = append(dangling, c.ID)
+		}
+	}
+	if len(dangling) > 0 {
+		if err := model.DB.Where("id IN ?", dangling).Delete(&model.FileHashCopy{}).Error; err != nil {
+			return err
+		}
+	}
+	// RefCount 用子查询在 DB 侧原子重算：并发登记/删除同一内容时，
+	// 「先查存活副本再写回」会互相覆盖成过期值（例如 50 路并发登记后只剩 30）
+	if err := model.DB.Model(&model.FileHash{}).Where("id = ?", fh.ID).
+		UpdateColumn("ref_count",
+			gorm.Expr("(SELECT COUNT(*) FROM file_hash_copies WHERE file_hash_copies.hash = ?)", hash)).Error; err != nil {
+		return err
+	}
+	var aliveCnt int64
+	if err := model.DB.Model(&model.FileHashCopy{}).Where("hash = ?", hash).Count(&aliveCnt).Error; err != nil {
+		return err
+	}
+	if aliveCnt == 0 {
+		return model.DB.Delete(&model.FileHash{}, fh.ID).Error
+	}
+	if fi, err := os.Stat(fh.SourcePath); err != nil || !fi.Mode().IsRegular() || fi.Size() != fh.Size {
+		var next model.FileHashCopy
+		if e := model.DB.Where("hash = ?", hash).Order("id").First(&next).Error; e == nil && next.PhysPath != "" {
+			return model.DB.Model(&model.FileHash{}).Where("id = ?", fh.ID).
+				UpdateColumn("source_path", next.PhysPath).Error
+		}
+	}
+	return nil
+}
+
+// logLedgerErr 台账写失败统一出口：不阻断主流程（物理文件已落盘），
+// 但必须留痕——静默吞错会让 RefCount 与物理副本长期漂移。
+func logLedgerErr(op, hash string, err error) {
+	if err == nil {
 		return
 	}
-	model.DB.Model(&fh).UpdateColumn("ref_count", int64(len(alive)))
-	if fi, err := os.Stat(fh.SourcePath); err != nil || !fi.Mode().IsRegular() || fi.Size() != fh.Size {
-		model.DB.Model(&fh).UpdateColumn("source_path", alive[0].PhysPath)
-	}
+	log.Printf("[秒传台账] %s 失败 hash=%s: %v", op, hash, err)
 }
 
 // HashOfPhys 按物理路径反查秒传账本，返回 sha256 hex。
@@ -240,18 +293,26 @@ func removeHashCopy(phys string) {
 	if err := model.DB.Where("phys_path = ?", phys).First(&c).Error; err != nil {
 		return
 	}
-	model.DB.Delete(&c)
+	if err := model.DB.Delete(&c).Error; err != nil {
+		logLedgerErr("删除副本记录", c.Hash, err)
+		return
+	}
 	// 被移除的恰是当前源时立即改指：物理删除可能尚未发生（先记账后 RemoveAll），
 	// 此刻 stat 仍会成功，不能依赖 reconcile 的"源失效"探测
 	var n int64
-	model.DB.Model(&model.FileHashCopy{}).Where("hash = ?", c.Hash).Count(&n)
+	if err := model.DB.Model(&model.FileHashCopy{}).Where("hash = ?", c.Hash).Count(&n).Error; err != nil {
+		logLedgerErr("统计副本", c.Hash, err)
+	}
 	if n > 0 {
 		var next model.FileHashCopy
-		model.DB.Where("hash = ?", c.Hash).Order("id").First(&next)
-		model.DB.Model(&model.FileHash{}).Where("hash = ? AND source_path = ?", c.Hash, phys).
-			UpdateColumn("source_path", next.PhysPath)
+		if err := model.DB.Where("hash = ?", c.Hash).Order("id").First(&next).Error; err == nil {
+			if err := model.DB.Model(&model.FileHash{}).Where("hash = ? AND source_path = ?", c.Hash, phys).
+				UpdateColumn("source_path", next.PhysPath).Error; err != nil {
+				logLedgerErr("改指源", c.Hash, err)
+			}
+		}
 	}
-	reconcileHash(c.Hash)
+	logLedgerErr("对账", c.Hash, reconcileHash(c.Hash))
 }
 
 // HashPathRenamed 物理文件（或目录）改名/移动后调用（含移入回收站、版本保存）：
@@ -261,33 +322,56 @@ func HashPathRenamed(oldPhys, newPhys string) {
 		return
 	}
 	if info, err := os.Stat(newPhys); err == nil && info.IsDir() {
+		// 目录：先把全部副本行迁到新路径，最后再逐个 hash 对账。
+		// 不能"边迁边对账"——reconcileHash 按 stat 判定悬空副本，而目录改名后旧路径已整体
+		// 不存在，此时尚未迁移的行会被误判为悬空而删掉（同内容多副本的目录搬一次就丢行）。
+		hashes := map[string]bool{}
 		_ = filepath.WalkDir(newPhys, func(p string, d os.DirEntry, err error) error {
 			if err != nil || d == nil || d.IsDir() {
 				return nil
 			}
-			renameHashCopy(oldPhys+strings.TrimPrefix(p, newPhys), p)
+			if h := renameHashCopyNoReconcile(oldPhys+strings.TrimPrefix(p, newPhys), p); h != "" {
+				hashes[h] = true
+			}
 			return nil
 		})
+		for h := range hashes {
+			logLedgerErr("对账", h, reconcileHash(h))
+		}
 		return
 	}
 	renameHashCopy(oldPhys, newPhys)
 }
 
 func renameHashCopy(oldPhys, newPhys string) {
+	if h := renameHashCopyNoReconcile(oldPhys, newPhys); h != "" {
+		logLedgerErr("对账", h, reconcileHash(h))
+	}
+}
+
+// renameHashCopyNoReconcile 迁移单条副本记录（含改指源），返回其 hash；无该副本行时返回空串。
+// 不做对账：目录批量迁移必须全部迁完再对账（见 HashPathRenamed）
+func renameHashCopyNoReconcile(oldPhys, newPhys string) string {
 	var c model.FileHashCopy
 	if err := model.DB.Where("phys_path = ?", oldPhys).First(&c).Error; err != nil {
-		return
+		return ""
 	}
 	var n int64
-	model.DB.Model(&model.FileHashCopy{}).Where("phys_path = ?", newPhys).Count(&n)
-	if n > 0 {
-		model.DB.Delete(&c) // 目的地已有同内容记录（防御）
-	} else {
-		model.DB.Model(&c).Update("phys_path", newPhys)
+	if err := model.DB.Model(&model.FileHashCopy{}).Where("phys_path = ?", newPhys).Count(&n).Error; err != nil {
+		logLedgerErr("统计目标副本", c.Hash, err)
 	}
-	model.DB.Model(&model.FileHash{}).Where("hash = ? AND source_path = ?", c.Hash, oldPhys).
-		UpdateColumn("source_path", newPhys)
-	reconcileHash(c.Hash)
+	if n > 0 {
+		if err := model.DB.Delete(&c).Error; err != nil { // 目的地已有同内容记录（防御）
+			logLedgerErr("删除重复副本", c.Hash, err)
+		}
+	} else if err := model.DB.Model(&c).Update("phys_path", newPhys).Error; err != nil {
+		logLedgerErr("更新副本路径", c.Hash, err)
+	}
+	if err := model.DB.Model(&model.FileHash{}).Where("hash = ? AND source_path = ?", c.Hash, oldPhys).
+		UpdateColumn("source_path", newPhys).Error; err != nil {
+		logLedgerErr("改指源", c.Hash, err)
+	}
+	return c.Hash
 }
 
 // HashPathCopied 复制产生新物理副本后调用（目录复制遍历新树，按旧路径查哈希）
@@ -313,8 +397,10 @@ func addHashCopyFrom(oldPhys, newPhys string) {
 	if err := model.DB.Where("phys_path = ?", oldPhys).First(&c).Error; err != nil {
 		return // 源内容未登记过索引，不补登记
 	}
-	upsertHashCopy(c.Hash, newPhys)
-	reconcileHash(c.Hash)
+	if err := upsertHashCopy(c.Hash, newPhys); err != nil {
+		logLedgerErr("登记副本", c.Hash, err)
+	}
+	logLedgerErr("对账", c.Hash, reconcileHash(c.Hash))
 }
 
 // ---- 分块上传（断点续传） ----
@@ -323,7 +409,7 @@ func (s *Service) chunkPath(sid string, idx int) string {
 	return filepath.Join(s.TmpDir, sid, fmt.Sprintf("%06d.part", idx))
 }
 
-func (s *Service) InitUpload(uid uint, policyID uint, parent, name string, size int64, chunkSize int64, hash string) (*model.UploadSession, []int, bool, error) {
+func (s *Service) InitUpload(uid, ownerID uint, policyID uint, parent, name string, size int64, chunkSize int64, hash string) (*model.UploadSession, []int, bool, error) {
 	if chunkSize <= 0 {
 		chunkSize = 8 << 20
 	}
@@ -335,10 +421,12 @@ func (s *Service) InitUpload(uid uint, policyID uint, parent, name string, size 
 	if fh := s.lookupHash(hash, size); fh != nil {
 		return nil, nil, true, nil
 	}
-	// 续传：同用户同策略同目录同名同大小的活跃会话
+	// 续传：同用户同策略同目录同名同大小的活跃会话。
+	// 必须带上 owner_id：同一个 (用户, 策略, 路径, 文件名) 既可能是「传到自己盘」，
+	// 也可能是「传到共享创建者的盘」（路径是对方的命名空间），两者不能互相认领对方的会话。
 	var old model.UploadSession
-	q := model.DB.Where("user_id=? AND policy_id=? AND parent_path=? AND name=? AND size=? AND status=?",
-		uid, policyID, parent, name, size, "uploading")
+	q := model.DB.Where("user_id=? AND owner_id=? AND policy_id=? AND parent_path=? AND name=? AND size=? AND status=?",
+		uid, ownerID, policyID, parent, name, size, "uploading")
 	if hash != "" {
 		q = q.Where("hash=?", hash)
 	}
@@ -348,7 +436,7 @@ func (s *Service) InitUpload(uid uint, policyID uint, parent, name string, size 
 	sid := genID()
 	_ = os.MkdirAll(filepath.Join(s.TmpDir, sid), 0o755)
 	rc, _ := json.Marshal([]int{})
-	sess := &model.UploadSession{ID: sid, UserID: uid, PolicyID: policyID, ParentPath: parent, Name: name,
+	sess := &model.UploadSession{ID: sid, UserID: uid, OwnerID: ownerID, PolicyID: policyID, ParentPath: parent, Name: name,
 		Size: size, ChunkSize: chunkSize, TotalChunks: total, Hash: hash, Received: string(rc), Status: "uploading"}
 	if err := model.DB.Create(sess).Error; err != nil {
 		return nil, nil, false, err
@@ -385,11 +473,12 @@ func (s *Service) SaveChunk(sid string, idx int, r io.Reader) (int, error) {
 		_ = os.Remove(s.chunkPath(sid, idx))
 		return 0, errors.New("分片过大")
 	}
-	s.mu.Lock()
+	lock := s.chunkLock(sid)
+	lock.Lock()
+	defer lock.Unlock()
 	// 锁内重新读取最新 Received，避免并发上传同会话多个分片时基于过期值互相覆盖、丢失已上传分片记录
 	var fresh model.UploadSession
 	if err := model.DB.Select("received").First(&fresh, "id = ?", sid).Error; err != nil {
-		s.mu.Unlock()
 		return 0, fmt.Errorf("读取上传会话记录失败: %w", err)
 	}
 	received := fresh.ReceivedList()
@@ -407,12 +496,19 @@ func (s *Service) SaveChunk(sid string, idx int, r io.Reader) (int, error) {
 	rc, _ := json.Marshal(received)
 	if err := model.DB.Model(&model.UploadSession{}).Where("id = ?", sid).
 		Updates(map[string]interface{}{"received": string(rc), "updated_at": time.Now()}).Error; err != nil {
-		s.mu.Unlock()
 		return 0, fmt.Errorf("更新上传进度失败: %w", err)
 	}
-	s.mu.Unlock()
 	return len(received), nil
 }
+
+// chunkLock 取（或新建）某会话的分片记账锁
+func (s *Service) chunkLock(sid string) *sync.Mutex {
+	v, _ := s.chunkLocks.LoadOrStore(sid, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+// releaseChunkLock 会话进入终态后释放锁条目，避免 sync.Map 随会话数无限增长
+func (s *Service) releaseChunkLock(sid string) { s.chunkLocks.Delete(sid) }
 
 func (s *Service) CompleteUpload(sess *model.UploadSession, physResolver func(string) (string, error)) (*Entry, error) {
 	received := sess.ReceivedList()
@@ -481,9 +577,10 @@ func (s *Service) CompleteUpload(sess *model.UploadSession, physResolver func(st
 		_ = os.Remove(tmpOut)
 		return nil, err
 	}
-	s.RegisterHash(actualHash, written, physTarget)
+	logLedgerErr("登记上传索引", actualHash, RegisterHash(actualHash, written, physTarget))
 	model.DB.Model(sess).UpdateColumn("status", "completed")
 	_ = os.RemoveAll(filepath.Join(s.TmpDir, sess.ID))
+	s.releaseChunkLock(sess.ID) // 会话已终态，回收分片记账锁条目
 	fi, _ := os.Stat(physTarget)
 	e := &Entry{Name: sess.Name, IsDir: false, Size: written, Ext: extOf(sess.Name)}
 	if fi != nil {
@@ -502,6 +599,7 @@ func (s *Service) AbortUpload(sid string, uid uint) error {
 	}
 	model.DB.Model(&sess).UpdateColumn("status", "aborted")
 	_ = os.RemoveAll(filepath.Join(s.TmpDir, sess.ID))
+	s.releaseChunkLock(sess.ID) // 会话已终态，回收分片记账锁条目
 	// 顺带清理中断合并可能残留的 .assembling（尽力而为，不阻塞取消）
 	s.removeAssembling(&sess, uid)
 	return nil

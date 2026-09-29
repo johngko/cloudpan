@@ -242,6 +242,7 @@ func (h *AdminHandler) GroupSave(c *gin.Context) {
 			return
 		}
 		middleware.Audit(c, "admin", "保存用户组 "+in.Name)
+		middleware.InvalidateGroupCache()
 		dto.OK(c, groupOut{UserGroup: g, AppPerms: model.ParseAppPerms(perms)})
 		return
 	}
@@ -260,6 +261,7 @@ func (h *AdminHandler) GroupSave(c *gin.Context) {
 		return
 	}
 	model.InvalidateAppPermCache(in.ID)
+	middleware.InvalidateGroupCache()
 	middleware.Audit(c, "admin", "保存用户组 "+in.Name)
 	var g model.UserGroup
 	model.DB.First(&g, in.ID)
@@ -277,6 +279,7 @@ func (h *AdminHandler) GroupDelete(c *gin.Context) {
 	_, _ = fmt.Sscanf(c.Param("id"), "%d", &gid)
 	model.DB.Delete(&model.UserGroup{}, c.Param("id"))
 	model.InvalidateAppPermCache(gid)
+	middleware.InvalidateGroupCache()
 	dto.OK(c, nil)
 }
 
@@ -446,11 +449,32 @@ func (h *AdminHandler) SettingsGet(c *gin.Context) {
 	dto.OK(c, GetSiteSettings())
 }
 
+// siteSettingKeys 允许通过管理接口写入的站点设置键白名单。
+// 拒绝未知键：既避免写入任意键污染后续逻辑，也防止覆盖 visitor_group_synced 等内部标记。
+var siteSettingKeys = map[string]bool{
+	"site_name": true, "announcement": true, "site_theme": true, "public_url": true,
+	"register_open": true, "register_invite_code": true, "guest_login": true,
+	"demo_share": true, "standalone_apps": true, "wallpaper_catalog": true,
+	"video_transcode": true, "webdav_enabled": true,
+	"onlyoffice_url": true, "onlyoffice_jwt": true, "onlyoffice_dses": true,
+	"notify_webhook_url": true, "notify_webhook_token": true,
+	"notify_email_enabled": true, "notify_email_host": true, "notify_email_port": true,
+	"notify_email_user": true, "notify_email_pass": true, "notify_email_from": true, "notify_email_to": true,
+	"update_url": true, "update_version": true, "update_repo": true, "update_proxy": true,
+}
+
 func (h *AdminHandler) SettingsSet(c *gin.Context) {
 	var in map[string]string
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
 		return
+	}
+	// 先整批校验再落库：命中未知键时不做任何写入，避免半批生效
+	for k := range in {
+		if !siteSettingKeys[k] {
+			dto.Fail(c, 400, "不支持的设置项: "+k)
+			return
+		}
 	}
 	for k, v := range in {
 		// 敏感设置（SMTP 授权码等）落库前密封；历史密文原样透传（前缀防二次加密）
@@ -460,6 +484,7 @@ func (h *AdminHandler) SettingsSet(c *gin.Context) {
 		model.DB.Save(&model.SiteSetting{Key: k, Value: v})
 	}
 	middleware.Audit(c, "admin", "更新站点设置")
+	InvalidateSiteSettings() // 立即失效读缓存，保证返回与下次读取都是新值
 	dto.OK(c, GetSiteSettings())
 }
 
