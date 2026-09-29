@@ -1053,3 +1053,54 @@ set: (m) => { if (m === 'direct' && !settings.value.update_url) settings.value.u
 
 - 遍历为同步执行：本地盘 663 个文件瞬时返回；若将来挂载巨型云端盘，建议改为后台任务 + 进度轮询。
 - 目前一次分析一个盘（与既有接口约定一致），可扩展为"全部盘合计"。
+
+## 33. 2026-09-29 新增：手机适配（保留桌面 + 窗口全屏化 + 可安装 PWA，移动回归 22/22 + 桌面防误伤 10/10 ✅）
+
+### 33.1 背景与决策
+
+手机（390×844）打开本站原本基本不可用：全站 `@media` 仅 9 处、**断点最小到 620px**，没有手机档；核心交互是鼠标专用。实测三个致命点：资源管理器侧栏 210px + 预览窗格 244px = 454px > 屏宽；两条工具栏 12+ 按钮被 `overflow:hidden` 裁掉；win12 浮动任务栏无溢出处理、固定宽面板 350~380px、天气卡 300px 占屏 77%。
+
+**已具备、未重做的部分**（避免无谓改动）：`index.html` 的 viewport 早已配好（含 `viewport-fit=cover`）；窗口拖拽/缩放**本来就是 Pointer Events**；窗口尺寸已有钳制且 `isMaximizedArea()` 已存在；登录页在窄屏正常。
+
+产品决策（经与用户确认）：**保留桌面与三套主题，手机上应用窗口打开即全屏**；**做成可安装 PWA**。
+
+### 33.2 实施（一个开关 + 一份手机样式表）
+
+- 新增 [viewport.ts](file:///www/wwwhdd/cloudpan/web/src/stores/viewport.ts) + [mobile.ts](file:///www/wwwhdd/cloudpan/web/src/utils/mobile.ts)：`narrow`（`max-width:640px`）、`coarse`（`pointer:coarse`）、用户偏好 `auto|on|off`；统一同步到 `<html data-mobile>` / `data-touch`，作为唯一事实来源（CSS 与命令式代码都读它）。纯逻辑 `resolveMobile`/`parseOverride` 抽出并单测（坏 KV 一律回退 auto）。
+- 新增 [mobile.css](file:///www/wwwhdd/cloudpan/web/src/assets/mobile.css)：**所有规则限定在 `html[data-mobile]` 下**，在 `main.ts` 中排在 `./themes/registry`（三主题 CSS 的静态加载点）之后引入 → 桌面端零影响，也避免把同一批规则在三套主题里各写一遍。
+- 窗口全屏化：`windows.ts` 开窗时窄屏直接取 `isMaximizedArea()` 并置 `maximized`；`toggleMax` 窄屏不退化成浮动窗（拖拽已禁用，否则会变成移不动的残窗）；`useWindowChrome.ts` 窄屏早退禁拖拽/缩放，最小宽度由 `360` 改为 `min(360, innerWidth-24)` 避免顶出屏幕。
+- 触控尺寸与安全区：标题栏 38→48px、控制钮 ≥44px；`100dvh`；`env(safe-area-inset-*)`；隐藏缩放句柄。
+- 桌面图标与驱动器卡片：鼠标保持**双击打开**，手机布局下触屏**单击即打开**（按 `pointerType` 分流）。不补驱动器卡片这条，手机上打开资源管理器后会停在「此电脑」进不去任何盘。
+
+### 33.3 资源管理器触屏交互（风险最高，单列）
+
+- 侧栏（210px）→ 覆盖式抽屉（`translateX(-100%)`），工具栏新增 ☰ 开关，点其中任一项自动收起；工具栏改为可换行，按钮不再被裁掉。
+- 条目交互按 `pointerType` 分流：**鼠标路径完全不变**（双击打开、右键菜单、框选、拖拽）；触屏为**单击选中 → 再点已选中项打开 → 长按 500ms 出右键菜单**（位移 >8px 取消，多选时不弹以保住批量语义）。
+- 过程中修掉一个真实缺陷：初版在 `pointerdown` 就执行"再点即打开"，导致**长按已选中项想调菜单时会先被打开**；改为只记录意图、`pointerup` 时才真正打开，长按触发即取消。
+- 触屏不做框选与拖拽（用已有复选框多选、剪切/粘贴替代），预览窗格与「大小/修改时间」列在窄屏隐藏。
+
+### 33.4 PWA
+
+`public/manifest.json`（`display:standalone`、`start_url:/#/desktop`、192/512 + maskable）+ `icons/pwa/{180,192,512,maskable-512}.png` + `index.html` 的 manifest / apple-touch-icon / theme-color / apple-mobile-web-app-* 元信息。**不加 service worker**：数据全在线、离线价值低，不加就没有"更新后卡在旧缓存"的风险。
+
+两个实测踩到的点：① **图标必须用 Chromium 生成**——`logo.svg` 主体是渐变填充，ImageMagick 内置 SVG 渲染器不解析渐变与滤镜，实测整图渲染成纯红；脚本 `scripts/gen-pwa-icons.mjs` 改为无头 Chromium（可输出透明背景）。② manifest 若用 `.webmanifest` 扩展名，本项目静态服务会以 `text/plain` 返回（可能被浏览器忽略），改为 `.json` 即得 `application/json`，无需改后端。
+
+### 33.5 验证
+
+| 项 | 结果 |
+| --- | --- |
+| `vue-tsc`（基础 + strict）/ `eslint` | 0 error（strict 抓出触屏分支里 `nextSelection` 可能返回 null，已补防御） |
+| `vitest` | 162/162（新增 mobile 纯逻辑 5 例） |
+| `go vet ./...` | 静默 |
+| **移动回归**（390×844，isMobile+hasTouch+3x，新建 `mobile-check.mjs`） | **22/22**：登录页/桌面/资源管理器均无横向溢出、`data-mobile`+`data-touch` 生效、天气卡隐藏、单击图标即开应用、窗口铺满（w=390）、侧栏默认收起→☰ 滑出、单击选中、长按出菜单、再点进入子目录、PWA 三资源 200、360 与 820 两档边界无溢出、0 页面错误 |
+| **桌面防误伤回归**（1440×900，新建 `desktop-regress.mjs`） | **10/10**：不挂 `data-mobile`、天气卡仍在、双击图标/驱动器卡片/条目、右键菜单、预览窗格、侧栏常驻、☰ 隐藏 |
+| 截图 | **t102**（登录）…**t108**（iPad 档），共 7 张 |
+| 生产 | `up:200`、mysql、`/manifest.json` → `application/json`、PWA 图标 `image/png`、`/api/site/public` `code:0` |
+
+### 33.6 回滚
+
+`data-mobile` 可由「设置 → 外观」的布局偏好一键关闭（`mobile_layout`，存用户设置 KV，全用户可用），等于立即回到改动前的桌面行为。四批改动各自独立，Explorer 触屏那批可单独整体回退。
+
+### 33.7 未做
+
+手机专属外壳/独立路由、触屏拖拽与框选、service worker/离线、安装引导弹窗、UI 组件库——按方案明确不做；后端零改动。
