@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "typecheck:strict": "vue-tsc -p tsconfig.strict.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
@@ -33,9 +37,18 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@typescript-eslint/eslint-plugin": "^8.70.1",
+    "@typescript-eslint/parser": "^8.70.1",
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.5.1",
+    "eslint": "^10.11.0",
+    "eslint-plugin-vue": "^10.11.1",
     "typescript": "~5.6.3",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "^5.0.2",
+    "vue-tsc": "^3.3.11"
   },
   "allowScripts": {
     "esbuild@0.25.12": true,
