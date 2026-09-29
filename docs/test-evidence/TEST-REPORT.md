@@ -620,3 +620,383 @@ CloudPan 全部功能模块（登录与权限、桌面外壳、文件管理、�
 - **四批次脚本重跑：34 + 24 + 30 + 23 = 111/111 PASS**（2026-09-19 13:54 部署后，MySQL 生产库，`up:200`）。
 - 测试清理：C: 根 7 个测试文件（ui-picasa-test.png / ui-pdf-test.pdf / b1-tui-save-test.png / b2-epub-test.epub / b2-code-test.js / b2-svg-test.svg / b2-eml-test.eml）API 删除 → 回收站 purge（台账 `HashPathGone` 对账）→ 磁盘/回收站/版本目录零残留；KV 测试键 `app.music.kv_bridge_test` 已清空；/tmp 一次性脚本已删（回归脚本 `pw-batch0..3.js` 与夹具 `b2assets/` 保留，密码经环境变量注入不落盘）。
 - 未提交 git；生产真实文件/共享/配额零改动。
+
+---
+
+## 22. 2026-09-28 加测：共享盘分片上传 + 桌面图标拖拽排序（浏览器实测，t53–t60，8/8 ✅）
+
+**测试方式（与 21 章不同，本轮刻意不打生产）**：起一个隔离实例（`CP_DB=sqlite CP_DATA=/tmp/cp-smoke CP_PORT=18999`，自带前端 dist），用 `playwright-core` + 系统 Chromium 153 驱动真实浏览器；管理员密码取自该实例启动日志（随机生成），**只经环境变量注入、不落盘、不打生产库**。脚本 `/tmp/pw-batch4.mjs`（ESM；`/usr/bin/chromium`，无需下载浏览器）。
+
+### 22.1 P4.3 桌面图标拖拽排序（已实施项）验证
+
+- 登录后桌面渲染 12 个图标（管理员全量）→ 把第 1 个「此电脑」拖到第 5 个位置：**顺序改变、图标数量不变（12→12）**。
+- **刷新页面后顺序保持**：重载后前五位为「回收站 | 文件资源管理器 | 记事本 | 终端 | 此电脑」。
+- 客观佐证：用户设置 KV `desktop_icon_order` = `["recycle","explorer","notepad","terminal","thispc",…]` —— 「此电脑」确实由首位落到第五位，与拖拽一致（此前只能靠单测覆盖纯逻辑，没法证明"拖了真的会存"）。
+- 截图 `t54-win12-desktop.png`（拖前）、`t55-win12-icon-dragged.png`（拖后）、`t56-win12-icon-order-persisted.png`（重载后）。
+
+### 22.2 P4.1 共享盘「分片」上传（本轮新功能）验证
+
+- 夹具：创建者 `owner1`（配额 200MB）建 `/sh` 并开 rw/所有人共享；上传设置固定 **分片 4MB**（10MB 文件 = 3 片，确保真走多分片，而不是被秒传或单分片蒙混）。
+- UI 路径：桌面双击「文件资源管理器」→ 侧栏「来自他人的共享」出现该共享 → 点击打开共享窗口（显示「可写共享」）→ 点「上传」选择 10MB 文件。
+- 上传完成后**文件自动出现在共享列表**（这条同时验证了新增的 `cp-refresh-shared` 主动刷新生效），截图 `t57-explorer-open.png` / `t58-shared-browser-before.png` / `t59-shared-upload-running.png` / `t60-shared-upload-done.png`。
+- **服务端对账（UI 动作 → 后端真实效果）**：
+  - 会话 `upload_sessions`：`user_id=1`（上传者 admin）、**`owner_id=3`（落盘属主 = 共享创建者 owner1）**、`total_chunks=3`、`status=completed` —— 证明"按上传者鉴权、按创建者落盘"这条分离真的生效。
+  - 物理文件落在 **创建者目录**：`/tmp/cp-browser-store/owner1/sh/browser-10mb.bin`。
+  - 配额：`owner1.used_bytes = 10485760`（恰等于文件大小），上传者 admin 仍为 `0`。
+  - 台账：`file_hash_copies` 该内容指向创建者目录；**文件 sha256 与源文件一致**（10MB 无损坏）。
+
+### 22.3 清理
+
+- 隔离实例已停；`/tmp/cp-smoke*`、`/tmp/cp-browser-store`、`/tmp/browser-10mb.bin` 已删；密码文件不留存（改由环境变量注入）。
+- 生产库/生产文件零改动（本轮全程未连生产）。截图与本节为仅有的新增产物。
+
+## 23. 2026-09-28 加测：mac/deepin 全局搜索对齐 + deepin 任务栏命中修复（浏览器实测，t61–t66，17/17 ✅）
+
+### 23.1 背景与做法
+
+- 目标（P3.9 第一阶段）：让 mac/deepin 也有 win12 那样的**全局搜索**（应用 / 文件 / 网页 / 设置 / 按类型过滤）。
+- 做法：把 win12 搜索窗的全部逻辑**原样抽出**为 [useGlobalSearch.ts](file:///www/wwwhdd/cloudpan/web/src/shell/useGlobalSearch.ts)；[WinSearchWin.vue](file:///www/wwwhdd/cloudpan/web/src/themes/windows/WinSearchWin.vue) 改为调用它（**模板/CSS 一字未动**，只是不再重复一份逻辑）；再写主题中立的 [GlobalSearchPanel.vue](file:///www/wwwhdd/cloudpan/web/src/shell/GlobalSearchPanel.vue) 供 mac/deepin 用（语义 token + `AppIcon`，不碰 `w12-*` 与 win12 位图）。
+- 结果：**同一份搜索逻辑，三套主题三种外观**，没有第二份实现。
+
+### 23.2 三主题实机 17/17
+
+| 主题 | 入口 | 断言 |
+| --- | --- | --- |
+| win12（回归） | 任务栏搜索按钮 | 面板打开、搜「计算」出「计算器」、点面板外可关 |
+| macOS | 菜单栏右侧搜索（Spotlight 位置） | 面板打开、搜出结果、「设置」页签 5 条深链、「文件夹」页签列出浏览源、**文件图标 `img=0 / svg=2`（走通用 AppIcon，确认没用 win12 位图）**、点结果自动关面板并开窗 |
+| Deepin | 任务栏托盘左侧搜索 | 面板打开、搜出结果、Esc 关闭 |
+
+- 截图：`t61-win12-search.png`、`t62-mac-search.png`、`t63-mac-search-opened.png`、`t64-deepin-search.png`、`t65-deepin-search-closed.png`、`t66-mac-search-files.png`。
+- 脚本 `/tmp/pw-batch5.mjs`（隔离实例 18999 + 系统 Chromium），站点主题经 `PUT /api/admin/settings {site_theme}` 切换后刷新生效。
+
+### 23.3 顺带修复：deepin 任务栏「按钮点不动」
+
+- 现象：deepin 桌面在 1440 宽下，**「启动器」「网络测速」「传输」都点不动**。
+- 定位：用 `elementFromPoint` 探针发现 `.dde-tb-center`（`flex:1` + 居中）装着 31 个应用，**内容溢出盒子**后横向盖住左右两侧，托盘与启动器位置的命中元素全是溢出的 `.dd-app`。
+- 修复：[deepin.css](file:///www/wwwhdd/cloudpan/web/src/themes/deepin/deepin.css) 的 `.dde-tb-center` 加 `clip-path: inset(-140px 0 0 0)` —— 把绘制与命中裁回自身盒子、负上边距保留图标上方悬浮提示（未用 `overflow`，避免滚动条与提示被裁）。
+- 复测探针：启动器 / 搜索 / 网络测速 / 传输**全部命中自身元素**；`t64` 截图肉眼确认悬浮提示仍正常。
+
+### 23.4 工程校验与部署
+
+- `vue-tsc --noEmit`、`vue-tsc -p tsconfig.strict.json --noEmit`：0 error；`eslint src`：0 error（仅既有 warning）；`vitest run`：**97/97**。
+- `./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+- 本轮未改后端，故未复跑后端冒烟套件；隔离实例已停，`/tmp` 产物按惯例清理，生产库/文件零改动。
+
+## 24. 2026-09-28 加测：Explorer 大目录虚拟滚动（P2.6，浏览器实测，t67–t69，19/19 + 9/9 ✅）
+
+### 24.1 先量后改（为什么做这个）
+
+动手前先在隔离实例造了 300 / 800 / 3000 项目录，用系统 Chromium 实测（全部在页面内计时，排除 Playwright 的定位/滚动开销）：
+
+| 条目数 | 点选一次的成本 |
+| --- | --- |
+| 300 | ≈40ms（其中约 33ms 是等两帧的地板值，实际 ≈6ms） |
+| 3000 | ≈122~175ms |
+
+3000 项目录的**首屏渲染 ≈1244ms**。成本随条目数线性增长 —— 根因是 `v-for` 全量渲染 + 选中态一改就重刷全部条目。
+
+先试了零成本的 CSS 方案 `content-visibility: auto`：只拿回约 30%（首屏 1244→813ms、点选 175→125ms），且会让屏幕外条目的 `getBoundingClientRect` 失真（实测"可见条目数"统计从 49 变成 42），会危及框选命中 —— 遂放弃，改做真正的窗口化渲染。
+
+### 24.2 做法
+
+- 纯逻辑 `computeWindow()` 抽到 [virtualWindow.ts](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/virtualWindow.ts)，**12 例单测**覆盖边界：未开窗口化 / 未超阈值 / 行高或视口未测到 → 一律退回全量渲染（宁全渲染不留白）；滚动值超界钳制；「上占位 + 渲染高度 + 下占位 = 总高」。
+- Explorer 网格按「容器宽度算列数 + 固定行高」切片、列表按行切片，上下用**占位元素/占位行**撑住总高。
+- **只在条目数 > 300 时启用**：普通目录全量渲染，DOM 与样式与改动前一致。
+
+### 24.3 过程中踩到的坑（值得记下来）
+
+**占位高度不能用滚动容器自己的 padding。** 容器是 `box-sizing: border-box`，padding 一旦超过自身高度，元素的**实际高度会被撑到 padding 大小**——实测 `.file-grid` 的 `clientHeight` 从 453 被撑到 38792：于是它不再内部滚动，内容还会被外层 `overflow:hidden` 整个裁掉（表现为"大目录滚不动"）。改成「跨整行的占位元素」后 `clientHeight` 回到 453，滚动正常。
+
+### 24.4 结果
+
+| 指标（3000 项） | 改前 | 改后 |
+| --- | --- | --- |
+| 首屏渲染 | ≈1244ms | **194ms** |
+| 单次点选 | 122~175ms | **13ms**（列表行 7ms） |
+| 渲染条目数 | 3000 | **49** |
+| 滚动条总高 | — | 46356（与改前同量级） |
+
+### 24.5 交互回归 19/19
+
+- 窗口化正确性：`virtual` 类生效、只渲染可见行（49 项）、容器确实内部滚动（`client=453 < scrollHeight=46356`）。
+- **框选保真**：框选选中数 = 视口内相交条目数（14/14）—— 框选本就是视口坐标语义，只命中所见条目。
+- **Ctrl+A**：状态栏显示「已选中: 3000」，而 DOM 只有 49 项（选中集仍持有全部）。
+- 右键菜单、重命名对话框（可取消）、双击打开（多出一个窗口）全部照常。
+- 列表视图：窗口化生效、顶部只有下占位行、滚到中部上下占位行齐备、滚到底可见 `f02999.txt`；点选 7.1ms。
+- 排序后窗口重算正常。
+
+### 24.6 影响面 9/9
+
+- **300 项目录（未超阈值）与改动前完全一致**：无 `virtual` 类、无占位元素、条目高 88px、网格内边距 10px、300 项全量渲染。
+- 滚动无白屏：21 步等距滚到底，每步可见条目最少 30 个。
+- 三主题（win12 / macOS / Deepin）大目录均窗口化且可内部滚动，截图 `t69-vt-macos.png`、`t69-vt-deepin.png`。
+
+### 24.7 工程校验与部署
+
+- `vue-tsc`（基础 + strict）0 error、`eslint` 0 error（仅既有 warning）、`vitest` **109/109**（新增 12 例）。
+- `./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+- 本轮未改后端，故未复跑后端冒烟套件；隔离实例已停，`/tmp` 产物按惯例清理，生产库/文件零改动。
+
+## 25. 2026-09-28 加测：P2.6 收尾 —— 轮询降载 + 搜索骨架/高亮（浏览器实测，t70，9/9 ✅）
+
+### 25.1 轮询只查可视/选中项
+
+- 改前：`pollEditing()` 每 30s 把**当前目录全部 Office 文件**整批上报 `/office/status-batch` —— 万级目录 = 万级条目 POST。
+- 改后：只查「当前渲染窗口（未窗口化时=全量）+ 选中项」去重后的集合；结果**按项合并**（窗口外条目保留旧徽章，滚动时徽章不忽隐忽现），滚动停下 300ms 防抖补查一次。
+- 实测（拦截请求体核对）：**3000 个 .docx 目录 → 请求条目 3000 → 63 条，逐条核对全部落在当前渲染窗口内（越界 0）**；50 项小目录窗口=全量（50 条），行为与改前一致。
+
+### 25.2 搜索「搜索中」骨架 + 命中高亮
+
+- 骨架延迟 150ms 才出现（本地搜索常几十毫秒返回，立刻显示会闪一下），盖在旧结果上避免「没反应」的错觉，结束自动消失。
+- 命中高亮把文件名切成片段、渲染成 `<mark>`；**不用 `v-html`**（文件名是用户可控内容，拼 HTML 字符串 = 注入入口），切分逻辑抽成 [highlight.ts](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/highlight.ts)（14 例单测，含「片段拼接 === 原文」不变式）。
+- 实测：网络层把 `/fs/search` 放慢 400ms → 骨架出现、结果出来骨架消失；结果中 `<mark>` 高亮内容恰为关键词（`0042`），截图 `t70-search-highlight.png`。
+
+### 25.3 工程校验与部署
+
+- `vue-tsc`（基础 + strict）0 error、`eslint` 0 error（仅既有 warning）、`vitest` **123/123**（新增 14 例）。
+- `./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+- 未改后端，故未复跑后端冒烟套件；隔离实例已停，`/tmp` 产物按惯例清理，生产库/文件零改动。
+
+## 26. 2026-09-28 加测：P5.2 数据层消 any（strict 覆盖范围清零，实机烟测 9/9 ✅）
+
+### 26.1 范围与原则
+
+- 只清 `src/api/**` 与 `src/stores/**`（`tsconfig.strict.json` 覆盖范围），组件层不动。
+- **契约类型全部从后端源码取字段**（让 Explore 子代理逐个读 handler 的 `json` tag / `gin.H` 字面量，非猜测），避免「前端类型写对了、后端字段其实叫别的」这类更糟的错。
+
+### 26.2 主要改动
+
+- [http.ts](file:///www/wwwhdd/cloudpan/web/src/api/http.ts)：`api<T=any>` → `api<T=unknown>`，信封类型化为 `Envelope<T>`，拦截器/doRefresh 全面补型（`axios.isAxiosError` + `RetryConfig`）。
+- [modules.ts](file:///www/wwwhdd/cloudpan/web/src/api/modules.ts)：新增 30+ 契约接口（`NotifyItem`/`RecycleItem`/`SearchHit`/`UserShareItem`/`ShareItem`/`UploadInit`/管理端 `PageOut` 全家等）；`UploadInit` 用判别式联合并注释「布尔判别式不收窄，必须 `=== true`」。
+- stores：`notify`/`weather`/`transfer`/`appstate`/`session` 补型；`weather` 把 open-meteo 响应声明成接口（非 `any`）。
+- **保留的 4 处 `any` 都是刻意的、有注释**（`windows.props` 各应用自定义负载；`dialog.resolver` 异构 resolve 槽位逆变）。
+
+### 26.3 类型化顺带抓出 2 个真问题
+
+1. [useGlobalSearch.ts](file:///www/wwwhdd/cloudpan/web/src/shell/useGlobalSearch.ts) 里 `policyId` 被误写成 `string` —— 后端实为 `number`（统一改用 `SearchHit` 类型后自动暴露）。
+2. `validTheme` 守卫把 `unknown` 直接当 string 用 → 补 `typeof v === 'string'` 收窄。
+
+### 26.4 验证
+
+- `vue-tsc`（基础 + strict）0 error；`eslint` 0 error（仅既有 warning）；`vitest` **123/123**（http.spec 补了 `isAxiosError` 替身字段）。
+- **浏览器实机烟测 9/9**（隔离实例）：登录（请求头注入 + api 解包）→ 文件列表 → 二次导航 → 新建文件夹（mkdir 写接口）→ 天气卡出数据（weather 直连 open-meteo）→ 通知接口返回数组 → **坏令牌 401 → 清凭证跳登录**（跑的就是被重写的拦截器链路）→ 全程无页面错误。
+- 部署：`./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+
+## 27. 2026-09-28 加测：图标体系统一 + 小组件面板（P3.8 / P3.9，浏览器实测，t71–t74，20/20 ✅）
+
+### 27.1 P3.8 图标统一：先量清楚“骨折”在哪
+
+- 实测发现两处真问题：
+  1. **组件各自硬编码 `/icons/win12/**` 路径** —— [WinSearchWin.vue](file:///www/wwwhdd/cloudpan/web/src/themes/windows/WinSearchWin.vue) 里抄了一整套「扩展名 → 位图」映射，与 [fileIcons.ts](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/fileIcons.ts) 重复维护；
+  2. **win12 的原生登记表有缺口** —— `apps.ts` 用到 31 个应用图标，`AppIcon` 的 `WIN12_ICONS` 只登记了 11 个，其余静默回落成自绘 tile，与原生图标混排（这就是"同一主题内风格骨折"）。
+- 做法：
+  - WinSearchWin 删掉重复映射，改走 `fileIcons` + `AppIcon`（**文件类型→图标从此只有一份定义**，组件里不再出现 `/icons/` 路径）；
+  - `AppIcon` 的 win12 登记表补到 25 项，素材**全部取仓库内已有文件并逐一目视核对**（先做了一张样张把候选素材渲染出来看，再决定映射，避免张冠李戴）；同时显式注释列出**刻意不登记**的名字及原因。
+- 效果：win12 桌面 12 个图标的原生素材 **6 → 10**，仅「在线PS / CAD 看图」无素材保留自绘 tile。
+
+### 27.2 P3.9 小组件面板
+
+- 新增主题中立 [WidgetsPanel.vue](file:///www/wwwhdd/cloudpan/web/src/shell/WidgetsPanel.vue)（Win11 式深底 + 亮卡片）。
+- **时钟/日历/天气三张卡直接复用 `themes/windows/widgets/*`**：一条 `import` 解决，没有第二套实现；面板另配「存储空间 / 传输任务 / 收藏」三张卡。
+- 复用关键：卡片的内部样式在各自文件里（scoped），硬编码浅色 —— 所以面板给亮色卡面（`rgba(255,255,255,.82)`），这正是 mac/deepin 上「暗底亮卡」的原生观感。
+- **没有改 win12 的 `WinWidgets`**：卡片外观规则由新面板自带一份（子组件根元素带父组件 scope，`.wg-card` 因而同时作用于复用卡与自建卡），避免动到已经工作的 win12 面板。
+- 入口：mac 菜单栏「小组件」、deepin 托盘「小组件」；Esc 与点遮罩均可关闭。
+
+### 27.3 实机验证 20/20
+
+- **图标**：win12 桌面 12 个图标逐个数 —— 回收站=`apps/explorer/rb.png`（**注**：该素材仅 20×20、在桌面 44px 下模糊，已于 2026-09-29 换为矢量 `apps/explorer/rb.svg`，见第 31 章）、浏览器=`edge.svg`、任务中心=`taskmgr.png`、图片编辑器=`files/img.png`、此电脑/文件资源管理器等维持原生；win12 全局搜索搜「季度报告」命中 `files/word.png`（走统一映射后仍是原生素材）；**mac/deepin 桌面 `img` 数 = 0**（确认没把 win12 位图漏进其他主题）。截图 `t71`/`t72`。
+- **小组件**：mac 菜单栏与 deepin 托盘均可打开；`wg-clock`/`wg-cal`/`wg-wx` 三张复用卡 + 存储空间/传输任务/收藏三张自建卡齐备，存储用量条正常；Esc、遮罩两种关闭方式都验证；**win12 自己的小组件面板回归通过**（证明没有被改坏）。截图 `t73`/`t74`。
+- 全程无未捕获页面错误。
+
+### 27.4 工程校验与部署
+
+- `vue-tsc`（基础 + strict）0 error、`eslint` 0 error（仅既有 warning）、`vitest` **123/123**。
+- `./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+- 未改后端；隔离实例已停，`/tmp` 产物按惯例清理，生产库/文件零改动。
+
+## 28. 2026-09-28 加测：死代码/死注释清理 + 配额判定式收口（P5.3，后端冒烟 177/177 ✅）
+
+### 28.1 死注释
+
+- [router.go](file:///www/wwwhdd/cloudpan/server/internal/handler/router.go)：「海报资源库管理（管理员）…」两行注释下面**已经没有任何路由**（海报应用下线时路由删了、注释留下）→ 删除。
+- [security.go](file:///www/wwwhdd/cloudpan/server/internal/middleware/security.go)：CSP 注释仍写 vendor 页面含 `poster`，而 `/vendor/poster` 已不存在、`frameableVendorPath` 里也没有它 → 去掉该词（CSP 规则本身没动）。
+- [usershare.go](file:///www/wwwhdd/cloudpan/server/internal/handler/usershare.go)：注释里「非管理员即使持有海报读权限…」用的已下线概念 → 改为「非管理员一律不能把内置库共享给他人」。
+- **边界**：`builtin`（内置资源库，如 T:）是**活概念**（`model` 里有该策略类型，admin/fs/share/dlink 都在用），本次只清「海报」死概念，未触碰 builtin 逻辑。
+
+### 28.2 占位导入（5 处）
+
+`tasks.go` 的 `var _ = context.Background`/`var _ = time.Now`、`util.go` 的 `var _ = time.Now`、`webdav.go` 的 `var _ = path.Join` 全部删除。
+
+其中 `context`（tasks.go）与 `path`（webdav.go）**只被占位行引用**，故连 import 一起删 —— 顺带验证了「占位行确实是在吊住无用导入」这一判断（删完 compile 立刻报 unused，说明该判断成立）。
+
+### 28.3 配额判定式收口（本项是重构，非纯清理）
+
+- 现象：`effectiveQuotaBytes` 之上的「是否超限」判定在 **6 处各抄一遍** —— `checkQuota`、上传预检（upload.go）、离线下载与 BT（bt.go / tasks.go）、压缩产物（tasks.go）、解压产物（tasks.go）。
+- 改法：抽出唯一判定函数 `quotaExceeded(u, g, add)`，保留「无增量（或负增量）直接放行」语义；6 处调用点只保留各自的**文案/通知**。收口后全仓库该判定式只剩 1 处。
+- 安全性：逐处比对过判定语义完全一致；差异只在各站点自己的 403/错误文案与 `NotifyQuotaExceeded`，均已保留。
+
+### 28.4 验证
+
+- `go build ./...` 与 `go vet ./...` 全静默（0 warning）；Go 源码内 `grep "var _ = \|海报"` 无结果。
+- **五套后端冒烟 177/177**（隔离实例、每套前重启）：
+
+| 套件 | 结果 | 与本次改动的关联 |
+| --- | --- | --- |
+| cp-smoke3 | 52/52 | 上传/秒传/回收站/压缩解压/转存（含解压路径） |
+| cp-smoke5 | 50/50 | 台账不变式 + 归档产物入账（压缩产物预检路径） |
+| cp-smoke4 | 35/35 | **共享盘配额专项：quotaMB=1 用户上传 2MB 被 403 拒** —— 直接覆盖本次改的上传预检分支 |
+| cp-smoke6 | 20/20 | 共享盘写入台账 |
+| cp-smoke7 | 20/20 | 共享盘分片（含配额失败回滚） |
+
+- 部署：`go build -ldflags … -o cloudpan` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+- 隔离实例已停，`/tmp` 产物按惯例清理，生产库/文件零改动。
+
+## 29. 2026-09-28 加测：Explorer 巨型组件拆分第一批（P5.1 菜单生成器 + 条目视图组件，vitest 140/140 + 浏览器 57/57 + 菜单专项 7/7 ✅）
+
+> 背景说明：用户在听完「大文件拆分属于内部结构重构、无用户可见收益、有一定回归风险」的大白话解释后，明确选择执行。执行方式为**先补自动测试再搬家、每步独立验证**。
+
+### 29.1 改动内容
+
+- **右键菜单生成器**（新增 [menus.ts](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/menus.ts) 282 行 + [menus.spec.ts](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/menus.spec.ts) 184 行 17 例）：
+  - Explorer.vue 内 10 处 `ctx.show` 的菜单**数组构建**全部抽成纯函数：`newEntries`（新建子菜单，工具栏与空白右键共用）、`blankMenu`（空白右键：未开盘/共享盘/普通盘三分支）、`itemMenu`（条目右键：共享盘/多选/目录/文件四分支）、`policyMenu`（盘卡片右键）、`isExtractable`（解压资格判定）。
+  - 菜单形状逐项与旧代码对齐（label/icon/checked/danger/disabled/children、分享 share vs share2、收藏 star/starFill、解压 zip+tar 系判定、游客隐藏收藏、组禁归档整体隐藏等）。
+- **条目视图组件**（新增 [FileGrid.vue](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/FileGrid.vue) 72 行 / [FileList.vue](file:///www/wwwhdd/cloudpan/web/src/apps/explorer/FileList.vue) 67 行）：
+  - 模板中两段最长的条目循环（网格 171–186 / 表格行 187–220）下沉为**无状态子组件**：props 注入 `items/selSet/editing` 与解析器（图标/缩略图/高亮/格式化），emits 六类事件（down/open/ctx/drag/drop/check）。
+  - **容器 ref、滚动监听、占位行、橡皮筋框选、拖拽落点逻辑全部留在 Explorer 不动**——子组件只渲染切片条目，DOM 结构与改动前逐节点一致（`data-path`、`draggable`、复选框 stop 修饰等原样保留）。
+  - **scoped 样式随条目迁移**：Explorer 是 `scoped`，跨组件选择器够不着子组件内部——角标/复选框/编辑徽章/缩略图/高亮 mark/窗口化行高（`.file-grid.virtual .file-item{height:104px}`、`.file-list.virtual tbody tr{height:34px}` 等）已迁入对应子组件；`base.css` 全局基础布局与 Explorer 保留的容器规则不受影响。
+- `Explorer.vue` 2554 → **2411 行**。
+
+### 29.2 验证
+
+| 层 | 结果 |
+| --- | --- |
+| `vue-tsc`（基础 + strict） | 0 error |
+| `eslint` | 0 error（仅既有 1 个 `catch(e)` 未用 warning，非本次引入） |
+| `vitest` 全量 | **140/140**（原 123 + menus 新增 17） |
+| 浏览器回归（隔离实例） | **57/57**：vt2 大文件夹窗口化 19/19、vt3 外观/影响面（win12/macos/deepin）9/9、p38p39 图标+小组件 20/20、p26 轮询/搜索 9/9 |
+| 菜单实机专项（本次新增 [menu-check.mjs]） | **7/7**：空白菜单（含离线下载显隐按组权限）、新建子菜单（创意文档门控）、文件右键（打开方式/提取直链/危险色删除）、盘卡片右键（普通用户无管理存储）；截图 **t75–t78** |
+
+- 菜单专项中条目菜单曾误触弹出（脚本点击位置落在文件上），其形状（打开/复制路径/下载 (zip)/分享/共享…/收藏/剪切/复制/粘贴到内部/重命名/压缩打包/删除/属性）恰好完整验证了目录右键分支。
+- **测试基建修正**（随本次发现）：vt2「滚到底」断言由硬编码旧数据文件名（`f02999.txt`）改为数据集无关的末尾标记文件（`zz-last.txt`）；vt3 `setTheme` 由 owner1 会话 token（对 `/api/admin/settings` 401 且静默失败）修正为管理员 token。
+- 部署：`./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0`。
+- 隔离实例与造数目录（/big 3000 项、/mid800、/small300、/docs3000、/small50 等）位于 `/tmp` 冒烟实例，不影响生产数据。
+- **后续**：`AdminConsole.vue`（1475 行）按页签拆分为独立任务，本轮未动。
+
+## 30. 2026-09-28 加测：AdminConsole 按页签拆分（P5.1 第三批，vitest 154/154 + 管理台浏览器回归 57/57 ✅）
+
+### 30.1 改动内容
+
+`AdminConsole.vue` **1479 → 75 行**，拆为 `web/src/apps/admin/` 下的 16 个组件 + 2 个模块 + 1 个样式表：
+
+| 文件 | 职责 |
+| --- | --- |
+| [format.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/format.ts) / [format.spec.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/format.spec.ts) | 纯展示逻辑（格式化/名称映射/权限摘要/配额三态换算）+ 14 例单测 |
+| [state.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/state.ts) | 状态单例：全部 ref + 加载器 + 轮询 + 变更操作（逐字搬移，逻辑零改写） |
+| 11 个 `*Tab.vue` | 各页签模板下沉（Dash/Users/Groups/Policies/Shares/UserShares/Tasks/Settings/Update/Logs/Notify） |
+| 5 个 `*Dialog.vue` | 用户/配额/权限/用户组/存储策略对话框 |
+| [console.css](file:///www/wwwhdd/cloudpan/web/src/apps/admin/console.css) | 原 `<style scoped>` 整段迁出为独立样式表 |
+
+关键设计取舍与理由：
+
+- **状态单例而非 props 管道**：`admin` 是单实例应用（`stores/apps.ts` 未标 `multi`），故 ref 定义在模块作用域并具名导出，子组件直接 import 同一批 ref。这避免了给 11 个页签 + 5 个对话框设计数十条 props/emits。
+- **scoped 样式必须改全局**：Vue 的 scoped 样式不作用于子组件内部元素；拆分后若保持 scoped，150 行通用规则（`ac-table`/`ac-card`/`ac-switch`/`perm-*`/`sys-*`）就得复制到每个子组件，必然漂移。这些选择器全部带唯一前缀且仅管理台使用，作为全局样式表不会外溢。
+- **顺带精确一处契约**：`adminApi.policies()` 原声明为 `Policy[]`，但该端点实际返回含 `options`（密钥）/`statusMsg` 的管理端 DTO → 新增 `AdminPolicyRow` 并修正返回类型（与「类型从后端源码提取」的既有约定一致）。
+- **strict 检查纳入 `apps/admin/**/*.ts`**：`state.ts` 与 `format.ts` 通过 `noUnusedLocals`/`noImplicitAny` 等严格检查。此过程**真实抓出 1 处类型缺陷**：`groupName(id: number)` 在配额对话框里收到 `quotaUser?.groupId`（可能 undefined）——非严格模式下 `strictNullChecks` 关闭故不报错，已改为 `id?: number`（行为不变：undefined 时返回 undefined 渲染空白，与拆分前一致）。
+
+### 30.2 验证
+
+| 层 | 结果 |
+| --- | --- |
+| `vue-tsc`（基础 + strict） | 0 error |
+| `eslint` | 0 error |
+| `vitest` 全量 | **154/154**（原 140 + admin/format 新增 14） |
+| 管理台浏览器回归（新建 [admin-check.mjs]，隔离实例） | **57/57** |
+| 部署 | `./build.sh` → `./start.sh restart` → `up:200`、日志「数据库类型: mysql」、`/api/site/public` `code:0` |
+
+浏览器回归覆盖（截图 **t79–t95**，共 17 张）：
+
+1. **11 个页签逐个实机渲染**：仪表盘（4 张统计卡 + 系统资源 CPU/内存/磁盘 + 存储概览列出本地存储 C）、用户管理（2 行数据、角色标签、用户组名解析、配额文案）、用户组（2 张卡片、默认标签、权限摘要）、存储策略（C: 本地存储、状态「正常」）、分享审计、共享审计（区别说明 + 搜索框）、任务监控（表头齐全）、站点设置（6 个分区 + DS 列表 + 转码）、系统更新（三分区 + 运行版本，t92）、审计日志（分页 + 导出，t94）、通知记录（分页 + 只看已清除，t95）。
+2. **5 个对话框逐个打开验证**：新建用户（3 输入框 + 角色/用户组下拉已填充 → 取消）、配额（三选一、admin 默认「跟随用户组」、显示当前用量）、权限（29 项三态网格、admin 默认全「继承」）、用户组编辑（29 项组级网格、数值字段回填）、挂载存储（类型下拉 4 项、本地目录字段、`ac-guide` 全局样式生效）。
+3. **一条真实写入链路**（验证 `v-model` 打进模块级 ref 后仍可保存）：读取站点名称 → 改为 `…-t` → 点「保存全部设置」→ toast「设置已保存」→ 直接查 `/api/admin/settings` 比对 **已落库** → 还原原名 → 再次落库校验。
+4. **系统更新来源切换**（含修复后的完整链路，见 30.4）、**通知记录「只看已清除」勾选**等交互分支。
+5. **全程 0 未捕获页面错误**（17 张截图随流程采集）。
+
+### 30.3 发现并修复（非本次引入，已回溯确认）
+
+**系统更新 → 更新来源的「直链下载」切换存在既有缺陷**：选择后下拉框显示「直链下载」，但面板仍渲染 GitHub 分支（「下载地址」输入框不出现）。**该缺陷已于同日修复，见 30.5。**
+
+- 实测数据：`settings.update_url = undefined`；选中后 `select.value === 'direct'`，但 `innerText` 仍含「GitHub 仓库」、不含「下载地址」。
+- 根因：[state.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/state.ts) 的 `updMode` 由「`update_url` 是否有值」反推，而 setter 在地址为空时执行 `settings.update_url = ''`（不改变真值）→ computed 仍求值为 `github` → Vue 判定绑定值未变、**不回写已被用户交互改动的 DOM**，形成「下拉与面板不一致」。
+- **回溯证据**：该逻辑在 `git HEAD:web/src/apps/AdminConsole.vue` 第 884–890 行逐字相同，故为重构前既有问题，本次拆分**未改变任何行为**。
+
+### 30.4 说明
+
+- 隔离冒烟实例（端口 18999，sqlite + `/tmp` 数据目录）已停止，造数目录已清理，生产库与生产文件零改动。
+- 回归脚本 `/tmp/pw/admin-check.mjs` 可重复执行：`cd /tmp/pw && ADMIN_PASS=<新密码> node admin-check.mjs`。
+
+### 30.5 修复：更新来源「直链下载」切换不生效（2026-09-29）
+
+**用户视角**：在「系统更新 → 更新来源」里选「直链下载」，期望出现「下载地址」输入框以填写二进制地址，但下拉变了、输入框不出现，导致直链模式无法配置。
+
+**根因**：[state.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/state.ts)（拆分前在 `AdminConsole.vue`）的 `updMode` 是由「`update_url` 是否有值」反推的 computed：
+
+```ts
+get: () => (settings.value.update_url ? 'direct' : 'github'),
+set: (m) => { if (m === 'direct' && !settings.value.update_url) settings.value.update_url = ''   // 空赋空，真值未变
+                 if (m === 'github') settings.value.update_url = '' }
+```
+
+`update_url` 原本为空时，选「直链」执行 `update_url = ''` —— 值没变 → computed 仍算出 `github` → Vue 判定绑定值未变、**不回写已被用户交互改动的 DOM**，于是出现「下拉显示直链、面板仍是仓库」的分裂状态。这与后端判定口径也一致（[update.go](file:///www/wwwhdd/cloudpan/server/internal/handler/update.go#L129-L141)：`update_url` 非空即直链），所以 `get()` 本身没错，问题在于**没有地方承载「用户已选择直链、但地址尚未填写」这个中间状态**。
+
+**修复**：引入一层「本地覆盖值」表示用户本次的手动选择，保存后清除、重新以落库数据为准。
+
+- [format.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/format.ts)：新增纯函数 `resolveUpdMode(updateUrl, override)`（覆盖优先，否则按数据推导）+ `UpdMode` 类型；补 3 例单测（空地址可显示直链、覆盖为 null 时回归数据驱动）。
+- [state.ts](file:///www/wwwhdd/cloudpan/web/src/apps/admin/state.ts)：`updMode` 改为「本地覆盖 ref + `resolveUpdMode`」；`saveUpdSource()` 成功后清空覆盖（保证保存后显示与后端实际生效模式一致）；切回仓库模式时仍清空直链地址（保留原语义）。
+
+**验证**：
+
+| 项 | 结果 |
+| --- | --- |
+| `vue-tsc`（基础 + strict）/ `eslint` | 0 error |
+| `vitest` 全量 | **157/157**（新增 resolveUpdMode 3 例） |
+| 浏览器实测完整链路 | 选「直链」→ **「下载地址」「版本号」立即出现**（tag=下载地址,版本号）→ 填地址 → 保存 → **查库确认 `update_url` 已落库** → 切走再切回 → **仍识别为直链模式**（数据驱动）→ 切回「GitHub 仓库」→ **仓库/代理字段恢复且直链地址被清空落库** |
+| 回归套件 | 管理台回归 **62/62**（原 57 条 + 新增 5 条直链链路断言） |
+| 截图 | t92（仓库模式）与 **t93（直链模式，可见两个新输入框）** |
+| 部署 | `./build.sh` → `./start.sh restart` → `up:200`、mysql、`code:0` |
+
+**备注**：回归脚本中检查面板分支的断言曾误用 `innerText` 包含「GitHub 仓库」——`<select>` 的 `<option>` 文本也在其中，导致恒为真。已改为按「设置行标签」（`.ac-set-lbl b`，即「下载地址」/「GitHub 仓库」/「下载代理前缀」）精确判定。
+
+## 31. 2026-09-29 修复：回收站图标在桌面「看不清」（win12 桌面图标解像度缺陷 ✅）
+
+### 31.1 现象
+
+用户反馈：**回收站图标看不清**（win12 主题桌面）。
+
+### 31.2 定位过程与根因
+
+1. **先看素材本身的画质**：`web/public/icons/win12/apps/explorer/rb.png` 实测仅 **20×20 像素**（1170 字节，RGBA）。
+2. **再看渲染尺寸**：[base.css](file:///www/wwwhdd/cloudpan/web/src/assets/base.css#L232) 的 `.desk-icon .ico` 为 **44×44px**，[AppIcon.vue](file:///www/wwwhdd/cloudpan/web/src/components/AppIcon.vue#L3) 对登记在 `WIN12_ICONS` 的素材渲染成 `<img :width="size" :height="size">` → 该 20×20 位图被**拉伸 2.2 倍**显示。
+3. **排除其它候选**：逐一量过所有 win12 桌面图标的素材分辨率（`thispc.svg`/`explorer.svg`/`notepad.svg` 等为矢量，`taskmgr.png` 128、`vscode.png` 1024、`picture.png` 63、`img.png` 40）——**`rb.png` 是唯一远小于 44px 的**，因此「糊」只发生在回收站。
+4. **目视确认**：把该素材按实际显示尺寸（20→44，双线性）渲染后放大观察，边缘严重模糊；对照 `thispc.svg` 则锐利清晰。**根因：素材解像度不足**（并非 CSS 尺寸或主题适配问题）。
+
+### 31.3 修复
+
+- **新增矢量素材** [rb.svg](file:///www/wwwhdd/cloudpan/web/public/icons/win12/apps/explorer/rb.svg)（1.8KB，纯静态、无脚本/外链，CSP 安全）：按原素材同一画风（白桶身 + 盖子与提手 + **蓝色三箭头回收标志**）矢量重绘，任意尺寸都清晰。回收标志由几何计算生成（等边三角形三边 + 末端箭头，三次旋转对称），确保形状标准而非手绘近似。
+- [AppIcon.vue](file:///www/wwwhdd/cloudpan/web/src/components/AppIcon.vue#L53)：`WIN12_ICONS.recycle` 由 `apps/explorer/rb.png` 改为 `apps/explorer/rb.svg`（并注明替换原因）。
+- **删除已被取代的 `rb.png`**：确认全仓库仅 AppIcon 一处代码引用（后端 Go 亦无引用），删除以防再次被登记。
+- **影响面**：`imgSrc` 仅在 `osTheme === 'win12'` 时生效，macOS/Deepin 桌面仍使用内联矢量 tile —— 本次改动不影响这两个主题（回归中 `mac/deepin 桌面 img 数 = 0` 仍成立）。
+
+制作过程中矢量图标经多轮渲染目视迭代（首版回收箭头未成形 —— 原因是 SVG 里路径数据直接写在 `<g>` 内、漏了 `<path d="…">` 元素，连线根本没渲染；补上后即成形），并据桌面相邻图标的视觉重量把桶身加宽了一版。
+
+### 31.4 验证
+
+| 项 | 结果 |
+| --- | --- |
+| `vue-tsc`（基础 + strict）/ `eslint` | 0 error |
+| `vitest` 全量 | **157/157** |
+| 图标回归套件 `p38p39.mjs` | **20/20**（断言同步更新为 `rb.svg`；mac/deepin 未混入位图） |
+| 新建专项 `recycle-check.mjs`（隔离实例，deviceScaleFactor=2） | **6/6**：桌面存在回收站、素材已为 `rb.svg`、素材真实加载成功（naturalWidth>0）、渲染尺寸正常、与原生素材混排、全程 0 页面错误 |
+| 实机截图 | **t96**（win12 整屏桌面）、**t97**（回收站特写，含相邻图标对比） |
+| 生产 | `rb.svg` → `200 image/svg+xml`（1837 字节，内容为新矢量）；直连应用 `rb.png` 已回退 SPA（文件确已移除） |
+
+**关于生产上 `rb.png` 仍返回 200**：这是 nginx 反向代理缓存了旧响应（应用对静态资源设 `cache-control: public, max-age=86400`，24h 内按 URL 命中缓存）。已核实**直连应用（127.0.0.1:18322）与带 `?v=1` 的请求均返回 SPA 回退**，即构建产物中已无该文件；且前端已无任何引用，故对用户无影响，缓存到期后自然消失。
