@@ -37,6 +37,31 @@
           </div>
         </template>
 
+        <!-- 外观：布局偏好（所有用户可用；也是手机布局的"逃生口"——自动判断不合适时可强制关闭） -->
+        <template v-else-if="tab === 'display'">
+          <h2 style="font-size: 19px; margin-bottom: 20px">外观</h2>
+          <div style="font-size: 13px; color: var(--text-2); margin-bottom: 10px">
+            界面布局。窄屏（手机）会自动切换为手机布局：应用窗口铺满屏幕、触屏单击即打开文件。
+            若自动判定不合适（平板、触屏笔记本等），可在此强制指定。
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; max-width: 560px">
+            <div v-for="m in layoutModes" :key="m.id"
+              style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: var(--radius); border: 1.5px solid var(--stroke); background: var(--card)"
+              :style="viewport.override === m.id ? { borderColor: 'var(--theme-2)', background: 'var(--hover-b)' } : {}"
+              @click="viewport.setOverride(m.id)">
+              <div style="flex: 1">
+                <div style="font-size: 14px; font-weight: 600">{{ m.name }}</div>
+                <div style="font-size: 11.5px; color: var(--text-3); margin-top: 2px">{{ m.desc }}</div>
+              </div>
+              <AppIcon v-if="viewport.override === m.id" name="check" :size="16" style="color: var(--theme-2)" />
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-3); margin-top: 12px">
+            屏幕宽度：{{ viewport.narrow ? '≤ 640px（窄屏）' : '> 640px（宽屏）' }}；
+            当前生效：<b>{{ viewport.mobile ? '手机布局' : '桌面布局' }}</b>
+          </div>
+        </template>
+
         <!-- 账号 -->
         <template v-else-if="tab === 'account'">
           <h2 style="font-size: 19px; margin-bottom: 20px">账号信息</h2>
@@ -237,6 +262,7 @@ import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
 import AppIcon from '../components/AppIcon.vue'
+import { useViewport } from '../stores/viewport'
 
 const toast = useToast()
 const uiDlg = useUiDialog()
@@ -282,8 +308,17 @@ async function cancelOffline(t: any) {
 const isAdmin = computed(() => session.user?.role === 'admin')
 // 离线下载页签：无权限用户（如游客）整体不显示，与后端 403 语义一致
 const canOffline = computed(() => canUseOffline())
+const viewport = useViewport()
+/** 布局偏好三选一（值与 utils/mobile 的 MobileOverride 一致） */
+const layoutModes = [
+  { id: 'auto', name: '跟随屏幕宽度', desc: '窄屏自动用手机布局，宽屏用桌面布局（推荐）' },
+  { id: 'on', name: '始终使用手机布局', desc: '窗口铺满屏幕、触屏交互；适合手机与小平板' },
+  { id: 'off', name: '始终使用桌面布局', desc: '保留浮动窗口与桌面图标双击；适合宽屏' }
+] as const
+
 const tabs = computed(() => [
   ...(isAdmin.value ? [{ id: 'person', name: '个性化', icon: 'sun' }] : []),
+  { id: 'display', name: '外观', icon: 'grid' },
   { id: 'account', name: '账号', icon: 'user' },
   { id: 'shares', name: '我的分享', icon: 'share' },
   { id: 'upload', name: '上传', icon: 'upload' },

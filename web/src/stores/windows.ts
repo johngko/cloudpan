@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { appDef } from './apps'
 import { useSession } from './session'
 import { resolveTheme } from '../themes/registry'
+import { isMobileLayout } from '../utils/mobile'
 
 // 屏幕保留区（菜单栏/任务栏/Dock）统一取自当前主题 geometry
 function shellInsets() {
@@ -64,13 +65,17 @@ export const useWindows = defineStore('windows', {
       const ww = opts.w || appDef(app)?.w || 900, wh = opts.h || appDef(app)?.h || 600
       const g = shellInsets()
       const maxW = window.innerWidth - g.left - g.right, maxH = window.innerHeight - g.top - g.bottom
-      const w = Math.min(ww, maxW - 40), h = Math.min(wh, maxH - 40)
+      // 手机布局：窗口直接铺满可用区并标记为最大化。
+      // 不做居中偏移（手机上偏移会顶出屏幕），也不留浮动状态——手机下拖拽已禁用，
+      // 浮动窗口会变成既移不动又占不满屏的残窗
+      const area = isMobileLayout() ? this.isMaximizedArea() : null
+      const w = area ? area.w : Math.min(ww, maxW - 40), h = area ? area.h : Math.min(wh, maxH - 40)
       const off = (this.wins.length % 6) * 28
       const win: WinState = {
         id: nextId++, app, title: opts.title || appDef(app)?.name || app, icon: opts.icon || app,
-        x: Math.max(g.left + 8, Math.round(g.left + (maxW - w) / 2) - 80 + off),
-        y: Math.max(g.top + 8, Math.round(g.top + (maxH - h) / 2) - 30 + off),
-        w, h, minimized: false, maximized: false, z: ++topZ, props: props || {}
+        x: area ? area.x : Math.max(g.left + 8, Math.round(g.left + (maxW - w) / 2) - 80 + off),
+        y: area ? area.y : Math.max(g.top + 8, Math.round(g.top + (maxH - h) / 2) - 30 + off),
+        w, h, minimized: false, maximized: !!area, z: ++topZ, props: props || {}
       }
       this.wins.push(win)
       this.activeId = win.id
@@ -114,6 +119,15 @@ export const useWindows = defineStore('windows', {
     toggleMax(id: number) {
       const w = this.wins.find(x => x.id === id)
       if (!w) return
+      // 手机布局下窗口必须始终铺满：标题栏双击/最大化按钮都可能触发到这里，
+      // 若允许还原成浮动窗口，用户会发现窗口既拖不动（拖拽已禁用）又没占满屏
+      if (isMobileLayout()) {
+        const r = this.isMaximizedArea()
+        if (!w.maximized) w.prev = { x: w.x, y: w.y, w: w.w, h: w.h }
+        Object.assign(w, { x: r.x, y: r.y, w: r.w, h: r.h, maximized: true })
+        this.focus(id)
+        return
+      }
       if (w.maximized) {
         if (w.prev) { Object.assign(w, w.prev); w.prev = undefined }
         w.maximized = false

@@ -1,0 +1,121 @@
+/* ============================================================
+   手机布局样式表（唯一一份，替代在三套主题里各写一遍媒体查询）
+   ------------------------------------------------------------
+   机制：<html data-mobile> 由 stores/viewport 维护（窄屏或用户手动开启）；
+        本文件所有规则都限定在 html[data-mobile] 下，桌面端零影响。
+   引入顺序：main.ts 里排在 ./themes/registry 之后（registry 会静态加载
+        三主题 CSS），保证这里的覆盖值生效；属性选择器本身也带来更高特异性。
+   关联文件：src/utils/mobile.ts（判定与纯逻辑）、src/stores/viewport.ts
+   ============================================================ */
+
+/* 触屏点击不出现灰色高亮块（仅触屏浏览器受影响，桌面无副作用） */
+html { -webkit-tap-highlight-color: transparent; }
+
+/* ---------- 基础：动态视口高度 + 禁止橡皮筋滚动 ---------- */
+html[data-mobile],
+html[data-mobile] body,
+html[data-mobile] #app { height: 100dvh; overflow: hidden; }
+html[data-mobile] body { overscroll-behavior: none; }
+
+/* ---------- 安全区（刘海屏/圆角屏）---------- */
+html[data-mobile] .desktop-icons {
+  top: calc(70px + env(safe-area-inset-top));
+  bottom: calc(var(--shell-bottom) + 14px + env(safe-area-inset-bottom));
+}
+html[data-mobile] .notify-panel { bottom: calc(56px + env(safe-area-inset-bottom)); }
+
+/* ---------- win12 浮动任务栏：窄屏可横向滚动，避免多个胶囊被挤出屏幕 ---------- */
+html[data-mobile] .w12-dockbox {
+  /* 原样式是为居中悬浮胶囊设计：width:100% + justify-content:center + pointer-events:none。
+     窄屏下内容比屏幕宽，会被裁掉右侧（控制中心/日期点不到）。
+     改左对齐 + 可横向滚动；同时放开 pointer-events（否则触屏无法滚动这个滚动容器）——
+     这条仅在手机布局生效，桌面仍保持原样的"空白处可穿透点击"。 */
+  justify-content: flex-start;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
+  padding-left: max(6px, env(safe-area-inset-left));
+  padding-right: max(6px, env(safe-area-inset-right));
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+html[data-mobile] .w12-dockbox::-webkit-scrollbar { display: none; }
+
+/* ---------- 固定宽浮层：一律收敛到视口内（原值 350~380px 在 390px 屏上几乎占满）---------- */
+html[data-mobile] .w12-ctrl { width: min(350px, calc(100vw - 16px)); }
+html[data-mobile] .w12-datebox { width: min(380px, calc(100vw - 16px)); max-height: calc(100dvh - 120px); }
+html[data-mobile] .notify-panel { width: min(360px, calc(100vw - 16px)); }
+html[data-mobile] .theme-deepin .notify-panel { width: min(380px, calc(100vw - 16px)); }
+html[data-mobile] .theme-macos .notify-panel { width: min(360px, calc(100vw - 16px)); }
+html[data-mobile] .transfer-panel {
+  width: calc(100vw - 16px); right: 8px; max-height: calc(100dvh - 160px);
+}
+
+/* ---------- 天气卡：手机上占屏 77% 且压住图标/窗口，直接隐藏 ---------- */
+html[data-mobile] .wx-widget { display: none; }
+
+/* ---------- 触控命中尺寸：可点区域不小于 44px（原 6px 手柄 / 45×33 按钮太难点）---------- */
+html[data-mobile] .theme-win12 .win-titlebar { height: 48px; min-height: 48px; }
+html[data-mobile] .theme-win12 .win-titlebar .t-ico { margin-top: 13px; }
+html[data-mobile] .theme-win12 .win-titlebar .t-txt { margin-top: 14px; }
+html[data-mobile] .win-ctrl,
+html[data-mobile] .mac-ctrl,
+html[data-mobile] .dde-ctrl { min-width: 44px; min-height: 44px; }
+html[data-mobile] .dock-app { min-width: 44px; }
+html[data-mobile] .tool-btn { min-height: 40px; }
+
+/* ---------- 窗口缩放句柄：手机布局下层已禁用缩放（见 useWindowChrome），句柄一并隐藏 ---------- */
+html[data-mobile] .win-resize { display: none; }
+
+/* ---------- 桌面图标：加大可点区域，标签最多两行已由 base.css 保证 ---------- */
+html[data-mobile] .desk-icon { width: 88px; }
+
+/* ============================================================
+   资源管理器移动化（批 3）
+   ------------------------------------------------------------
+   注意优先级：Explorer.vue / FileGrid.vue 的 scoped 样式带 [data-v-*]，
+   特异度等价于"两个类"，且随懒加载 chunk 在 mobile.css 之后注入——
+   因此凡是要覆盖它们的地方，用 html[data-mobile] .app-root xxx（三个类）拉开差距，
+   侧栏宽度是内联样式，只能用 !important。
+   ============================================================ */
+
+/* 工具栏：允许换行，避免 12+ 个按钮被 .app-root overflow:hidden 直接裁掉点不到 */
+html[data-mobile] .app-toolbar { flex-wrap: wrap; row-gap: 4px; }
+
+/* 侧栏开关按钮：桌面不显示 */
+.m-nav { display: none; }
+html[data-mobile] .m-nav { display: inline-flex; }
+
+/* 侧栏 → 覆盖式抽屉：默认移出屏外，点 ☰ 或点其中任一项后开合 */
+html[data-mobile] .exp-side {
+  position: absolute; top: 0; bottom: 0; left: 0; z-index: 30;
+  width: min(260px, 80vw) !important;
+  background: var(--card);
+  border-right: 1px solid var(--stroke-b);
+  transform: translateX(-100%);
+  transition: transform 0.18s ease;
+  box-shadow: 2px 0 14px rgba(0, 0, 0, 0.18);
+}
+html[data-mobile] .exp-side.m-open { transform: translateX(0); }
+
+/* 预览窗格：窄屏没有空间，直接隐藏（工具栏上的开关按钮同步隐藏） */
+html[data-mobile] .preview-pane { display: none; }
+html[data-mobile] .m-hide { display: none; }
+
+/* 文件网格：列宽收窄，窄屏能放下两列 */
+html[data-mobile] .file-grid { grid-template-columns: repeat(auto-fill, 84px); }
+html[data-mobile] .file-item { width: 84px; }
+
+/* 此电脑的驱动器卡片：从 250px 最小宽收窄，避免横向溢出 */
+html[data-mobile] .app-root .drive-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+/* 文件列表：窄屏只留「名称/类型」，隐藏修改时间与大小两列
+   （列序：1 复选框 · 2 名称 · 3 修改时间 · 4 类型 · 5 大小） */
+html[data-mobile] .file-list th:nth-child(3),
+html[data-mobile] .file-list td:nth-child(3),
+html[data-mobile] .file-list th:nth-child(5),
+html[data-mobile] .file-list td:nth-child(5) { display: none; }
+
+/* 触屏：复选框常显（桌面是悬停才显示），并放大到可点 */
+html[data-mobile] .f-check { opacity: 1; width: 20px; height: 20px; }

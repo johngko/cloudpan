@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import { useWindows, type WinState } from '../stores/windows'
 import { useSession } from '../stores/session'
 import { resolveTheme } from '../themes/registry'
+import { isMobileLayout } from '../utils/mobile'
 
 /**
  * 窗口框架共享行为（各主题的 WindowFrame 组件复用）：
@@ -94,8 +95,10 @@ export function useWindowChrome(w: WinState) {
 
   function onTitlebarDown(e: PointerEvent) {
     if (e.button !== 0) return
-    e.preventDefault() // 触屏：阻止默认滚动手势，改由拖拽接管
     store.focus(w.id)
+    // 手机布局：窗口铺满屏幕，禁用拖拽（否则会把窗口拖出可视区且无路可回）
+    if (isMobileLayout()) return
+    e.preventDefault() // 触屏：阻止默认滚动手势，改由拖拽接管
     const root = rootOf(e)
     root?.classList.add('win-dragging')
     const startX = e.clientX, startY = e.clientY
@@ -148,6 +151,8 @@ export function useWindowChrome(w: WinState) {
 
   function onResizeDown(dir: string, e: PointerEvent) {
     e.stopPropagation()
+    // 手机布局：禁用八向缩放（句柄在窄屏上也已隐藏，这里再兜一层）
+    if (isMobileLayout()) return
     e.preventDefault() // 触屏：阻止默认手势
     store.focus(w.id)
     const root = rootOf(e)
@@ -157,9 +162,11 @@ export function useWindowChrome(w: WinState) {
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX, dy = ev.clientY - startY
       const r: any = {}
-      if (dir.includes('e')) r.w = Math.max(360, s.w + dx)
+      // 最小宽度不能大于当前视口，否则窄屏（如平板分屏/窄窗口）拖拽会把窗口顶出屏
+      const minW = Math.min(360, window.innerWidth - 24)
+      if (dir.includes('e')) r.w = Math.max(minW, s.w + dx)
       if (dir.includes('s')) r.h = Math.max(240, s.h + dy)
-      if (dir.includes('w')) { r.w = Math.max(360, s.w - dx); r.x = s.x + (s.w - r.w) }
+      if (dir.includes('w')) { r.w = Math.max(minW, s.w - dx); r.x = s.x + (s.w - r.w) }
       if (dir.includes('n')) { r.h = Math.max(240, s.h - dy); r.y = s.y + (s.h - r.h) }
       store.setRect(w.id, r)
     }

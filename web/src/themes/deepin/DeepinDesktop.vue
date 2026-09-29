@@ -3,7 +3,7 @@
     @mousedown="onDeskDown" @contextmenu.prevent="onDeskCtx">
     <div class="desktop-icons">
       <div v-for="ic in icons" :key="ic.id" class="desk-icon" :class="{ selected: sel === ic.id }" draggable="true"
-        @mousedown.stop="sel = ic.id" @dblclick="launch(ic)" @contextmenu.stop.prevent="onIconCtx(ic, $event)"
+        @mousedown.stop="sel = ic.id" @pointerup="onIconUp(ic, $event)" @dblclick="onIconDblClick(ic)" @contextmenu.stop.prevent="onIconCtx(ic, $event)"
         @dragstart="dragStart(ic, $event)" @dragover.prevent @drop.prevent="drop(ic)">
         <div class="ico"><AppIcon :name="ic.icon" :size="44" /></div>
         <div class="lbl">{{ ic.name }}</div>
@@ -47,6 +47,7 @@ import ContextMenu from '../../shell/ContextMenu.vue'
 import DialogHost from '../../shell/DialogHost.vue'
 import TransferPanel from '../../shell/TransferPanel.vue'
 import AppIcon from '../../components/AppIcon.vue'
+import { isMobileLayout, isTouchLayout } from '../../utils/mobile'
 
 const router = useRouter()
 const session = useSession()
@@ -69,6 +70,19 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => {})
+
+// ---- 桌面图标启动：鼠标保持「双击打开」，手机布局下触屏改为「单击打开」 ----
+// 触屏不处理单击会让用户以为点了没反应；同时要防住触屏的双击再启动一次
+// （多开应用会被开出两个窗口）。鼠标路径完全不变。
+function onIconUp(ic: DeskIcon, e: PointerEvent) {
+  if (e.pointerType === 'mouse') return
+  if (isMobileLayout()) launch(ic)
+}
+function onIconDblClick(ic: DeskIcon) {
+  // 手机布局 + 触屏：单击已启动过，这里吞掉，避免重复
+  if (isMobileLayout() && isTouchLayout()) return
+  launch(ic)
+}
 
 function launch(ic: DeskIcon) {
   if (ic.appId === 'recycle') { store.open('recycle'); return }
