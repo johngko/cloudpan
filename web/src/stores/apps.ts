@@ -56,6 +56,8 @@ export const APPS: AppDef[] = [
   { id: 'tasks', name: '任务中心', icon: 'tasks', w: 780, h: 580, desktop: true, pinned: true },
   // 壁纸中心：内置目录 + 管理员目录 + 我的壁纸（URL），支持定时自动轮换
   { id: 'wallpapers', name: '壁纸中心', icon: 'wallpapers', w: 860, h: 600,pinned: true },
+  // 存储分析：按类型/顶层目录/大文件排行看空间占用，并列出同内容多副本（明确标注硬链接不省空间）
+  { id: 'storage_analysis', name: '存储分析', icon: 'tasks', w: 960, h: 660, pinned: true, feature: 'storage_analysis' },
   // 图库：按月份分组的照片墙（递归收集 + 缩略图缓存），点击进图片查看器灯箱
   { id: 'photos', name: '图库', icon: 'gallery', w: 1000, h: 660,installable: true },
   { id: 'shared', name: '来自他人的共享', icon: 'share', w: 900, h: 600, pinned: true, feature: 'usershare' },

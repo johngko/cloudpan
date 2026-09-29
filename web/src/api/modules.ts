@@ -61,6 +61,21 @@ export interface FileProps {
   count: number; dirCount: number; size: number; path: string
   sha256?: string; sha256Note?: string
 }
+
+/** 存储分析（GET /fs/analysis）—— 字段与服务端 handler.StorageAnalysis 的响应严格对应 */
+export interface StorageTypeBucket { key: string; label: string; bytes: number; count: number }
+export interface StorageDirBucket { path: string; bytes: number; count: number }
+export interface StorageLargestItem { path: string; name: string; size: number; modTime: number; ext: string }
+/** 同内容多副本：hardLinked 为真表示秒传硬链接产物，不额外占空间（前端据此避免误导） */
+export interface StorageDupGroup { hash: string; size: number; count: number; hardLinked: boolean; paths: string[] }
+export interface StorageAnalysis {
+  totalBytes: number; totalFiles: number
+  byType: StorageTypeBucket[]; byTopDir: StorageDirBucket[]
+  largest: StorageLargestItem[]
+  duplicates: StorageDupGroup[]
+  truncated: boolean   // 遍历触顶（统计不完整）
+  scanned: number
+}
 /** 全局搜索命中（GET /fs/global-search；kind=browse 时为各盘顶层首屏） */
 export interface SearchHit extends FileItem {
   policyId: number; letter: string; policyName: string; policyType: string
@@ -172,6 +187,8 @@ export const fsApi = {
   search: (policyId: number, keyword: string, path = '/') => get<FileItem[]>(`/fs/search?policyId=${policyId}&keyword=${encodeURIComponent(keyword)}&path=${encodeURIComponent(path)}`),
   globalSearch: (q: string, kind?: string) => get<SearchHit[]>(`/fs/global-search?q=${encodeURIComponent(q)}${kind ? `&kind=${kind}` : ''}`),
   properties: (policyId: number, path: string) => get<FileProps>(`/fs/properties?policyId=${policyId}&path=${encodeURIComponent(path)}`),
+  // 存储分析（只读）：按类型/顶层目录/大文件聚合，并列出同内容多副本
+  analysis: (policyId: number) => get<StorageAnalysis>(`/fs/analysis?policyId=${policyId}`),
   dlink: (policyId: number, path: string, expireHours: number) => get<{ url: string; expireAt: number; permanent: boolean; name: string; size: number }>(`/fs/dlink?policyId=${policyId}&path=${encodeURIComponent(path)}&expireHours=${expireHours}`),
   readText: (policyId: number, path: string) => get<{ content: string }>(`/fs/text?policyId=${policyId}&path=${encodeURIComponent(path)}`),
   writeText: (policyId: number, path: string, content: string) => post('/fs/text', { policyId, path, content }),
