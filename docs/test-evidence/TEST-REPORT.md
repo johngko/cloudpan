@@ -1000,3 +1000,56 @@ set: (m) => { if (m === 'direct' && !settings.value.update_url) settings.value.u
 | 生产 | `rb.svg` → `200 image/svg+xml`（1837 字节，内容为新矢量）；直连应用 `rb.png` 已回退 SPA（文件确已移除） |
 
 **关于生产上 `rb.png` 仍返回 200**：这是 nginx 反向代理缓存了旧响应（应用对静态资源设 `cache-control: public, max-age=86400`，24h 内按 URL 命中缓存）。已核实**直连应用（127.0.0.1:18322）与带 `?v=1` 的请求均返回 SPA 回退**，即构建产物中已无该文件；且前端已无任何引用，故对用户无影响，缓存到期后自然消失。
+
+## 32. 2026-09-29 新增：存储分析应用（按类型/目录/大文件 + 同内容多副本，浏览器回归 18/18 ✅）
+
+### 32.1 背景：为什么不是「重复文件清理」
+
+原计划先做「重复文件清理」，动手前先核实了台账与秒传实现，结论是**该功能在此系统里几乎无价值**，故改为「存储分析」：
+
+| 实测项 | 结果 |
+| --- | --- |
+| 秒传实现 | `fscore/service.go` 的 `InstantPut` **优先 `os.Link` 硬链接**，失败才复制 |
+| 生产台账 | `file_hashes` 647 行 / `file_hash_copies` 659 行；同哈希多副本仅 **12 组** |
+| 理论可回收 | **0.27GB**（全库 127GB 的 0.2%） |
+| 抽查 inode | 两组样本同一 inode、`nlink=2` → **确认硬链接，实际可回收 ≈ 0** |
+
+即：**相同内容在秒传时已按硬链接存储，不额外占盘**。真正占空间的是可重下的软件包（ISO 70GB + Adobe 约 30GB，占 127GB 的 98%）——因此有价值的是「看清空间被什么占了」，而不是「查重复」。
+
+### 32.2 实现
+
+**后端**（只读接口，无写操作）：
+
+- [analysis.go](file:///www/wwwhdd/cloudpan/server/internal/fscore/analysis.go)：纯聚合（按类型/按顶层目录/大文件排行）+ `WalkEntries` 目录遍历（对 `Driver` 接口编程，可注入桩驱动）。上限 20 万条目 / 深度 12，触顶置 `truncated` 让前端明确提示"统计不完整"；单个子目录读失败**跳过而不整体失败**。
+- [storage.go](file:///www/wwwhdd/cloudpan/server/internal/handler/storage.go)：`GET /fs/analysis?policyId=`，挂 `AppGateAny("storage_analysis")`；本地盘另补"同内容多副本"，用 `os.SameFile` 实测是否硬链接。
+- 台账行按**当前用户自己的可见根**前缀过滤，且**只回传虚拟路径**（`physToVirtual` 对前缀之外的物理路径一律返回空串，防越权/防泄露绝对路径）。
+- [manifest.go](file:///www/wwwhdd/cloudpan/server/internal/apps/manifest.go) 登记系统功能 `storage_analysis`（启动时按清单补种，已核实生产库自动新增该行）。
+
+**前端**：
+
+- [StorageAnalysis.vue](file:///www/wwwhdd/cloudpan/web/src/apps/StorageAnalysis.vue)：概览 4 卡 + 四页签（按类型 / 按顶层目录 / 大文件 / 同内容多副本）；大文件项支持「定位」（复用 `store.open('explorer', {policyId, path})` 深链约定）与「删除」（走既有 `/fs/delete`，进回收站）。
+- 重复页**明确标注**"硬链接不额外占用空间 / 独立副本占用额外空间"，避免误导用户去清理。
+- 三处登记保持一致：`stores/apps.ts`（应用）+ `themes/registry.ts`（加载器）+ `server/internal/apps/manifest.go`（系统功能）；`scripts/check-app-registry.mjs` 对账通过（34 个应用）。
+
+### 32.3 开发中实测发现并修掉的两个缺陷
+
+1. **GORM `Scan()` 返回值误当 error**（`handler/storage.go`）：`gorm.DB.Scan()` 返回 `*gorm.DB` 而非 `error`，写成 `if err := ...Scan(&rows); err != nil` 恒成立 → 每次都提前返回"无重复"。改为判 `.Error`。已全仓检索确认**无同类误用**（仅此一处）。
+2. **虚拟路径基准错误**：原按「整盘根」换算，管理员拿到的是 `/admin/工资表.xlsx`，而其虚拟根就是该目录（应为 `/工资表.xlsx`），「定位」会跳到不存在的目录。改为统一按「当前用户自己的可见根」换算。
+3. 另修正一处边界：`physToVirtual` 对"物理路径 == 前缀本身"返回了 `/.`，应返回空串（由单测抓出）。
+
+### 32.4 验证
+
+| 层 | 结果 |
+| --- | --- |
+| `go vet ./...` | 静默 |
+| Go 单测（新增） | 聚合/遍历 6 例（含触顶截断、深度限制、子目录失败跳过、同体积排序稳定、空输入切片非 nil）；`hardLinked` 真/假/路径不存在 3 例（用 `os.Link` 造真实硬链接）；`physToVirtual` 5 例（含越权路径） |
+| `vue-tsc`（基础 + strict）/ `eslint` | 0 error |
+| `vitest` 全量 | 157/157 |
+| 浏览器回归（新建 [storage-analysis-check.mjs]） | **18/18**：4 张卡、占比条宽度非 0、顶层目录（含「(根目录)」聚合）、大文件排行首位正确、定位/删除按钮、重复组标注「独立副本」且列出 2 条路径、点「定位」成功打开资源管理器、全程 0 页面错误 |
+| 生产 | `up:200`、mysql、`/api/fs/analysis` 无令牌返回 **401（已挂载）**、`system_apps` 自动新增 `storage_analysis`(enabled=1) |
+| 截图 | **t98**（按类型）、**t99**（按顶层目录）、**t100**（大文件）、**t101**（同内容多副本） |
+
+### 32.5 后续可做（尚未实施）
+
+- 遍历为同步执行：本地盘 663 个文件瞬时返回；若将来挂载巨型云端盘，建议改为后台任务 + 进度轮询。
+- 目前一次分析一个盘（与既有接口约定一致），可扩展为"全部盘合计"。
