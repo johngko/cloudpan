@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="自托管网盘与 Web 云桌面" />
+    <!-- PWA：可添加到手机主屏幕。图标由 scripts/gen-pwa-icons.mjs 从 icons/win12/logo.svg 生成 -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/pwa/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/pwa/icon-180.png" />
+    <meta name="theme-color" content="#2473DC" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="CloudPan" />
+    <!-- 状态栏透明：配合 viewport-fit=cover 让内容延伸到刘海区（安全区由 env(safe-area-inset-*) 兜） -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>CloudPan</title>
   </head>
   <body>
