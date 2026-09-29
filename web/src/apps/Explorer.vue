@@ -57,6 +57,7 @@
 
     <!-- 操作栏 -->
     <div class="app-toolbar" style="padding: 4px 10px">
+      <button class="tool-btn m-nav" title="侧栏" @click.stop="navOpen = !navOpen"><AppIcon name="list" :size="15" /></button>
       <button class="tool-btn" :disabled="!canWriteHere" @click.stop="onSharedDrive ? sharedNewMenu($event) : newMenu($event)"><AppIcon name="plus" :size="15" />新建</button>
       <button class="tool-btn" :disabled="!canWriteHere" @click.stop="onSharedDrive ? sharedPickFiles() : uploadMenu($event)"><AppIcon name="upload" :size="15" />上传</button>
       <button class="tool-btn" :disabled="!selPaths.length" @click="downloadSel"><AppIcon name="download" :size="15" />下载</button>
@@ -72,7 +73,7 @@
       <button class="tool-btn" v-if="group.allowArchive && selPaths.length && !onSharedDrive && !readOnly" @click="archiveSel"><AppIcon name="archive" :size="15" />压缩</button>
       <button class="tool-btn" v-if="singleZipSelected && !onSharedDrive" @click="extractSel"><AppIcon name="archive" :size="15" />解压</button>
       <div style="flex: 1"></div>
-      <button class="tool-btn" :class="{ 'global-on': previewMode }" title="预览窗格（Alt+P）" @click="togglePreview">
+      <button class="tool-btn m-hide" :class="{ 'global-on': previewMode }" title="预览窗格（Alt+P）" @click="togglePreview">
         <AppIcon name="preview" :size="15" />
       </button>
       <button class="tool-btn" @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'">
@@ -80,9 +81,9 @@
       </button>
     </div>
 
-    <div style="flex: 1; display: flex; overflow: hidden">
+    <div style="flex: 1; position: relative; display: flex; overflow: hidden">
       <!-- 侧栏 -->
-      <div style="width: 210px; flex: none; border-right: 1px solid var(--stroke); overflow: auto; padding: 8px 6px">
+      <div class="exp-side" :class="{ 'm-open': navOpen }" @click="navOpen = false" style="width: 210px; flex: none; border-right: 1px solid var(--stroke); overflow: auto; padding: 8px 6px">
         <div class="side-title">快速访问</div>
         <div v-for="s in stars" :key="s.id" class="side-item" :title="s.name"
           @click="openPolicyId(s.policyId, s.path)">
@@ -117,7 +118,7 @@
         <div class="sec-title">共享 ({{ sharedWithMe.length }})</div>
         <div class="drive-grid">
           <div class="drive-card" :class="{ sel: selectedDrive === -1 }" @click="selectedDrive = -1"
-            @dblclick="openSharedDrive">
+            @dblclick="openSharedDrive" @pointerup="onSharedTap($event)">
             <AppIcon name="share2" :size="54" />
             <div style="flex: 1; min-width: 0">
               <div class="drive-name">共享</div>
@@ -130,7 +131,7 @@
           <div class="sec-title">设备和驱动器 ({{ localPolicies.length }})</div>
           <div class="drive-grid">
             <div v-for="p in localPolicies" :key="p.id" class="drive-card" :class="{ sel: selectedDrive === p.id }"
-              @click="selectedDrive = p.id" @dblclick="openPolicy(p)"
+              @click="selectedDrive = p.id" @dblclick="openPolicy(p)" @pointerup="onDriveTap(p, $event)"
               @contextmenu.stop.prevent="onPolicyCtx(p, $event)">
               <AppIcon :name="p.type === 'local' ? 'drive' : 'cloud'" :size="54" />
               <div style="flex: 1; min-width: 0">
@@ -147,7 +148,7 @@
           <div class="sec-title" style="margin-top: 18px">云盘 ({{ cloudPolicies.length }})</div>
           <div class="drive-grid">
             <div v-for="p in cloudPolicies" :key="p.id" class="drive-card" :class="{ sel: selectedDrive === p.id }"
-              @click="selectedDrive = p.id" @dblclick="openPolicy(p)"
+              @click="selectedDrive = p.id" @dblclick="openPolicy(p)" @pointerup="onDriveTap(p, $event)"
               @contextmenu.stop.prevent="onPolicyCtx(p, $event)">
               <AppIcon name="cloud" :size="48" />
               <div style="flex: 1; min-width: 0">
@@ -172,8 +173,8 @@
           <div v-if="virtualGrid && gridPadTop" class="vt-pad" :style="{ height: gridPadTop + 'px' }"></div>
           <FileGrid :items="gridItems" :sel-set="selSet" :editing="editing"
             :icon-of="iconOf" :is-thumb="isThumb" :thumb-url="thumbUrl" :name-parts="nameParts"
-            @item-down="onItemDown" @item-open="openItem" @item-ctx="onItemCtx"
-            @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" />
+            @item-down="onItemDown" @item-open="onItemOpen" @item-ctx="onItemCtx"
+            @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" @item-up="onItemUp" />
           <div v-if="virtualGrid && gridPadBottom" class="vt-pad" :style="{ height: gridPadBottom + 'px' }"></div>
         </div>
         <div v-else class="file-list" :class="{ virtual: virtualList }" ref="listEl" @scroll.passive="onViewScroll">
@@ -192,8 +193,8 @@
               <tr v-if="virtualList && listWin.padTop" class="vpad" :style="{ height: listWin.padTop + 'px' }"><td :colspan="5"></td></tr>
               <FileList :items="listItems" :sel-set="selSet" :editing="editing"
                 :icon-of="iconOf" :name-parts="nameParts" :fmt="fmt" :fmt-time="fmtTime"
-                @item-down="onItemDown" @item-open="openItem" @item-ctx="onItemCtx"
-                @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" />
+                @item-down="onItemDown" @item-open="onItemOpen" @item-ctx="onItemCtx"
+                @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" @item-up="onItemUp" />
               <!-- 窗口化：下占位行 -->
               <tr v-if="virtualList && listWin.padBottom" class="vpad" :style="{ height: listWin.padBottom + 'px' }"><td :colspan="5"></td></tr>
             </tbody>
@@ -554,6 +555,7 @@ import { newEntries, blankMenu, itemMenu, policyMenu } from './explorer/menus'
 import FileGrid from './explorer/FileGrid.vue'
 import FileList from './explorer/FileList.vue'
 import AppIcon from '../components/AppIcon.vue'
+import { isMobileLayout, isTouchLayout } from '../utils/mobile'
 
 const props = defineProps<{ winId: number; props: any }>()
 const store = useWindows()
@@ -576,6 +578,8 @@ const stars = ref<any[]>([])
 const items = ref<FileItem[]>([])
 const loading = ref(false)
 const selSet = ref(new Set<string>())
+// 手机布局下的侧栏抽屉开合（桌面端该状态不生效）
+const navOpen = ref(false)
 const selectedDrive = ref(0)
 
 // ---- 多标签（每个标签页保存：盘符路径/搜索/视图/前进后退历史）----
@@ -707,6 +711,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('cp-refresh-explorer', onRefreshEvent)
   window.removeEventListener('cp-refresh-shared', onRefreshShared)
   window.removeEventListener('keydown', onKey)
+  cancelLongPress()
   if (editTimer) window.clearInterval(editTimer)
   if (editScrollTimer) clearTimeout(editScrollTimer)
   if (skelTimer) clearTimeout(skelTimer)
@@ -1049,10 +1054,90 @@ function toggleGlobal() {
 // ---- 选择 ----
 // 选择语义纯逻辑见 ./explorer/selection（右键保持整组 / Ctrl 切换 / Shift 区间）
 function onItemDown(f: FileItem, e: MouseEvent) {
+  const pe = e as PointerEvent
+  // 手机布局 + 触屏：换成"点按"语义（鼠标分支原样保留，桌面行为不变）
+  //   · 单击未选中项 → 选中
+  //   · 再单击已选中项 → 打开（手机上双击既别扭又和缩放手势冲突）
+  //   · 长按 500ms → 右键菜单
+  if (pe.pointerType && pe.pointerType !== 'mouse' && isMobileLayout()) {
+    const onlyThis = selSet.value.size === 1 && selSet.value.has(f.path)
+    // 关键：不能在按下时就打开——用户长按"已选中项"想调菜单时会先被打开。
+    // 这里只记录意图，真正的"打开"推迟到抬手（见 onItemUp），长按触发后会被取消。
+    tapOpenPending = onlyThis
+    if (!onlyThis) {
+      const nx = nextSelection(selSet.value, sortedItems.value.map(x => x.path), { path: f.path })
+      if (nx) selSet.value = nx // 触屏单点路径不会返回 null（无修饰键），这里做防御
+    }
+    startLongPress(f, pe)
+    return
+  }
   const next = nextSelection(selSet.value, sortedItems.value.map(x => x.path), {
     path: f.path, button: e.button, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey
   })
   if (next) selSet.value = next
+}
+
+// ---- 触屏长按出菜单 ----
+// 长按是手机上打开右键菜单的通行做法；位移超过 8px（滚动/拖拽）或抬手都要取消，
+// 否则用户滚列表时会莫名弹出菜单。
+// 触屏"再点已选中项即打开"的待定意图（抬手时才真正打开）
+let tapOpenPending = false
+let lpTimer: ReturnType<typeof setTimeout> | undefined
+let lpOff: (() => void) | undefined
+function cancelLongPress() {
+  if (lpTimer) { clearTimeout(lpTimer); lpTimer = undefined }
+  if (lpOff) { lpOff(); lpOff = undefined }
+}
+function startLongPress(f: FileItem, e: PointerEvent) {
+  cancelLongPress()
+  const sx = e.clientX, sy = e.clientY
+  lpTimer = setTimeout(() => {
+    lpTimer = undefined
+    lpOff?.(); lpOff = undefined
+    tapOpenPending = false // 已进入长按：抬手时不要再打开
+    // 多选状态下不弹菜单，保住"批量操作整组"的语义
+    if (selSet.value.size > 1) return
+    showItemMenu(f, sx, sy)
+  }, 500)
+  const onMove = (ev: PointerEvent) => {
+    if (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8) cancelLongPress()
+  }
+  const onUp = () => cancelLongPress()
+  document.addEventListener('pointermove', onMove, { passive: true })
+  document.addEventListener('pointerup', onUp, { passive: true })
+  document.addEventListener('pointercancel', onUp, { passive: true })
+  lpOff = () => {
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onUp)
+    document.removeEventListener('pointercancel', onUp)
+  }
+}
+
+// 「此电脑」里的驱动器卡片：鼠标保持双击打开；手机布局下触屏单击即打开。
+// 不补这一条，手机上打开资源管理器后会停在"此电脑"，点不进去任何盘。
+function onDriveTap(p: Policy, e: PointerEvent) {
+  if (e.pointerType === 'mouse') return
+  if (isMobileLayout()) openPolicy(p)
+}
+function onSharedTap(e: PointerEvent) {
+  if (e.pointerType === 'mouse') return
+  if (isMobileLayout()) openSharedDrive()
+}
+
+/** 触屏抬手：若本次是"再点已选中项"，此时才打开（长按出菜单的情况已在定时器里取消） */
+function onItemUp(f: FileItem, e: MouseEvent) {
+  const pe = e as PointerEvent
+  if (!(pe.pointerType && pe.pointerType !== 'mouse' && isMobileLayout())) return
+  cancelLongPress()
+  if (!tapOpenPending) return
+  tapOpenPending = false
+  openItem(f)
+}
+
+/** 触屏双击的"打开"要吞掉：单击已打开过，再来一次会把多开应用开出第二个窗口 */
+function onItemOpen(f: FileItem) {
+  if (isTouchLayout() && isMobileLayout()) return
+  openItem(f)
 }
 
 // ---- 复选框多选（Windows 11 资源管理器同款叠加勾选） ----
@@ -2152,8 +2237,8 @@ function onBlankCtx(e: MouseEvent) {
   })
   ctx.show(e.clientX, e.clientY, menu)
 }
-function onItemCtx(f: FileItem, e: MouseEvent) {
-  onItemDown(f, e)
+/** 弹出条目菜单：鼠标右键与触屏长按共用，坐标由调用方给出 */
+function showItemMenu(f: FileItem, x: number, y: number) {
   const multi = selPaths.value.length > 1
   const menu = itemMenu({
     f,
@@ -2187,7 +2272,13 @@ function onItemCtx(f: FileItem, e: MouseEvent) {
       sharedMkdir: () => sharedMkdir(sharedPathParse(f.path)?.rel || '')
     }
   })
-  ctx.show(e.clientX, e.clientY, menu)
+  ctx.show(x, y, menu)
+}
+
+/** 鼠标右键：先按既有语义选中（右键作用于整组），再弹菜单 */
+function onItemCtx(f: FileItem, e: MouseEvent) {
+  onItemDown(f, e)
+  showItemMenu(f, e.clientX, e.clientY)
 }
 
 // 解压到当前目录（zip 右键）

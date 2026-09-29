@@ -2,7 +2,7 @@
   <!-- 表格行：只负责「一行长什么样」；表头/占位行/滚动都在 Explorer -->
   <template v-for="f in items" :key="f.path">
     <tr :data-path="f.path" :class="{ selected: selSet.has(f.path) }" draggable="true"
-      @mousedown="$emit('item-down', f, $event)" @dblclick="$emit('item-open', f)" @contextmenu.stop.prevent="$emit('item-ctx', f, $event)"
+      @pointerdown="$emit('item-down', f, $event)" @pointerup="$emit('item-up', f, $event)" @dblclick="$emit('item-open', f)" @contextmenu.stop.prevent="$emit('item-ctx', f, $event)"
       @dragstart="$emit('item-drag', f, $event)" @dragover.prevent @drop.prevent.stop="$emit('item-drop', f, $event)">
       <td style="width: 34px; text-align: center"><input type="checkbox" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="$emit('check-toggle', f)" /></td>
       <td><div style="display: flex; align-items: center; gap: 10px">
@@ -39,6 +39,7 @@ defineEmits<{
   (e: 'item-drag', f: FileItem, ev: DragEvent): void
   (e: 'item-drop', f: FileItem, ev: DragEvent): void
   (e: 'check-toggle', f: FileItem): void
+  (e: 'item-up', f: FileItem, ev: PointerEvent): void
 }>()
 </script>
 

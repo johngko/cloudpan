@@ -2,7 +2,7 @@
   <!-- 网格条目：只负责「一个条目长什么样」；容器/滚动/占位/橡皮筋都在 Explorer -->
   <template v-for="f in items" :key="f.path + (f.letter || '')">
     <div class="file-item" :class="{ selected: selSet.has(f.path) }" :data-path="f.path" draggable="true"
-      @mousedown="$emit('item-down', f, $event)" @dblclick="$emit('item-open', f)" @contextmenu.stop.prevent="$emit('item-ctx', f, $event)"
+      @pointerdown="$emit('item-down', f, $event)" @pointerup="$emit('item-up', f, $event)" @dblclick="$emit('item-open', f)" @contextmenu.stop.prevent="$emit('item-ctx', f, $event)"
       @dragstart="$emit('item-drag', f, $event)" @dragover.prevent @drop.prevent.stop="$emit('item-drop', f, $event)">
       <input type="checkbox" class="f-check" :checked="selSet.has(f.path)" @mousedown.stop.prevent @click.stop="$emit('check-toggle', f)" :title="selSet.has(f.path) ? '取消选择' : '选择'" />
       <span v-if="f.letter" class="g-badge">{{ f.letter }}</span>
@@ -37,6 +37,7 @@ defineEmits<{
   (e: 'item-drag', f: FileItem, ev: DragEvent): void
   (e: 'item-drop', f: FileItem, ev: DragEvent): void
   (e: 'check-toggle', f: FileItem): void
+  (e: 'item-up', f: FileItem, ev: PointerEvent): void
 }>()
 </script>
 
