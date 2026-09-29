@@ -77,6 +77,8 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/fs/search", site.Search)
 		ug.GET("/fs/global-search", middleware.AppGate("global_search"), site.GlobalSearch)
 		ug.GET("/fs/properties", site.Properties)
+		// 存储分析（只读；受「存储分析」功能门控，游客由 default-deny 的写白名单之外不受限，故读门控按功能可用性）
+		ug.GET("/fs/analysis", middleware.AppGateAny("storage_analysis"), site.StorageAnalysis)
 		ug.GET("/fs/raw", site.Raw)
 		ug.GET("/fs/transcode", site.Transcode)
 		// 外部壁纸同源代理（SSRF 段检查 + 20MB 上限，见 handler/wallpaper.go）
@@ -181,22 +183,22 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		// 系统功能清单（应用中心数据源）
 		ug.GET("/apps", site.AppList)
 
-			// 终端：本地真实 shell（PTY/ConPTY）/ 远程 SSH 终端 + SFTP 文件管理。
-			// 每个端点都挂「终端」功能门控（无门控端点 = 绕过功能开关的 shell 入口，已修复）；
-			// 默认仅管理员可用（默认用户组 AppPerms 禁用 terminal，应用清单默认关闭）
-			th := NewTerminalHandler(cfg.Secret)
-			migrateSiteSecrets() // 站点敏感设置历史明文一次性密封（依赖上面注入的服务器密钥）
-			ug.GET("/terminal/ws", middleware.AppGate("terminal"), th.WebSocket)
-			ug.GET("/terminal/platform", middleware.AppGate("terminal"), th.Platform)
-			ug.POST("/terminal/conns", middleware.AppGate("terminal"), th.ConnSave)
-			ug.GET("/terminal/conns", middleware.AppGate("terminal"), th.ConnList)
-			ug.PUT("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnUpdate)
-			ug.DELETE("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnDelete)
-			ug.POST("/terminal/conns/:id/test", middleware.AppGate("terminal"), th.ConnTest)
-			ug.GET("/terminal/fs/list", middleware.AppGate("terminal"), th.FSList)
-			ug.POST("/terminal/fs/op", middleware.AppGate("terminal"), th.FSOps)
-			ug.GET("/terminal/fs/download", middleware.AppGate("terminal"), th.FSDownload)
-			ug.POST("/terminal/fs/upload", middleware.AppGate("terminal"), th.FSUpload)
+		// 终端：本地真实 shell（PTY/ConPTY）/ 远程 SSH 终端 + SFTP 文件管理。
+		// 每个端点都挂「终端」功能门控（无门控端点 = 绕过功能开关的 shell 入口，已修复）；
+		// 默认仅管理员可用（默认用户组 AppPerms 禁用 terminal，应用清单默认关闭）
+		th := NewTerminalHandler(cfg.Secret)
+		migrateSiteSecrets() // 站点敏感设置历史明文一次性密封（依赖上面注入的服务器密钥）
+		ug.GET("/terminal/ws", middleware.AppGate("terminal"), th.WebSocket)
+		ug.GET("/terminal/platform", middleware.AppGate("terminal"), th.Platform)
+		ug.POST("/terminal/conns", middleware.AppGate("terminal"), th.ConnSave)
+		ug.GET("/terminal/conns", middleware.AppGate("terminal"), th.ConnList)
+		ug.PUT("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnUpdate)
+		ug.DELETE("/terminal/conns/:id", middleware.AppGate("terminal"), th.ConnDelete)
+		ug.POST("/terminal/conns/:id/test", middleware.AppGate("terminal"), th.ConnTest)
+		ug.GET("/terminal/fs/list", middleware.AppGate("terminal"), th.FSList)
+		ug.POST("/terminal/fs/op", middleware.AppGate("terminal"), th.FSOps)
+		ug.GET("/terminal/fs/download", middleware.AppGate("terminal"), th.FSDownload)
+		ug.POST("/terminal/fs/upload", middleware.AppGate("terminal"), th.FSUpload)
 	}
 
 	// 内置浏览器代理：iframe 子资源请求没有 Authorization 头，故独立鉴权——

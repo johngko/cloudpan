@@ -29,6 +29,7 @@ var Manifest = []Def{
 	{Key: "version", Name: "版本管理", Icon: "refresh", Desc: "文件覆盖时保留历史版本", Version: "1.0", DefaultEnabled: true},
 	{Key: "notify", Name: "站内通知", Icon: "bell", Desc: "任务与配额事件通知中心", Version: "1.0", DefaultEnabled: true},
 	{Key: "global_search", Name: "全局搜索", Icon: "search", Desc: "跨所有存储盘搜索文件", Version: "1.0", DefaultEnabled: true},
+	{Key: "storage_analysis", Name: "存储分析", Icon: "tasks", Desc: "按类型/目录/大文件分析空间占用，并列出同内容多副本", Version: "1.0", DefaultEnabled: true},
 	{Key: "share", Name: "公开分享", Icon: "link", Desc: "生成外链分享（密码/有效期/次数）", Version: "1.0", DefaultEnabled: true},
 	{Key: "usershare", Name: "内部共享", Icon: "share", Desc: "用户之间共享目录（只读/读写）", Version: "1.0", DefaultEnabled: true},
 	{Key: "browser", Name: "内置浏览器", Icon: "browser", Desc: "桌面内置浏览器（服务端代理访问网站）", Version: "1.0", DefaultEnabled: true},
