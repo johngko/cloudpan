@@ -46,7 +46,29 @@ const WIN12_ICONS: Record<string, string> = {
   fileImg: 'files/img.png',
   fileMusic: 'files/music.png',
   fileVidio: 'files/vidio.png',
-  fileExe: 'files/exefile.png'
+  fileExe: 'files/exefile.png',
+  // 以下为「应用图标」在 win12 下的原生对应（此前未登记，win12 里会退化成自绘 tile，
+  // 与其他 Windows 原生图标混在一起 —— 这是 P3.8 说的「风格骨折」的主因）。
+  // 素材均为仓库内已有、已逐一目视核对过的文件。
+  recycle: 'apps/explorer/rb.svg',      // 回收站（矢量重绘：原 rb.png 仅 20×20，桌面 44px 显示严重模糊）
+  browser: 'edge.svg',                  // 内置浏览器
+  tasks: 'taskmgr.png',                 // 任务中心
+  code: 'vscode.png',                   // 多功能编辑器
+  whiteboard: 'whiteboard.svg',         // 白板
+  mindmap: 'files/mindmap.svg',         // 思维导图
+  flowchart: 'files/flowchart.svg',     // 流程图
+  archive: 'files/zip.svg',             // 压缩包浏览器
+  pdfreader: 'files/pdf.svg',           // PDF 阅读器
+  gallery: 'files/picture.png',         // 图库
+  imageedit: 'files/img.png',           // 图片编辑器
+  mediacenter: 'files/vidio.png',       // 媒体中心
+  folderPlain: 'apps/explorer/folder.svg',
+  // fileIcon(win12) 对未知扩展名的兜底名，对应 Windows 的通用文档图标
+  file: 'files/none.png',
+  // 刻意不登记（仓库内没有合适的 Windows 原生素材，保留自绘 tile）：
+  //   book / cad / mail / ps / share / share2 / speedtest / vector / wallpapers / link / star / starFill
+  //   —— Windows 11 的应用图标本身就是彩色圆角方块，tile 与原生素材混排不违和；
+  //      新增素材后再往这里补即可（登记表 + 单一分发点，是本次统一的核心）
 }
 const session = useSession()
 const imgSrc = computed(() =>

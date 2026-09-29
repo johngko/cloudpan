@@ -1,0 +1,24 @@
+<!-- Windows 11 风格回收站：原 rb.png 仅 20×20，拉到桌面 44px 显示会严重模糊（用户反馈「看不清」）。
+     本文件按同一画风（白桶身 + 蓝色三箭头回收标志）以矢量重绘，任意尺寸都清晰。 -->
+<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rbBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fbfcfe"/><stop offset=".42" stop-color="#edf1f6"/><stop offset="1" stop-color="#c8d2de"/>
+    </linearGradient>
+    <linearGradient id="rbLid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d6dee7"/>
+    </linearGradient>
+    <linearGradient id="rbRim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eaeff5"/><stop offset="1" stop-color="#b3bfcd"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="24" cy="43.8" rx="13.6" ry="2" fill="#1d2b3c" opacity=".15"/>
+  <path d="M10.4 15.5h27.2l-2.7 22.7q-.32 2.8-3.15 2.8H16.25q-2.83 0-3.15-2.8z" fill="url(#rbBody)"/>
+  <path d="M14.2 17h3.4l-1.8 23.8h-2.4z" fill="#ffffff" opacity=".5"/>
+  <path d="M33.8 17h-3.4l1.8 23.8h2.4z" fill="#a9b6c6" opacity=".3"/>
+  <rect x="9.0" y="12.8" width="30.0" height="3.2" rx="1.3" fill="url(#rbRim)"/>
+  <path d="M8.6 10.1q0-2 2-2h26.8q2 0 2 2v2.1q0 1.7-1.7 1.7H10.3q-1.7 0-1.7-1.7z" fill="url(#rbLid)"/>
+  <path d="M18.4 8.1q0-3.1 3.1-3.1h5q3.1 0 3.1 3.1" fill="none" stroke="#c3cdd9" stroke-width="2.3" stroke-linecap="round"/>
+  <path d="M24.42 19.33L30.37 29.62M31.64 33.30L19.76 33.30M15.94 32.56L21.88 22.27" fill="none" stroke="#3b9fe0" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32.47 33.26L28.16 30.90L32.57 28.35ZM15.56 33.30L19.76 30.75L19.76 35.85ZM23.98 18.64L24.09 23.55L19.67 21.00Z" fill="#3b9fe0"/>
+</svg>
