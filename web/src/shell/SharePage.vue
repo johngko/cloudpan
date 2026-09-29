@@ -152,8 +152,12 @@ async function loadSiteTheme() {
     if (th === 'win12' || th === 'macos' || th === 'deepin') {
       siteTheme.value = th
       const el = document.documentElement
-      for (const t of availableThemes()) el.classList.remove(t.rootClass)
-      el.classList.add(resolveTheme(th).rootClass)
+      const t = resolveTheme(th)
+      for (const x of availableThemes()) el.classList.remove(x.rootClass)
+      el.classList.add(t.rootClass)
+      // 与 stores/session.ts 的 applyTheme 保持一致：强调色由主题契约注入
+      el.style.setProperty('--accent', t.accentColor)
+      el.style.setProperty('--accent-weak', t.accentWeak)
     }
   } catch { /* 回落默认主题 */ }
 }
@@ -352,7 +356,10 @@ async function openItem(f: any) {
         // 加密分享：密文下载 → 本地解密 → blob URL 预览
         try {
           const blob = encDecryptBlob(await fetchCipher(rel), pwd.value, info.value.encSalt, mimeOf(f.ext))
-          window.open(URL.createObjectURL(blob))
+          const url = URL.createObjectURL(blob)
+          window.open(url)
+          // 新标签页需要时间接管这个 blob URL：延迟回收，避免每次预览都常驻一份图片内存
+          setTimeout(() => URL.revokeObjectURL(url), 60000)
         } catch (e: any) { errMsg.value = '预览失败：' + (e.message || '未知错误') }
       } else {
         window.open(`/api/s/${token}/raw?st=${stoken.value}&path=${encodeURIComponent(rel)}`)

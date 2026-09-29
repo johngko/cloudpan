@@ -42,7 +42,7 @@ async function save() {
     emit('toast', '请输入密码', 'err')
     return
   }
-  if (f.authType === 'key' && !f.privateKey.trim()) {
+  if (f.authType === 'key' && !(f.privateKey ?? '').trim()) {
     emit('toast', '请粘贴私钥（完整 PEM）', 'err')
     return
   }

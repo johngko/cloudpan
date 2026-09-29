@@ -8,7 +8,7 @@
 
     <!-- 中区：应用（居中）——类名带 dde 前缀，避免与 win.css 的 .tb-center（绝对定位）冲突 -->
     <div class="dde-tb-center">
-      <template v-for="(a, i) in dockApps" :key="a.id">
+      <template v-for="a in dockApps" :key="a.id">
         <div class="dd-app" :class="{ running: running(a.id) }" @click="clickApp(a)"
           @contextmenu.prevent="quitMenu(a, $event)">
           <AppIcon :name="a.icon" :size="30" class="ico" />
@@ -26,6 +26,8 @@
 
     <!-- 右区：托盘（DDE tray：网络/通知/传输/时钟）+ 显示桌面窄条 -->
     <div class="tb-right">
+      <div class="dp-item" title="小组件" @click.stop="openWidgets"><AppIcon name="grid" :size="16" class="dp-ico" /></div>
+      <div class="dp-item" title="搜索" @click.stop="openSearch"><AppIcon name="search" :size="16" class="dp-ico" /></div>
       <div class="dp-item" title="网络测速" @click.stop="openSpeedtest"><AppIcon name="wifi" :size="16" class="dp-ico" /></div>
       <div v-if="notifyAvail" class="dp-item dp-badge" title="通知" @click.stop="notify.openPanel()">
         <AppIcon name="bell" :size="16" class="dp-ico" />
@@ -37,6 +39,12 @@
     </div>
   </div>
 
+  <!-- 全局搜索面板（DDE：任务栏右侧搜索入口） -->
+  <GlobalSearchPanel v-if="searchOpen" @close="searchOpen = false" />
+
+  <!-- 小组件面板（与 win12 的小组件对齐） -->
+  <WidgetsPanel v-if="widgetsOpen" @close="widgetsOpen = false" />
+
   <!-- 通知中心（右侧贴边） -->
   <div v-if="notify.open" class="notify-panel" @click.stop>
     <div class="np-head">
@@ -47,6 +55,7 @@
       </div>
     </div>
     <div class="np-body">
+      <div v-if="notify.streamDown" class="np-degraded">实时推送已断开，正在重连…（通知改为定时刷新）</div>
       <div v-if="!notify.list.length" class="np-empty">暂无通知</div>
       <div v-for="n in notify.list" :key="n.id" class="np-item" :class="{ unread: !n.read }" @click="notify.markRead(n.id)">
         <div class="np-title">
@@ -69,6 +78,8 @@ import { useNotify } from '../../stores/notify'
 import { useAppState } from '../../stores/appstate'
 import { useContextMenu } from '../../stores/ui'
 import AppIcon from '../../components/AppIcon.vue'
+import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
+import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
 defineEmits<{ (e: 'launcher'): void }>()
 
@@ -80,6 +91,10 @@ const ctx = useContextMenu()
 const notifyAvail = computed(() => useAppState().isAvailable('notify'))
 
 const TRASH: AppDef = { id: 'recycle', name: '回收站', icon: 'recycle', w: 960, h: 600 }
+// 全局搜索面板开关（任务栏右侧搜索入口）
+const searchOpen = ref(false)
+// 小组件面板开关
+const widgetsOpen = ref(false)
 const dockApps = computed(() =>
   visibleApps().filter(a => a.id !== 'thispc' && a.id !== 'recycle' && a.id !== 'settings')
 )
@@ -116,8 +131,10 @@ function quitMenu(a: AppDef, e: MouseEvent) {
 function minAll() {
   store.minimizeAll()
 }
-function openSettings() { store.open('settings') }
 function openSpeedtest() { store.open('speedtest') }
+// 打开全局搜索（先收起通知，避免层叠）
+function openSearch() { notify.close(); searchOpen.value = true }
+function openWidgets() { notify.close(); widgetsOpen.value = true }
 
 // 托盘时钟（DDE datetime）
 const clock = ref('')

@@ -199,7 +199,7 @@ onMounted(async () => {
   display: flex; align-items: center; gap: 6px;
 }
 .wp-del {
-  border: none; background: rgba(229, 57, 53, 0.15); color: #e57373;
+  border: none; background: var(--danger-bg); color: var(--danger);
   border-radius: 4px; font-size: 10px; padding: 1px 5px; cursor: pointer;
 }
 .wp-del:hover { background: rgba(229, 57, 53, 0.3) }

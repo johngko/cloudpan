@@ -145,7 +145,7 @@
               对新建的上传任务生效，进行中的任务保持原分片
             </div>
           </div>
-          <div v-if="upSaved" style="font-size: 12px; color: #4caf50; margin-top: 14px">已保存</div>
+          <div v-if="upSaved" style="font-size: 12px; color: var(--success); margin-top: 14px">已保存</div>
         </template>
 
         <!-- 离线下载 -->
@@ -183,6 +183,32 @@
           <div v-if="!offTasks.length" style="color: var(--text-3); padding: 30px; text-align: center">暂无离线任务</div>
         </template>
 
+        <!-- 我的操作记录 -->
+        <template v-else-if="tab === 'logs'">
+          <h2 style="font-size: 19px; margin-bottom: 6px">操作记录</h2>
+          <div style="font-size: 12.5px; color: var(--text-3); margin-bottom: 16px">仅显示你自己的操作（文件写入、分享、登录等），管理员可查全量记录。</div>
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 14px">
+            <input class="input" v-model="logKeyword" placeholder="搜索操作或详情" style="width: 260px" @keyup.enter="loadLogs(1)" />
+            <button class="btn" @click="loadLogs(1)">搜索</button>
+          </div>
+          <div v-if="logLoading" style="font-size: 13px; color: var(--text-3)">加载中…</div>
+          <div v-else-if="!logItems.length" style="font-size: 13px; color: var(--text-3)">暂无操作记录</div>
+          <template v-else>
+            <div v-for="l in logItems" :key="l.id" style="padding: 10px 12px; border-bottom: 1px solid var(--stroke-b); font-size: 12.5px">
+              <div style="display: flex; justify-content: space-between; gap: 12px">
+                <span style="font-weight: 600">{{ l.action }}</span>
+                <span style="color: var(--text-3); flex: none">{{ new Date(l.createdAt).toLocaleString() }}</span>
+              </div>
+              <div v-if="l.detail" style="color: var(--text-2); margin-top: 3px; word-break: break-all">{{ l.detail }}</div>
+              <div v-if="l.ip" style="color: var(--text-3); margin-top: 2px">IP {{ l.ip }}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 16px">
+              <button class="btn" :disabled="logPage <= 1 || logLoading" @click="loadLogs(logPage - 1)">上一页</button>
+              <span style="font-size: 12.5px; color: var(--text-3)">第 {{ logPage }} 页 · 共 {{ logTotal }} 条</span>
+              <button class="btn" :disabled="logPage * LOG_PAGE_SIZE >= logTotal || logLoading" @click="loadLogs(logPage + 1)">下一页</button>
+            </div>
+          </template>
+        </template>
         <!-- 关于 -->
         <template v-else>
           <h2 style="font-size: 19px; margin-bottom: 20px">关于</h2>
@@ -206,7 +232,7 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { fsApi, shareApi, authApi, userShareApi } from '../api/modules'
+import { fsApi, shareApi, authApi, userShareApi, auditApi, type AuditItem } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
@@ -262,6 +288,7 @@ const tabs = computed(() => [
   { id: 'shares', name: '我的分享', icon: 'share' },
   { id: 'upload', name: '上传', icon: 'upload' },
   ...(canOffline.value ? [{ id: 'offline', name: '离线下载', icon: 'download' }] : []),
+  { id: 'logs', name: '操作记录', icon: 'list' },
   { id: 'about', name: '关于', icon: 'info' }
 ])
 const winProps = defineProps<{ winId: number; props: any }>()
@@ -275,6 +302,29 @@ watch(() => winProps.props?.tab, v => { if (v && tabs.value.some(t => t.id === v
 const nickname = ref(session.user?.nickname || '')
 const oldPwd = ref(''); const newPwd = ref(''); const davPwd = ref('')
 const shares = ref<any[]>([])
+
+// 我的操作记录（懒加载：切到该页签才请求，避免打开设置就多打一次接口）
+const LOG_PAGE_SIZE = 20
+const logItems = ref<AuditItem[]>([])
+const logTotal = ref(0)
+const logPage = ref(1)
+const logKeyword = ref('')
+const logLoading = ref(false)
+async function loadLogs(page = logPage.value) {
+  logLoading.value = true
+  try {
+    const r = await auditApi.mine(page, LOG_PAGE_SIZE, logKeyword.value.trim())
+    logItems.value = r.items || []
+    logTotal.value = r.total || 0
+    logPage.value = page
+  } catch (e: any) {
+    toast.error(e?.message || '加载失败')
+  } finally {
+    logLoading.value = false
+  }
+}
+// 懒加载 + immediate：深链直接打开 { tab: 'logs' } 时也能立即拉取
+watch(tab, t => { if (t === 'logs' && !logItems.value.length) loadLogs(1) }, { immediate: true })
 
 const initial = computed(() => (session.user?.nickname || 'C').charAt(0).toUpperCase())
 
@@ -343,7 +393,7 @@ function fmt(n: number) {
   font-size: 13.5px; cursor: pointer; color: var(--text-2); margin-bottom: 2px;
 }
 .side-item:hover { background: var(--hover-b); color: var(--text); }
-.side-item.active { background: #3b91d825; color: var(--text); }
+.side-item.active { background: var(--accent-weak); color: var(--text); }
 .form-row label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 8px; }
 .ac-sub { font-size: 13px; font-weight: 600; color: var(--theme-2); margin: 6px 0 10px; }
 .ac-sub + .file-list { margin-bottom: 8px; }

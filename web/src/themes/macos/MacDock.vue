@@ -28,14 +28,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useWindows } from '../../stores/windows'
-import { useSession } from '../../stores/session'
 import { visibleApps, type AppDef } from '../../stores/apps'
 import { useContextMenu } from '../../stores/ui'
 import AppIcon from '../../components/AppIcon.vue'
 
 const emit = defineEmits<{ (e: 'launchpad'): void }>()
 const store = useWindows()
-const session = useSession()
 const ctx = useContextMenu()
 const dockEl = ref<HTMLElement>()
 

@@ -28,7 +28,7 @@ const STALE_KEY = 'cp_chunk_stale'
 function asyncApp(loader: () => Promise<any>): Component {
   return defineAsyncComponent({
     loader,
-    onError(err, retry, fail, attempts) {
+    onError(_err, retry, fail, attempts) {
       if (attempts <= 1 && !sessionStorage.getItem(STALE_KEY)) {
         sessionStorage.setItem(STALE_KEY, '1')
         setTimeout(() => location.reload(), 300)
@@ -109,18 +109,41 @@ export function appComponent(id: string): Component {
   return APP_COMPONENTS[id] || APP_COMPONENTS.notepad!
 }
 
-// 空闲预热全部应用 chunk：桌面进入后错峰触发（每个间隔 200ms，避免并发挤占带宽）；
+// 预热跳过清单：体量大且低频/角色相关的应用。
+// 进桌面后空闲预热「全部」chunk 会把这些重 chunk 一并拉下来，而它们多半只被少数人偶尔打开
+// ——改为按需加载（首次打开多等一次网络，其余体验不变）。
+const PRELOAD_SKIP = new Set([
+  'photopea', 'cadviewer',              // vendored 大应用
+  'whiteboard', 'mindmap', 'flowchart', // excalidraw 全家桶
+  'codeeditor', 'svgeditor',            // ace / svg 编辑器
+  'officeeditor',                       // docx/pptx 预览
+  'mediaviewer', 'mediacenter', 'musicplayer',
+  'terminal', 'archiveviewer', 'epubreader', 'emlviewer', 'imageeditor',
+  'admin'                               // 管理台：仅管理员使用且体积大
+])
+
+// 优先预热：桌面高频且体量适中的应用（先于其余应用预热，进桌面即可秒开）
+const PRELOAD_FIRST = [
+  'explorer', 'thispc', 'recycle', 'notepad', 'settings', 'tasks',
+  'appcenter', 'photos', 'wallpapers', 'browser', 'calculator', 'speedtest',
+  'shared', 'myshares', 'picasa', 'pdfreader'
+]
+
+// 空闲预热应用 chunk：桌面进入后错峰触发（分级 + 间隔，避免并发挤占带宽）；
 // import() 走模块缓存，重复调用零成本，幂等
 let preloading = false
 export function preloadApps() {
   if (preloading) return
   preloading = true
-  const ids = Object.keys(APP_LOADERS)
+  const enabled = Object.keys(APP_LOADERS).filter(id => !PRELOAD_SKIP.has(id))
+  const first = PRELOAD_FIRST.filter(id => enabled.includes(id))
+  const rest = enabled.filter(id => !first.includes(id))
   const start = () => {
-    ids.forEach((id, i) => {
-      window.setTimeout(() => { APP_LOADERS[id]().catch(() => { /* 预热失败不影响功能，首开仍会重试 */ }) }, 300 + i * 200)
-    })
+    const warm = (id: string) => { APP_LOADERS[id]().catch(() => { /* 预热失败不影响功能，首开仍会重试 */ }) }
+    first.forEach((id, i) => { window.setTimeout(() => warm(id), 200 + i * 150) })
+    const offset = 700 + first.length * 150
+    rest.forEach((id, i) => { window.setTimeout(() => warm(id), offset + i * 200) })
   }
-  if ('requestIdleCallback' in window) (window as any).requestIdleCallback(start, { timeout: 4000 })
+  if (typeof (window as any).requestIdleCallback === 'function') (window as any).requestIdleCallback(start, { timeout: 4000 })
   else window.setTimeout(start, 1200)
 }

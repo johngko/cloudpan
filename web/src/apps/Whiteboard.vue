@@ -52,7 +52,6 @@ const dirty = ref(false)
 const saving = ref(false)
 let latest: { elements: any[]; appState: any; files: any } | null = null
 let root: any = null
-let unmount = false
 
 async function mount() {
   if (!host.value) return
@@ -73,7 +72,8 @@ async function mount() {
       dirty.value = true
       status.value = '已就绪'
     },
-    UIOptions: { canvasActions: { loadToClipboard: true } },
+    // Excalidraw 0.18 的类型未收录 canvasActions.loadToClipboard（运行时忽略未知项），此处局部窄化
+    UIOptions: { canvasActions: { loadToClipboard: true } } as any,
     theme: 'light'
   })
   root = createRoot(host.value)
@@ -126,7 +126,6 @@ function onKey(e: KeyboardEvent) {
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => {
-  unmount = true
   window.removeEventListener('keydown', onKey)
   try { root?.unmount() } catch { /* 忽略 */ }
   root = null

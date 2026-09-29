@@ -7,6 +7,9 @@ import { resolveTheme } from '../themes/registry'
  * 窗口框架共享行为（各主题的 WindowFrame 组件复用）：
  * 定位/最大化样式、拖拽移动、八向缩放、贴边分屏（按主题开关）。
  * 屏幕保留区来自当前主题 geometry，是窗口几何的唯一事实来源。
+ *
+ * 拖拽/缩放统一走 Pointer Events（模板绑 @pointerdown）：鼠标与触屏同一套代码，
+ * 原先只绑 mousedown，移动端/触屏无法拖动或缩放窗口。
  */
 // Aero Snap 预览幽灵（Win11）：拖窗口贴近屏幕边缘时，先画出目标区域的半透明预览，
 // 松手才真正分屏；全页只建一个，各窗口拖拽共用
@@ -21,16 +24,31 @@ function ensureSnapGhost(): HTMLDivElement {
 }
 function hideSnapGhost() { if (snapGhost) snapGhost.style.display = 'none' }
 const SNAP_M = 8 // 贴边判定阈值（预览与真实吸附共用）
+// 拖拽边界钳制：横向至少保留这么多像素可见，纵向标题栏必须留在工作区内（否则拖不回来）
+const KEEP_VISIBLE_X = 120
+const KEEP_VISIBLE_Y = 40
 
-function updateSnapGhost(ev: MouseEvent, g: { top: number; bottom: number; left: number; right: number }) {
-  const H = window.innerHeight - g.top - g.bottom
-  const W = window.innerWidth - g.left - g.right
-  const X = g.left
+function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)) }
+
+type Geo = { top: number; bottom: number; left: number; right: number }
+
+function workArea(g: Geo) {
+  return { X: g.left, Y: g.top, W: window.innerWidth - g.left - g.right, H: window.innerHeight - g.top - g.bottom }
+}
+
+// 命中哪条边：top（最大化）/ bottom（下半屏）/ left（左半屏）/ right（右半屏）
+function snapTarget(g: Geo, cx: number, cy: number): [number, number, number, number] | null {
+  const { X, Y, W, H } = workArea(g)
+  if (cy <= Y + SNAP_M) return [X, Y, W, H]
+  if (cy >= Y + H - SNAP_M) return [X, Y + H / 2, W, H / 2]
+  if (cx <= X + SNAP_M) return [X, Y, W / 2, H]
+  if (cx >= X + W - SNAP_M) return [X + W / 2, Y, W / 2, H]
+  return null
+}
+
+function updateSnapGhost(g: Geo, cx: number, cy: number) {
+  const r = snapTarget(g, cx, cy)
   const el = ensureSnapGhost()
-  let r: [number, number, number, number] | null = null
-  if (ev.clientY <= g.top + SNAP_M) r = [X, g.top, W, H]
-  else if (ev.clientX <= X + SNAP_M) r = [X, g.top, W / 2, H]
-  else if (ev.clientX >= X + W - SNAP_M) r = [X + W / 2, g.top, W / 2, H]
   if (r) {
     el.style.display = 'block'
     el.style.left = r[0] + 'px'
@@ -70,63 +88,73 @@ export function useWindowChrome(w: WinState) {
   function close() { store.close(w.id) }
 
   // 拖拽/缩放期间给窗口根挂 .win-dragging（禁用 left/top/w/h 过渡，避免跟随延迟）
-  function rootOf(e: MouseEvent): HTMLElement | null {
+  function rootOf(e: Event): HTMLElement | null {
     return (e.currentTarget as HTMLElement | null)?.closest?.('.window') ?? null
   }
 
-  function onTitlebarDown(e: MouseEvent) {
+  function onTitlebarDown(e: PointerEvent) {
     if (e.button !== 0) return
+    e.preventDefault() // 触屏：阻止默认滚动手势，改由拖拽接管
     store.focus(w.id)
     const root = rootOf(e)
     root?.classList.add('win-dragging')
     const startX = e.clientX, startY = e.clientY
     let moved = false
     let sx = w.x, sy = w.y
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
+      const g = geo.value
       const dx = ev.clientX - startX, dy = ev.clientY - startY
       if (!moved && Math.abs(dx) + Math.abs(dy) < 3) return
       if (w.maximized) {
         // 从最大化拖出：还原并跟随鼠标
         store.toggleMax(w.id)
-        sx = Math.max(0, ev.clientX - w.w / 2)
-        sy = 0
+        const { X, W } = workArea(g)
+        sx = clamp(ev.clientX - w.w / 2, X, X + W - w.w)
+        sy = g.top
         store.setRect(w.id, { x: sx, y: sy })
         return
       }
       moved = true
-      const g = geo.value
-      store.setRect(w.id, { x: sx + dx, y: Math.max(g.top, sy + dy) })
-      if (snapEdges.value) updateSnapGhost(ev, g) // 贴边即显示目标区域预览
+      const { X, Y, W, H } = workArea(g)
+      // 边界钳制：横向至少保留 KEEP_VISIBLE_X 可见，纵向标题栏不越过工作区底部
+      const nx = clamp(sx + dx, X - w.w + KEEP_VISIBLE_X, X + W - KEEP_VISIBLE_X)
+      const ny = clamp(sy + dy, Y, Y + H - KEEP_VISIBLE_Y)
+      store.setRect(w.id, { x: nx, y: ny })
+      if (snapEdges.value) updateSnapGhost(g, ev.clientX, ev.clientY) // 贴边即显示目标区域预览
     }
-    const onUp = (ev: MouseEvent) => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+    const onUp = (ev: PointerEvent) => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
       root?.classList.remove('win-dragging')
       hideSnapGhost()
-      if (!snapEdges.value) return
-      // 贴边分屏（Windows/Deepin 风格，阈值与预览一致）
-      if (moved) {
-        const g = geo.value
-        const H = window.innerHeight - g.top - g.bottom
-        const W = window.innerWidth - g.left - g.right
-        const X = g.left
-        if (ev.clientY <= g.top + SNAP_M) { w.prev = { x: w.x, y: w.y, w: w.w, h: w.h }; store.setRect(w.id, { x: X, y: g.top, w: W, h: H }); w.maximized = true }
-        else if (ev.clientX <= X + SNAP_M) { store.setRect(w.id, { x: X, y: g.top, w: W / 2, h: H }) }
-        else if (ev.clientX >= X + W - SNAP_M) { store.setRect(w.id, { x: X + W / 2, y: g.top, w: W / 2, h: H }) }
+      if (!snapEdges.value || !moved) return
+      // 贴边分屏（Windows/Deepin 风格，阈值与预览一致；含底部下半屏）
+      const g = geo.value
+      const r = snapTarget(g, ev.clientX, ev.clientY)
+      if (!r) return
+      if (r[1] === g.top && r[2] === workArea(g).W && r[3] === workArea(g).H) {
+        w.prev = { x: w.x, y: w.y, w: w.w, h: w.h }
+        store.setRect(w.id, { x: r[0], y: r[1], w: r[2], h: r[3] })
+        w.maximized = true
+        return
       }
+      store.setRect(w.id, { x: r[0], y: r[1], w: r[2], h: r[3] })
     }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
   }
 
-  function onResizeDown(dir: string, e: MouseEvent) {
+  function onResizeDown(dir: string, e: PointerEvent) {
     e.stopPropagation()
+    e.preventDefault() // 触屏：阻止默认手势
     store.focus(w.id)
     const root = rootOf(e)
     root?.classList.add('win-dragging')
     const startX = e.clientX, startY = e.clientY
     const s = { x: w.x, y: w.y, w: w.w, h: w.h }
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX, dy = ev.clientY - startY
       const r: any = {}
       if (dir.includes('e')) r.w = Math.max(360, s.w + dx)
@@ -136,12 +164,14 @@ export function useWindowChrome(w: WinState) {
       store.setRect(w.id, r)
     }
     const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
       root?.classList.remove('win-dragging')
     }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
   }
 
   return { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown }

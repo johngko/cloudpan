@@ -27,7 +27,7 @@ function holidayOf(y: number, m: number, d: number): { name: string; work: boole
     table = new Map()
     try {
       for (const h of (HolidayUtil.getHolidays(y) || [])) {
-        table.set(h._day, { name: h._name, work: h._work })
+        table.set(h.getDay(), { name: h.getName(), work: h.isWork() })
       }
     } catch { /* 该年无内置数据 */ }
     cache.set(y, table)

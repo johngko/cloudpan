@@ -17,7 +17,7 @@
         <input class="w12-login-pwd" type="text" placeholder="用户名" v-model="username" @keyup.enter="doLogin" ref="nameEl"
           :style="{ opacity: stage === 'form' ? 1 : 0, transition: 'opacity 300ms' }" />
         <input class="w12-login-pwd" type="password" placeholder="密码" v-model="password" :disabled="loading"
-          @keyup.enter="doLogin" ref="pwdEl" :style="{ opacity: stage === 'form' ? 1 : 0, transition: 'opacity 300ms' }" />
+          @keyup.enter="doLogin" :style="{ opacity: stage === 'form' ? 1 : 0, transition: 'opacity 300ms' }" />
         <div class="w12-login-err">{{ errMsg }}</div>
         <button class="w12-login-btn" :disabled="loading" @click="doLogin">{{ loading ? '登录中' : '登录' }}</button>
         <div class="w12-login-switch" v-if="session.site.guestLogin">
@@ -75,7 +75,6 @@ const loading = ref(false)
 const stage = ref<'form' | 'welcome'>('form')
 const errMsg = ref('')
 const nameEl = ref<HTMLInputElement>()
-const pwdEl = ref<HTMLInputElement>()
 
 const displayName = computed(() => session.user?.nickname || session.user?.username || (mode.value === 'guest' ? '游客' : (username.value || '用户')))
 

@@ -139,7 +139,7 @@ function launch(id: string) {
   else store.open(id)
   emit('close')
 }
-function openFolder() { store.open('explorer', null, { title: '文件资源管理器' }); emit('close') }
+function openFolder(_f?: { name: string; icon: string }) { store.open('explorer', null, { title: '文件资源管理器' }); emit('close') }
 function openExplorer() { store.open('explorer', null, { title: '文件资源管理器' }); emit('close') }
 function openAll() { store.open('appcenter'); emit('close') }
 function openStar(s: any) {

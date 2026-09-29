@@ -36,8 +36,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Artplayer from 'artplayer'
+// aplayer 官方未提供类型声明（npm 上无 @types/aplayer），此处局部忽略该 import 的缺声明报错
+// @ts-ignore
 import APlayer from 'aplayer'
 import 'aplayer/dist/APlayer.min.css'
+import { getToken } from '../api/http'
 import { fsApi, rawUrl, settingsApi, coverUrl } from '../api/modules'
 import { useSession } from '../stores/session'
 import AppIcon from '../components/AppIcon.vue'
@@ -45,7 +48,6 @@ import AppIcon from '../components/AppIcon.vue'
 const props = defineProps<{ winId: number; props: any }>()
 
 const VIDEO_EXTS = ['mp4', 'webm', 'mkv', 'mov', 'm4v']
-const AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac']
 
 // 列表若不含当前条目（调用方传错 kind 等），退化为单曲播放，绝不能从第 0 项开始播错文件
 const list0: any[] = props.props?.list?.length ? props.props.list : [props.props]
@@ -61,12 +63,12 @@ const transcodeAvailable = computed(() => {
 })
 const transcodeHard = computed(() => (useSession().site as any)?.transcodeMode === 'auto')
 function transcodeUrl(): string {
-  return `/api/fs/transcode?policyId=${current.value.policyId}&path=${encodeURIComponent(current.value.path)}&t=${token || ''}`
+  return `/api/fs/transcode?policyId=${current.value.policyId}&path=${encodeURIComponent(current.value.path)}&t=${getToken() || ''}`
 }
 function toggleTranscode() {
   transcodeOn.value = !transcodeOn.value
   building++
-  buildPlayer()
+  build()
 }
 const artEl = ref<HTMLElement>()
 const apEl = ref<HTMLElement>()
@@ -338,6 +340,6 @@ onBeforeUnmount(() => { saveProgress(); destroy() })
 .mv-audio :deep(.aplayer) { width: min(560px, 92%); background: rgba(255,255,255,.05); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
 .mv-audio :deep(.aplayer .aplayer-lrc) { text-shadow: none; }
 .mv-audio :deep(.aplayer .aplayer-lrc p) { color: #c8d4e2; }
-.mv-audio :deep(.aplayer .aplayer-lrc .aplayer-lrc-current) { color: #4cc2ff; }
+.mv-audio :deep(.aplayer .aplayer-lrc .aplayer-lrc-current) { color: var(--accent); }
 .mv-audio :deep(.aplayer .aplayer-info .aplayer-music .aplayer-title) { color: #eef3fa; }
 </style>

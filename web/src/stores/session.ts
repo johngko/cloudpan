@@ -8,13 +8,17 @@ import { resolveTheme, availableThemes } from '../themes/registry'
 // 主题类挂在 <html> 上：theme-<id> + 可选 dark；CSS token 按此激活
 function applyTheme(dark: boolean, osTheme: ThemeId) {
   const el = document.documentElement
-  for (const t of availableThemes()) el.classList.remove(t.rootClass)
-  el.classList.add(resolveTheme(osTheme).rootClass)
+  const t = resolveTheme(osTheme)
+  for (const x of availableThemes()) el.classList.remove(x.rootClass)
+  el.classList.add(t.rootClass)
   el.classList.toggle('dark', dark)
+  // 强调色由主题契约注入：应用层只引用 --accent/--accent-weak，切主题即整体换色
+  el.style.setProperty('--accent', t.accentColor)
+  el.style.setProperty('--accent-weak', t.accentWeak)
 }
 
-function validTheme(v: any): v is ThemeId {
-  return !!v && availableThemes().some(t => t.id === v)
+function validTheme(v: unknown): v is ThemeId {
+  return typeof v === 'string' && availableThemes().some(t => t.id === v)
 }
 
 export const useSession = defineStore('session', {

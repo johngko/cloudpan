@@ -361,12 +361,12 @@ onBeforeUnmount(() => {
   background: rgba(127, 127, 127, 0.18); overflow: hidden;
 }
 .tc-bar-fill { height: 100%; border-radius: 2px; background: var(--theme-1, #3b91d8); transition: width 300ms }
-.tc-bar-fill.ok { background: #4caf50 }
-.tc-bar-fill.err { background: #e53935 }
+.tc-bar-fill.ok { background: var(--success) }
+.tc-bar-fill.err { background: var(--danger) }
 .tc-meta { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap }
 .tc-st { font-size: 12px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.tc-st.ok { color: #4caf50 }
-.tc-st.err { color: #e53935 }
+.tc-st.ok { color: var(--success) }
+.tc-st.err { color: var(--danger) }
 .tc-st.run { color: var(--theme-1, #3b91d8) }
 .tc-st.idle { color: var(--text-3) }
 .tc-ops { display: flex; justify-content: flex-end; gap: 2px }
@@ -375,5 +375,5 @@ onBeforeUnmount(() => {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
   padding: 10px 4px; border-bottom: 1px solid var(--stroke);
 }
-.tc-errmsg { width: 100%; font-size: 12px; color: #e53935 }
+.tc-errmsg { width: 100%; font-size: 12px; color: var(--danger) }
 </style>

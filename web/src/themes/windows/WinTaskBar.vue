@@ -104,6 +104,7 @@
       </div>
     </div>
     <div class="np-body">
+      <div v-if="notify.streamDown" class="np-degraded">实时推送已断开，正在重连…（通知改为定时刷新）</div>
       <div v-if="!notify.list.length" class="np-empty">暂无通知</div>
       <div v-for="n in notify.list" :key="n.id" class="np-item" :class="{ unread: !n.read }" @click="notify.markRead(n.id)">
         <div class="np-title">

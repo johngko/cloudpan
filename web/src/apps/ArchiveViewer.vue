@@ -33,7 +33,7 @@
       <input v-if="ext === '7z' || ext === 'rar'" class="tool-input av-pwd" type="password" v-model="password"
         placeholder="压缩包密码" @keyup.enter="load" />
       <div style="flex: 1"></div>
-      <button class="tool-btn" @click="extractTo(null, '')" :disabled="loading">
+      <button class="tool-btn" @click="extractTo(null, {})" :disabled="loading">
         <AppIcon name="download" :size="14" />解压到当前
       </button>
       <button class="tool-btn" @click="openDstDlg(null)" :disabled="loading">
@@ -139,7 +139,7 @@
         <div class="row" style="font-size: 12px; color: var(--text-3)">
           解压为后台任务，进度可在「任务中心」查看；目标目录已存在同名文件将被覆盖
         </div>
-        <div v-if="dstMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ dstMsg }}</div>
+        <div v-if="dstMsg" style="font-size: 12.5px; color: var(--danger); margin-bottom: 8px">{{ dstMsg }}</div>
         <div class="actions">
           <button class="btn" @click="dstShow = false">取消</button>
           <button class="btn primary" :disabled="dstBusy" @click="doDstExtract">{{ dstBusy ? '提交中…' : '开始解压' }}</button>
@@ -469,7 +469,7 @@ onMounted(load)
 .av-c-size { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap }
 .av-c-time { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap }
 .av-empty { padding: 30px 0; text-align: center; font-size: 12.5px; color: var(--text-3) }
-.av-empty.av-err { color: #ff8a80 }
+.av-empty.av-err { color: var(--danger) }
 .av-dir-item {
   padding: 7px 12px; cursor: pointer;
   display: flex; align-items: center; gap: 8px; font-size: 13px;

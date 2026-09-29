@@ -22,6 +22,8 @@ const theme: ThemeDef = {
   WindowFrame: DeepinWindowFrame,
   // DDE 25 布局：无顶部面板，底部全宽 48px 任务栏（dock 即任务栏）
   geometry: { top: 0, bottom: 48, left: 0, right: 0 },
+  accentColor: '#1F6EE7',
+  accentWeak: '#1F6EE721',
   caption: 'right',
   snapEdges: true,
   wallpapers: WALLPAPERS,

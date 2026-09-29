@@ -14,6 +14,23 @@ export interface WxCurrent {
 export interface WxHour { t: string; d: number; icon: string }
 export interface WxDay { date: string; label: string; icon: string; p: number | null; lo: number; hi: number }
 
+/** Open-Meteo 预报端点：只声明用到的那几项字段（字段名来自接口返回，非猜测）。
+ *  外层可选（请求参数不同可能整块缺省），内层数组必给；缺省一律有兜底值。 */
+interface MeteoForecast {
+  current?: {
+    temperature_2m?: number; apparent_temperature?: number; weather_code?: number
+    wind_speed_10m?: number; wind_direction_10m?: number; relative_humidity_2m?: number
+  }
+  hourly?: { time: string[]; temperature_2m: number[]; weather_code: number[] }
+  daily?: {
+    time: string[]; weather_code: number[]
+    temperature_2m_max: number[]; temperature_2m_min: number[]
+    precipitation_probability_max?: (number | null)[]
+  }
+}
+/** Open-Meteo 空气质量端点：只用 current.us_aqi */
+interface MeteoAir { current?: { us_aqi?: number } }
+
 const TTL = 30 * 60 * 1000
 const CITY_KEY = 'cp_wx_city'
 
@@ -38,32 +55,35 @@ export const useWeatherStore = defineStore('weather', () => {
         + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m'
         + '&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=15'
       const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-      const j: any = await r.json()
+      const j = (await r.json()) as MeteoForecast
       if (seq !== reqSeq) return
-      const cur = j.current || {}
+      const cur: MeteoForecast['current'] = j.current ?? {}
       const code = Number(cur.weather_code ?? -1)
       // 逐时：从当前整点起取 8 格
       const hNow = new Date().getHours()
-      const hTimes: string[] = j.hourly?.time || []
+      const hourly = j.hourly
+      const hTimes: string[] = hourly?.time || []
       const start = hTimes.findIndex(t => Number((t.split('T')[1] || '0:0').split(':')[0]) >= hNow)
       const hs: WxHour[] = []
       for (let i = Math.max(0, start); i < Math.max(0, start) + 8 && i < hTimes.length; i++) {
         const hh = Number((hTimes[i].split('T')[1] || '0:0').split(':')[0])
-        hs.push({ t: String(hh).padStart(2, '0') + ':00', d: Math.round(Number(j.hourly.temperature_2m[i])), icon: wmoIcon(Number(j.hourly.weather_code[i]), hh) })
+        hs.push({ t: String(hh).padStart(2, '0') + ':00', d: Math.round(Number(hourly?.temperature_2m[i] ?? 0)), icon: wmoIcon(Number(hourly?.weather_code[i] ?? -1), hh) })
       }
       // 15 天：今天/明天/周X
       const ds: WxDay[] = []
-      const dTimes: string[] = j.daily?.time || []
+      const daily = j.daily
+      const dTimes: string[] = daily?.time || []
       for (let i = 0; i < dTimes.length; i++) {
         const dt = new Date(dTimes[i] + 'T12:00:00')
         const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dt.getDay()]
+        const p = daily?.precipitation_probability_max?.[i]
         ds.push({
           date: dTimes[i],
           label: i === 0 ? '今天' : i === 1 ? '明天' : wd,
-          icon: wmoIcon(Number(j.daily.weather_code[i])),
-          p: j.daily.precipitation_probability_max?.[i] != null ? Math.round(Number(j.daily.precipitation_probability_max[i])) : null,
-          lo: Math.round(Number(j.daily.temperature_2m_min[i])),
-          hi: Math.round(Number(j.daily.temperature_2m_max[i]))
+          icon: wmoIcon(Number(daily?.weather_code[i] ?? -1)),
+          p: p != null ? Math.round(Number(p)) : null,
+          lo: Math.round(Number(daily?.temperature_2m_min[i] ?? 0)),
+          hi: Math.round(Number(daily?.temperature_2m_max[i] ?? 0))
         })
       }
       current.value = {
@@ -85,7 +105,7 @@ export const useWeatherStore = defineStore('weather', () => {
       // 空气质量：独立端点，失败仅隐藏（不阻塞主数据）
       try {
         const ar = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${c.lat}&longitude=${c.lon}&current=us_aqi`, { signal: AbortSignal.timeout(8000) })
-        const aj: any = await ar.json()
+        const aj = (await ar.json()) as MeteoAir
         if (seq === reqSeq && aj.current?.us_aqi != null) current.value.aqi = Math.round(Number(aj.current.us_aqi))
       } catch { /* AQI 不可用则隐藏 */ }
     } catch {

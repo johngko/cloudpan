@@ -367,3 +367,18 @@ html.theme-macos {
     radial-gradient(ellipse 1000px 640px at 55% 30%, rgba(120,60,180,0.4), transparent 64%),
     linear-gradient(158deg, #2a1040 0%, #5a2050 46%, #a04058 80%, #d06850 100%);
 }
+
+/* ============ 窄屏适配 ============
+   Dock 在窄视口可能溢出屏幕：改为可横向滚动（隐藏滚动条以保持高度，
+   geometry.bottom / --shell-bottom 维持 78px 不变，窗口摆放不受影响） */
+@media (max-width: 960px) {
+  .mac-dock { max-width: calc(100vw - 12px); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .mac-dock::-webkit-scrollbar { display: none; }
+  .dock-app { width: 48px; }
+  .dock-sep { margin: 0 2px; }
+}
+@media (max-width: 640px) {
+  .mac-menubar { padding: 0 6px; font-size: 11.5px; }
+  .mb-item { padding: 0 6px; }
+  .dock-app { width: 44px; }
+}

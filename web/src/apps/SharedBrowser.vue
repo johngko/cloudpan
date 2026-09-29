@@ -42,15 +42,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { userShareApi } from '../api/modules'
 import { useUiDialog, useToast } from '../stores/dialog'
+import { useTransfer } from '../stores/transfer'
 import { useContextMenu } from '../stores/ui'
 import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps<{ winId: number; props: any }>()
 const uiDlg = useUiDialog()
 const toast = useToast()
+const transfer = useTransfer()
 const ctx = useContextMenu()
 
 const shareId = props.props?.shareId || 0
@@ -64,10 +66,16 @@ const fileInput = ref<HTMLInputElement>()
 const segs = computed(() => rel.value.split('/').filter(Boolean))
 const canBack = computed(() => history.length > 0)
 
+// 共享盘上传完成（上传泵派发）：只刷新对应共享
+function onRefreshShared(e: any) {
+  if (e.detail?.shareId === shareId) load()
+}
 onMounted(async () => {
   try { info.value = await userShareApi.info(shareId) } catch (e: any) { toast.error(e.message) }
   load()
+  window.addEventListener('cp-refresh-shared', onRefreshShared)
 })
+onBeforeUnmount(() => window.removeEventListener('cp-refresh-shared', onRefreshShared))
 
 async function load() {
   sel.value = []
@@ -118,13 +126,10 @@ function pickFiles() { fileInput.value?.click() }
 async function onFilePicked(e: Event) {
   const input = e.target as HTMLInputElement
   if (!input.files?.length) return
-  try {
-    for (const f of Array.from(input.files)) {
-      await userShareApi.upload(shareId, rel.value, f)
-    }
-    toast.success('上传完成')
-    load()
-  } catch (e: any) { toast.error(e.message) }
+  // 走统一上传泵：分片 + 秒传 + 断点续传 + 重试 + 进度面板（大文件不再受单次直传限制）
+  transfer.addFiles(0, rel.value, Array.from(input.files), shareId)
+  transfer.panel(true)
+  toast.success(`已加入 ${input.files.length} 个文件到上传队列`)
   input.value = ''
 }
 async function delSel() {

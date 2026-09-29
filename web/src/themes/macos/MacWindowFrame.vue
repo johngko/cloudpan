@@ -1,6 +1,6 @@
 <template>
   <div class="window" :class="{ minimized: w.minimized, foc: store.activeId === w.id, entering: entering && !w.minimizing && !w.restoring, minimizing: w.minimizing, restoring: w.restoring }" :style="style" @mousedown="focusWin">
-    <div class="mac-titlebar" @mousedown="onTitlebarDown" @dblclick="toggleMax">
+    <div class="mac-titlebar" @pointerdown="onTitlebarDown" @dblclick="toggleMax">
       <div class="traffic" @mousedown.stop>
         <button class="tl close" @click="close" title="关闭"><span class="g">×</span></button>
         <button class="tl min" @click="minimize" title="最小化"><span class="g">−</span></button>
@@ -13,7 +13,7 @@
       <component :is="comp" :win-id="w.id" :props="w.props" />
     </div>
     <template v-if="!w.maximized">
-      <div v-for="dir in dirs" :key="dir" class="win-resize" :class="dir" @mousedown="onResizeDown(dir, $event)"></div>
+      <div v-for="dir in dirs" :key="dir" class="win-resize" :class="dir" @pointerdown="onResizeDown(dir, $event)"></div>
     </template>
   </div>
 </template>

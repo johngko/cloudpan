@@ -3,24 +3,40 @@
        未返回时把功能应用/自装应用全部隐藏造成图标"先缺后补"的闪现 -->
   <div v-if="veil" class="shell-veil"><div class="shell-veil-spin"></div></div>
   <component v-else :is="theme[screen]" />
+  <!-- 功能权限拉取失败（网络/服务异常）：不阻塞桌面（入口按放行显示），但明确提示并可一键重试 -->
+  <div v-if="!veil && screen === 'Desktop' && appstate.loadFailed" class="shell-degraded" role="alert">
+    <span>功能权限加载失败（网络或服务异常），入口显隐可能与实际权限不一致。</span>
+    <button class="shell-degraded-btn" :disabled="retrying" @click="retryAppState">{{ retrying ? '重试中…' : '重试' }}</button>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSession } from '../stores/session'
 import { ensureBootData, isBootDataReady } from '../stores/boot'
 import { getToken } from '../api/http'
 import { resolveTheme, preloadApps } from '../themes/registry'
 import { settingsApi } from '../api/modules'
+import { useAppState } from '../stores/appstate'
 
 // 外壳宿主：路由只挂载本组件，具体外壳（开机/登录/注册/桌面）按当前主题动态解析。
 // 切换主题时组件热替换，窗口等状态保存在 Pinia stores 中不丢失。
 const props = defineProps<{ screen: 'Boot' | 'Login' | 'Register' | 'Desktop' }>()
 const session = useSession()
+const appstate = useAppState()
 const router = useRouter()
 const theme = computed(() => resolveTheme(session.osTheme))
 const veil = ref(false)
+const retrying = ref(false)
+
+// 权限清单重试：必须直接调 appstate.load()，不能走 ensureBootData()——
+// 后者按身份去重（loadedFor 已置位）会直接返回 true 而不重新请求 /apps
+async function retryAppState() {
+  if (retrying.value) return
+  retrying.value = true
+  try { await appstate.load() } finally { retrying.value = false }
+}
 
 // ---- 壁纸定时轮换（壁纸中心配置，用户 KV wallpaper_rotate_min，0=关闭）----
 // 仅桌面激活时计时；每次到点从「当前主题内置 + 管理员目录 + 我的壁纸」中随机挑一张
@@ -67,10 +83,31 @@ watch(() => props.screen, async (s) => {
   }
   else { veil.value = false; stopRotate() }
 }, { immediate: true })
+
+// 路由离开/组件卸载时兜底清理：只靠 watch(screen) 在异常卸载路径下可能漏停
+onBeforeUnmount(stopRotate)
 </script>
 
 <style scoped>
 .shell-veil { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #0b0c12; }
 .shell-veil-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.15); border-top-color: rgba(255,255,255,.75); animation: shell-veil-rot .8s linear infinite; }
 @keyframes shell-veil-rot { to { transform: rotate(360deg) } }
+
+/* 权限加载失败提示条：浮于外壳之上，避开各主题的顶部保留区（macOS 菜单栏 24px） */
+.shell-degraded {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  top: calc(var(--shell-top, 0px) + 10px);
+  z-index: 9600; display: flex; align-items: center; gap: 10px;
+  max-width: min(680px, calc(100vw - 24px));
+  padding: 8px 14px; border-radius: var(--radius);
+  background: var(--warning-bg); color: var(--warning);
+  border: 1px solid var(--warning); box-shadow: var(--shadow);
+  font-size: 12.5px; line-height: 1.5;
+}
+.shell-degraded-btn {
+  flex: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--warning); background: transparent; color: var(--warning); font-size: 12.5px;
+}
+.shell-degraded-btn:hover:not(:disabled) { background: var(--warning); color: var(--bg); }
+.shell-degraded-btn:disabled { opacity: .6; cursor: default; }
 </style>

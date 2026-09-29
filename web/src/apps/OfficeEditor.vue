@@ -56,7 +56,7 @@
         <span style="font-size: 13px; color: var(--text); font-weight: 500">正在编辑: {{ props.props?.name }}</span>
         <span style="font-size: 11px; color: var(--text-3)">修改后请点击「保存」覆盖文件</span>
       </div>
-      <div class="edit-body" ref="editBody">
+      <div class="edit-body">
         <table class="edit-table">
           <tbody>
             <tr v-for="(row, ri) in editableData" :key="ri">
@@ -94,7 +94,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import axios from 'axios'
 import { get, post, put } from '../api/http'
-import { rawUrl, downloadUrl, userShareApi } from '../api/modules'
+import { rawUrl, downloadUrl, userShareApi, type UploadInit } from '../api/modules'
 import { useSession } from '../stores/session'
 import { useToast } from '../stores/dialog'
 import AppIcon from '../components/AppIcon.vue'
@@ -109,11 +109,9 @@ const isShared = computed(() => !!props.props?.shareId)
 const canWriteFile = computed(() => !isShared.value || props.props?.perm === 'rw')
 
 const mode = ref<'ds' | 'pdf' | 'static' | 'none'>('none')
-const dsError = ref('')
 const staticHost = ref<HTMLDivElement>()
 const docxHost = ref<HTMLDivElement>()
 const pptxHost = ref<HTMLDivElement>()
-const editBody = ref<HTMLDivElement>()
 const sheets = ref<string[]>([])
 const sheetIdx = ref(0)
 const sheetHtml = ref('')
@@ -296,7 +294,7 @@ async function saveEdit() {
       await post('/shared/' + props.props.shareId + '/upload', fd)
     } else {
       // 本地盘：分块上传会话（秒传直接返回）
-      const initResp = await post('/upload/init', {
+      const initResp = await post<UploadInit>('/upload/init', {
         policyId: props.props.policyId,
         parent: props.props.path.substring(0, props.props.path.lastIndexOf('/')) || '/',
         name: props.props.name,
@@ -305,8 +303,10 @@ async function saveEdit() {
         hash: ''
       })
 
-      if (!initResp.instant) {
-        const chunkSize = 8 * 1024 * 1024
+      // 布尔判别式必须显式比较，TS 的真值判断不收窄（见 UploadInit 注释）
+      if (initResp.instant === false) {
+        // 用服务端返回的分片尺寸：后端会把越界值收敛到 [1KB, 64MB]，客户端不能假定自己传的值
+        const chunkSize = initResp.chunkSize
         const chunks: number = Math.ceil(buf.byteLength / chunkSize)
         for (let i = 0; i < chunks; i++) {
           const start = i * chunkSize

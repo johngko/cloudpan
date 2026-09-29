@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { uploadApi, settingsApi } from '../api/modules'
+import { uploadApi, settingsApi, userShareApi, type UploadStatus } from '../api/modules'
 import { sha256, Sha256, EMPTY_SHA256 } from '../utils/sha256'
 import { useWindows } from './windows'
 import { useToast } from './dialog'
@@ -29,6 +29,48 @@ export interface TransferTask {
   pausedFlag?: boolean
   /** pump 已认领（防止 await 间隙被重复调度导致并发重复上传） */
   claimed?: boolean
+  /** 共享盘上传：目标共享 ID（落盘进共享创建者的目录）。缺省 = 上传到自己的盘 */
+  shareId?: number
+}
+
+// 上传端点集合：共享盘任务只替换 init（分片/完成/状态/取消是同一套 /upload/*，
+// 服务端按「会话归属 = 上传者」鉴权、并按会话里记下的落盘属主落盘），故泵逻辑完全复用。
+/** init 返回：普通上传与共享盘分片上传同构（instant 命中时无 sessionId） */
+interface UploadInitResult {
+  instant: boolean
+  path?: string
+  sessionId?: string
+  chunkSize?: number
+  totalChunks?: number
+  received?: number[]
+}
+interface UploadEndpoints {
+  init: (d: { policyId: number; parent: string; name: string; size: number; chunkSize: number; hash: string }) => Promise<UploadInitResult>
+  chunk: typeof uploadApi.chunk
+  complete: typeof uploadApi.complete
+  status: typeof uploadApi.status
+  abort: typeof uploadApi.abort
+}
+
+/** 上传端点选择（导出供单测断言：共享任务只换 init，其余复用 /upload/*） */
+export function uploadEndpoints(t: TransferTask): UploadEndpoints {
+  if (!t.shareId) return uploadApi
+  const shareId = t.shareId
+  return {
+    init: (d) => userShareApi.uploadInit(shareId, { rel: d.parent, name: d.name, size: d.size, chunkSize: d.chunkSize, hash: d.hash }),
+    chunk: uploadApi.chunk,
+    complete: uploadApi.complete,
+    status: uploadApi.status,
+    abort: uploadApi.abort
+  }
+}
+
+/** 拖拽目录遍历会给 File 挂上相对路径（见 Explorer/SftpPanel 的 drop 处理） */
+type FileWithRel = File & { __cpRel?: string }
+
+/** 统一从 unknown 异常里取可读信息（替代到处 catch 后取 e.message 的写法） */
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }
 
 // 小文件快速路径阈值：以下整块读入内存（含 buffer 驻留）无压力
@@ -88,7 +130,7 @@ export const useTransfer = defineStore('transfer', {
       await settingsApi.set('upload_concurrency', String(next.concurrency))
       await settingsApi.set('upload_chunk_size_mb', String(next.chunkMB))
     },
-    async addFiles(policyId: number, parent: string, files: FileList | File[]) {
+    async addFiles(policyId: number, parent: string, files: FileList | File[], shareId?: number) {
       const arr = Array.from(files)
       this.ensureSpeedTimer()
       // 先取回用户设置再开泵：否则首批发起时并发还是默认值 3，
@@ -100,7 +142,7 @@ export const useTransfer = defineStore('transfer', {
         // 后端上传完成时自动创建父目录
         let p = parent
         let name = f.name
-        const rel = ((f as any).__cpRel || (f as any).webkitRelativePath) as string | undefined
+        const rel = (f as FileWithRel).__cpRel || f.webkitRelativePath || undefined
         if (rel) {
           const parts = rel.split('/')
           name = parts[parts.length - 1]
@@ -108,7 +150,7 @@ export const useTransfer = defineStore('transfer', {
         }
         const t: TransferTask = {
           id: Math.random().toString(36).slice(2), name, policyId, parent: p,
-          size: f.size, uploaded: 0, progress: 0, status: 'queued', speed: 0, received: [], file: f
+          size: f.size, uploaded: 0, progress: 0, status: 'queued', speed: 0, received: [], file: f, shareId
         }
         this.tasks.push(t)
         this.pump()
@@ -168,7 +210,7 @@ export const useTransfer = defineStore('transfer', {
     cancel(id: string) {
       const t = this.tasks.find(x => x.id === id)
       if (!t) return
-      if (t.sessionId) uploadApi.abort(t.sessionId).catch(() => {})
+      if (t.sessionId) uploadEndpoints(t).abort(t.sessionId).catch(() => {})
       if (t.sessionId) { clearInterval(this.progressTimers.get(t.sessionId)!); this.progressTimers.delete(t.sessionId) }
       t.pausedFlag = true
       this.tasks = this.tasks.filter(x => x.id !== id)
@@ -189,8 +231,8 @@ export const useTransfer = defineStore('transfer', {
         let buf: ArrayBuffer
         try {
           buf = await t.file!.arrayBuffer()
-        } catch (e: any) {
-          throw new Error(`无法读取文件内容（${t.name}）：${e?.message || String(e)}`)
+        } catch (e: unknown) {
+          throw new Error(`无法读取文件内容（${t.name}）：${errMsg(e)}`)
         }
         t.buffer = buf
         // 注意：crypto.subtle 仅在安全上下文（HTTPS/localhost）存在，
@@ -216,7 +258,7 @@ export const useTransfer = defineStore('transfer', {
         // api() 已解包为 data 本体，这里拿到的直接是 {status,progress,...}
         // 进度以服务端为准（断点恢复后服务端可能领先本地计数）；速度只由本地分片循环
         // speedTick 提供真实字节数，避免与轮询重复计数造成抖动
-        const d = await uploadApi.status(t.sessionId)
+        const d = await uploadEndpoints(t).status(t.sessionId)
         if (d && d.status === 'uploading') {
           if (d.uploaded != null) t.uploaded = Math.max(t.uploaded, d.uploaded)
           if (d.progress != null) t.progress = Math.max(t.progress, d.progress)
@@ -249,7 +291,13 @@ export const useTransfer = defineStore('transfer', {
             t.speed = 0
           }
         }
+        // 没有任何在途任务（校验/上传/合并）时停表：原先定时器永不清理，
+        // 任务全部结束后仍每秒空转（CPU/电量浪费），重传/重试时会重新 ensure
+        if (this.activeCount === 0) this.stopSpeedTimer()
       }, 1000)
+    },
+    stopSpeedTimer() {
+      if (this.speedTimer) { clearInterval(this.speedTimer); this.speedTimer = 0 }
     },
     startPolling(t: TransferTask) {
       if (!t.sessionId || t.status !== 'uploading') return
@@ -266,9 +314,9 @@ export const useTransfer = defineStore('transfer', {
     async run(t: TransferTask) {
       try {
         await this.upload(t)
-      } catch (e: any) {
+      } catch (e: unknown) {
         t.status = 'error'
-        t.errMsg = e.message || '上传失败'
+        t.errMsg = errMsg(e) || '上传失败'
         // 失败即停：清零速度，否则该任务残留的 speed 会被 totalSpeed 累加，
         // 全部传完后面板头部仍显示 ↑速度（"这不是实时的吗"）
         t.speed = 0
@@ -277,10 +325,10 @@ export const useTransfer = defineStore('transfer', {
         // 控制台留全量诊断（黄色 warn）：目标路径 + 原始错误，便于定位 Windows 文件系统类问题
         console.warn('[CloudPan 上传失败]', {
           parent: t.parent, name: t.name, policyId: t.policyId,
-          size: t.size, hash: t.hash, error: e?.message ?? String(e)
+          size: t.size, hash: t.hash, error: errMsg(e)
         })
         const toast = useToast()
-        toast.error('上传失败: ' + (e.message || '未知错误'))
+        toast.error('上传失败: ' + (errMsg(e) || '未知错误'))
       }
     },
     // 队列清空检查（pump 的 finally 里调用）：不再有任何排队/校验/上传/合并/暂停中的任务时，
@@ -297,7 +345,8 @@ export const useTransfer = defineStore('transfer', {
     },
     async upload(t: TransferTask) {
       await this.hashFile(t)
-      const init = await uploadApi.init({
+      const ep = uploadEndpoints(t)
+      const init = await ep.init({
         policyId: t.policyId, parent: t.parent, name: t.name,
         size: t.size, chunkSize: this.prefs.chunkMB << 20, hash: t.hash || ''
       })
@@ -337,21 +386,21 @@ export const useTransfer = defineStore('transfer', {
           this.speedTick(t, chunk.byteLength)
           t.received.push(i)
           t.uploaded = Math.min(t.size, t.received.length * cs)
-          t.progress = Math.round((t.received.length / Math.max(t.totalChunks, 1)) * 100)
+          t.progress = Math.round((t.received.length / Math.max(t.totalChunks!, 1)) * 100)
         }
       }
       if (t.status !== 'uploading') return
       // 服务端异步合并：complete 立即返回（大文件合并+哈希需数分钟），
       // 轮询状态直到 completed/失败；关页面/断网不影响服务端合并
-      await uploadApi.complete(t.sessionId!)
+      await uploadEndpoints(t).complete(t.sessionId!)
       await this.waitMerge(t)
     },
     // 单分片重试（远端 DB 抖动/瞬时断流），全部失败才把错误抛给任务层
     async putChunk(t: TransferTask, idx: number, chunk: ArrayBuffer) {
-      let lastErr: any
+      let lastErr: unknown
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          await uploadApi.chunk(t.sessionId!, idx, chunk)
+          await uploadEndpoints(t).chunk(t.sessionId!, idx, chunk)
           return
         } catch (e) {
           lastErr = e
@@ -371,8 +420,8 @@ export const useTransfer = defineStore('transfer', {
         if (t.pausedFlag) return
         await new Promise(r => setTimeout(r, 2000))
         if (t.pausedFlag) return
-        let d: any
-        try { d = await uploadApi.status(t.sessionId!) } catch { continue }
+        let d: UploadStatus | undefined
+        try { d = await uploadEndpoints(t).status(t.sessionId!) } catch { continue }
         if (!d) continue
         if (d.status === 'completed') {
           t.status = 'done'
@@ -398,11 +447,17 @@ export const useTransfer = defineStore('transfer', {
       t.errMsg = '合并超时，请在任务中心查看'
     },
     refreshExplorer(t: TransferTask) {
+      // 共享盘上传：通知「来自他人的共享」视图刷新（文件不在自己的盘里，
+      // 派发 explorer 事件会让自己的文件浏览器刷一个不相干的目录）
+      if (t.shareId) {
+        window.dispatchEvent(new CustomEvent('cp-refresh-shared', { detail: { shareId: t.shareId } }))
+        return
+      }
       window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId: t.policyId, path: t.parent } }))
     }
   }
 })
 
-export function openFileByType(app: string, props: any, title: string, w = 900, h = 600) {
+export function openFileByType(app: string, props: Record<string, unknown> | null, title: string, w = 900, h = 600) {
   useWindows().open(app, props, { title, w, h })
 }

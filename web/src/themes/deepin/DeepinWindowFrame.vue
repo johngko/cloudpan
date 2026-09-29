@@ -1,7 +1,7 @@
 <template>
   <div class="window" :class="{ minimized: w.minimized, foc: store.activeId === w.id, entering: entering && !w.minimizing && !w.restoring, minimizing: w.minimizing, restoring: w.restoring }" :style="style" @mousedown="focusWin">
     <!-- DDE 25 标题栏：标题居中、无左侧图标，右侧细线按钮（close hover 纯红见 css） -->
-    <div class="dde-titlebar" @mousedown="onTitlebarDown" @dblclick="toggleMax">
+    <div class="dde-titlebar" @pointerdown="onTitlebarDown" @dblclick="toggleMax">
       <span class="dde-title">{{ w.title }}</span>
       <div class="dde-ctrls" @mousedown.stop>
         <button class="dde-ctrl" @click="minimize" title="最小化"><AppIcon name="min" :size="13" /></button>
@@ -13,7 +13,7 @@
       <component :is="comp" :win-id="w.id" :props="w.props" />
     </div>
     <template v-if="!w.maximized">
-      <div v-for="dir in dirs" :key="dir" class="win-resize" :class="dir" @mousedown="onResizeDown(dir, $event)"></div>
+      <div v-for="dir in dirs" :key="dir" class="win-resize" :class="dir" @pointerdown="onResizeDown(dir, $event)"></div>
     </template>
   </div>
 </template>

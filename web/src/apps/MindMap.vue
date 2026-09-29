@@ -55,6 +55,13 @@ const MINDMAP_TEMPLATE = JSON.stringify({
   view: null
 }, null, 2)
 
+// host.html 的 app.js 运行时向 iframe window 注入的桥接字段（DOM lib 未声明）
+type MMPWin = Window & {
+  initApp?: () => void
+  __mmData?: any
+  __mmOnSave?: (d: any) => void
+}
+
 function win(): Window | null {
   return frame.value?.contentWindow || null
 }
@@ -93,7 +100,7 @@ function onFrameLoad() {
   if (!parseOk.value) return
   // 文件内容尚未读取完成：稍后重试，避免用空数据初始化
   if (!dataReady.value) { setTimeout(onFrameLoad, 100); return }
-  const w = win()
+  const w = win() as MMPWin | null
   if (!w) return
   // host.html 的 app.js 加载完成后才暴露 initApp；load 事件保证已执行
   if (typeof w.initApp !== 'function') {

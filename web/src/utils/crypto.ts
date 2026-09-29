@@ -59,7 +59,8 @@ export function encDecryptBytes(cipherText: string, password: string, saltB64: s
   const iv = CryptoJS.enc.Base64.parse(cipherText.slice(0, i))
   const ct = CryptoJS.enc.Base64.parse(cipherText.slice(i + 1))
   // AES.decrypt 直接返回明文 WordArray（已去填充），不是 CipherParams 对象
-  const p = CryptoJS.AES.decrypt({ ciphertext: ct }, key, {
+  // @types/crypto-js 把入参声明为完整 CipherParams，但运行时接受 { ciphertext } 简对象——局部窄化
+  const p = CryptoJS.AES.decrypt({ ciphertext: ct } as CryptoJS.lib.CipherParams, key, {
     iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
   })
   return bytesFromWords(p)

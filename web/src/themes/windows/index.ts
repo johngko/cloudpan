@@ -22,6 +22,8 @@ import { WALLPAPERS } from './wallpapers'
     Desktop: WinDesktop,
     WindowFrame: WinWindowFrame,
     geometry: { top: 0, bottom: 50, left: 0, right: 0 },
+  accentColor: '#3b91d8',
+  accentWeak: '#3b91d825',
   caption: 'right',
   snapEdges: true,
   wallpapers: WALLPAPERS,

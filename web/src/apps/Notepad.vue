@@ -33,7 +33,7 @@
           <input class="input" v-model="saPath" placeholder="/笔记/待办.txt" style="width: 100%" @keydown.enter="doSaveAs" />
         </div>
         <div class="row" style="font-size: 12px; color: var(--text-3)">带目录会存到对应文件夹；不带扩展名自动补 .txt</div>
-        <div v-if="saMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ saMsg }}</div>
+        <div v-if="saMsg" style="font-size: 12.5px; color: var(--danger); margin-bottom: 8px">{{ saMsg }}</div>
         <div class="actions">
           <button class="btn" @click="saveAsShow = false">取消</button>
           <button class="btn primary" :disabled="saving" @click="doSaveAs">{{ saving ? '保存中…' : '保存' }}</button>
@@ -69,17 +69,17 @@
               ? '端到端加密：内容在本浏览器内用提取码加密后再上传，服务端无法查看；对方需提取码解密后才能阅读'
               : '对方打开链接即可在线阅读（无需登录）；.md 文件将渲染为 Markdown' }}
           </div>
-          <div v-if="shareMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ shareMsg }}</div>
+          <div v-if="shareMsg" style="font-size: 12.5px; color: var(--danger); margin-bottom: 8px">{{ shareMsg }}</div>
           <div class="actions">
             <button class="btn" :disabled="shareBusy" @click="shareShow = false">取消</button>
             <button class="btn primary" :disabled="shareBusy" @click="doShare">{{ shareBusy ? (shareEnc ? '加密上传中…' : '创建中…') : '创建链接' }}</button>
           </div>
         </div>
         <div v-else>
-          <div class="row" style="background: #3b91d818; border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
+          <div class="row" style="background: var(--accent-weak); border-radius: 6px; padding: 10px; font-size: 12.5px; word-break: break-all; user-select: text; cursor: text" title="点选后可手动复制">
             {{ shareLink }}
           </div>
-          <div v-if="shareMsg" style="font-size: 12.5px; color: #ff8a80; margin-bottom: 8px">{{ shareMsg }}</div>
+          <div v-if="shareMsg" style="font-size: 12.5px; color: var(--danger); margin-bottom: 8px">{{ shareMsg }}</div>
           <div class="actions">
             <button class="btn" @click="shareShow = false">关闭</button>
             <button class="btn primary" @click="copyShare">复制链接</button>

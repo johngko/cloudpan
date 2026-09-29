@@ -115,7 +115,9 @@ async function save() {
       : ext === 'webp' ? 'image/webp'
       : ext === 'gif' ? 'image/gif'
       : 'image/jpeg'
-    const blob = await new Promise<Blob | null>(r => cv.value!.toBlob(r, mime === 'image/png' || mime === 'image/gif' ? undefined : 0.92))
+    // 注意第 2 个参数是 MIME（type），质量必须是第 3 个参数：
+    // 原先把质量写在第 2 位，非 PNG/GIF 时会被当成非法 MIME → 导出实际仍是 PNG
+    const blob = await new Promise<Blob | null>(r => cv.value!.toBlob(r, mime, mime === 'image/png' || mime === 'image/gif' ? undefined : 0.92))
     if (!blob) throw new Error('导出图片失败')
     const buf = new Uint8Array(await blob.arrayBuffer())
     const parent = path.value.substring(0, path.value.lastIndexOf('/')) || '/'

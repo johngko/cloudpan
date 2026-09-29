@@ -1,6 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useSession } from './session'
 import { useAppState } from './appstate'
+import { moveIcon, sortByOrder } from './desktopIcons'
 
 export interface AppDef {
   id: string
@@ -15,39 +16,41 @@ export interface AppDef {
   feature?: string
   /** 可安装应用（应用中心「我的应用」）：用户自行安装/卸载，安装态存用户设置 KV */
   installable?: boolean
+  /** 可多开：允许同时打开多个窗口。缺省为 false = 单实例（再次打开聚焦已有窗口） */
+  multi?: boolean
 }
 
 export const APPS: AppDef[] = [
-  { id: 'explorer', name: '文件资源管理器', icon: 'explorer', w: 1000, h: 640, desktop: true, pinned: true },
+  { id: 'explorer', name: '文件资源管理器', icon: 'explorer', w: 1000, h: 640, desktop: true, pinned: true, multi: true },
   { id: 'thispc', name: '此电脑', icon: 'thispc', w: 1000, h: 640, desktop: true, pinned: true },
   { id: 'recycle', name: '回收站', icon: 'recycle', w: 960, h: 600, desktop: true, pinned: true },
-  { id: 'notepad', name: '记事本', icon: 'notepad', w: 760, h: 560, desktop: true, pinned: true },
+  { id: 'notepad', name: '记事本', icon: 'notepad', w: 760, h: 560, desktop: true, pinned: true, multi: true },
   { id: 'terminal', name: '终端', icon: 'terminal', w: 1040, h: 640, desktop: true, pinned: true, feature: 'terminal' },
   { id: 'calculator', name: '计算器', icon: 'calculator', w: 340, h: 500, desktop: true, pinned: true },
   { id: 'speedtest', name: '网络测速', icon: 'speedtest', w: 480, h: 640,pinned: true, feature: 'speedtest' },
   { id: 'browser', name: '浏览器', icon: 'browser', w: 1100, h: 700, desktop: true, pinned: true, feature: 'browser' },
   // imageviewer（图片查看器）已下线：图片打开统一走 picasa
-  { id: 'mediaviewer', name: '媒体播放器', icon: 'media', w: 880, h: 580 },
-  { id: 'officeeditor', name: 'Office 编辑器', icon: 'office', w: 1240, h: 780, feature: 'office' },
-  { id: 'archiveviewer', name: '压缩包浏览器', icon: 'archive', w: 1000, h: 620, feature: 'archive_view' },
+  { id: 'mediaviewer', name: '媒体播放器', icon: 'media', w: 880, h: 580, multi: true },
+  { id: 'officeeditor', name: 'Office 编辑器', icon: 'office', w: 1240, h: 780, feature: 'office', multi: true },
+  { id: 'archiveviewer', name: '压缩包浏览器', icon: 'archive', w: 1000, h: 620, feature: 'archive_view', multi: true },
   // 创意文档五件套（系统功能：管理员开关 + 组分配，不可自装）
-  { id: 'mindmap', name: '思维导图', icon: 'mindmap', w: 1080, h: 700, feature: 'mindmap' },
-  { id: 'whiteboard', name: '白板', icon: 'whiteboard', w: 1080, h: 700, feature: 'whiteboard' },
-  { id: 'flowchart', name: '流程图', icon: 'flowchart', w: 1080, h: 700, feature: 'flowchart' },
-  { id: 'imageeditor', name: '图片编辑器', icon: 'imageedit', w: 980, h: 660, desktop: true, feature: 'image_editor' },
-  { id: 'pdfreader', name: 'PDF 阅读器', icon: 'pdfreader', w: 1080, h: 700, feature: 'pdf_reader' },
+  { id: 'mindmap', name: '思维导图', icon: 'mindmap', w: 1080, h: 700, feature: 'mindmap', multi: true },
+  { id: 'whiteboard', name: '白板', icon: 'whiteboard', w: 1080, h: 700, feature: 'whiteboard', multi: true },
+  { id: 'flowchart', name: '流程图', icon: 'flowchart', w: 1080, h: 700, feature: 'flowchart', multi: true },
+  { id: 'imageeditor', name: '图片编辑器', icon: 'imageedit', w: 980, h: 660, desktop: true, feature: 'image_editor', multi: true },
+  { id: 'pdfreader', name: 'PDF 阅读器', icon: 'pdfreader', w: 1080, h: 700, feature: 'pdf_reader', multi: true },
   // v9os 商店移植 webapps（自包含静态应用，容器 = WebAppHost，见 docs/DOCS-v9os应用移植.md）
-  { id: 'musicplayer', name: '音乐播放器', icon: 'media', w: 920, h: 620, feature: 'music_player' },
-  { id: 'picasa', name: 'Picasa 图片预览', icon: 'image', w: 980, h: 660, feature: 'picasa' },
+  { id: 'musicplayer', name: '音乐播放器', icon: 'media', w: 920, h: 620, feature: 'music_player', multi: true },
+  { id: 'picasa', name: 'Picasa 图片预览', icon: 'image', w: 980, h: 660, feature: 'picasa', multi: true },
   // 批次 2 移植：epub 阅读器 / ace 多功能编辑器 / SVG 编辑器 / EML 查看器
-  { id: 'epubreader', name: 'Epub 电子书阅读器', icon: 'book', w: 1000, h: 700, feature: 'epub_reader' },
-  { id: 'codeeditor', name: '多功能编辑器', icon: 'code', w: 1100, h: 720, feature: 'code_editor' },
-  { id: 'svgeditor', name: 'SVG 编辑器', icon: 'vector', w: 1100, h: 720, feature: 'svg_editor' },
-  { id: 'emlviewer', name: 'EML 查看器', icon: 'mail', w: 1000, h: 700, feature: 'eml_viewer' },
+  { id: 'epubreader', name: 'Epub 电子书阅读器', icon: 'book', w: 1000, h: 700, feature: 'epub_reader', multi: true },
+  { id: 'codeeditor', name: '多功能编辑器', icon: 'code', w: 1100, h: 720, feature: 'code_editor', multi: true },
+  { id: 'svgeditor', name: 'SVG 编辑器', icon: 'vector', w: 1100, h: 720, feature: 'svg_editor', multi: true },
+  { id: 'emlviewer', name: 'EML 查看器', icon: 'mail', w: 1000, h: 700, feature: 'eml_viewer', multi: true },
   // 批次 3 移植：在线PS（photopea，完整 vendored）。birdpaper（小鸟壁纸）已下线：
   // 与壁纸中心功能重复且依赖第三方公开 API，壁纸获取统一走壁纸中心
-  { id: 'photopea', name: '在线PS', icon: 'ps', w: 1240, h: 780, desktop: true, feature: 'photopea' },
-  { id: 'cadviewer', name: 'CAD 看图', icon: 'cad', w: 1200, h: 780, desktop: true, feature: 'cad_viewer' },
+  { id: 'photopea', name: '在线PS', icon: 'ps', w: 1240, h: 780, desktop: true, feature: 'photopea', multi: true },
+  { id: 'cadviewer', name: 'CAD 看图', icon: 'cad', w: 1200, h: 780, desktop: true, feature: 'cad_viewer', multi: true },
   { id: 'mediacenter', name: '媒体中心', icon: 'mediacenter', w: 1080, h: 680,installable: true },
   // 统一任务中心：聚合「上传/秒传任务（本机 transfer 队列）」与「离线下载（服务端任务队列）」
   { id: 'tasks', name: '任务中心', icon: 'tasks', w: 780, h: 580, desktop: true, pinned: true },
@@ -99,27 +102,55 @@ export function canUseOffline(): boolean {
 
 export interface DesktopAppIcon { id: string; name: string; icon: string; appId: string }
 
+/** 桌面图标控制器：图标列表（已按用户顺序排列）+ 拖拽排序回调 */
+export interface DesktopIconsApi {
+  icons: Ref<DesktopAppIcon[]>
+  /** 拖拽开始：记录被拖图标（H5 拖拽必须 setData 才会进入 drop 阶段） */
+  dragStart: (ic: DesktopAppIcon, e: DragEvent) => void
+  /** 落到目标图标上：把被拖图标移到目标位置并持久化顺序 */
+  drop: (ic: DesktopAppIcon) => void
+}
+
 /**
  * 桌面图标（三个主题桌面共用）：
  * base = 主题自有的固定图标（此电脑/回收站，名称随主题语言）；
  * 动态部分 = 全部可见应用（visibleApps()：管理员全量，普通用户按权限），
  * 随「可安装应用安装态」与「系统功能开关」响应式增删（安装/卸载立即生效，无需重挂桌面）。
+ * 合并后的列表按用户持久化顺序（设置 KV desktop_icon_order）排列，顺序表缺项追加末尾。
  */
-export function useDesktopIcons(base: DesktopAppIcon[]): Ref<DesktopAppIcon[]> {
+export function useDesktopIcons(base: DesktopAppIcon[]): DesktopIconsApi {
   const apps = useAppState()
   const session = useSession()
   const icons = ref<DesktopAppIcon[]>([...base])
+  const dragId = ref('')
   const sync = () => {
     const baseIds = new Set(base.map(b => b.id))
     const dyn = visibleApps()
       .filter(a => !baseIds.has(a.id) && a.desktop === true)
       .map(a => ({ id: a.id, name: a.name, icon: a.icon, appId: a.id }))
-    icons.value = [...base, ...dyn]
+    icons.value = sortByOrder([...base, ...dyn], apps.iconOrder)
   }
   sync()
   // session.user 异步加载——adminOnly 应用（如管理控制台）必须等角色到位后再补同步；
   // allowed 随 /apps 加载到位后补同步（权限变更导致的应用显隐）；
-  // loaded 翻转（未决→已决）保证 /apps 返回的瞬间图标按真实权限收敛
-  watch([() => apps.loaded, () => apps.installed, () => apps.enabled, () => apps.allowed, () => session.user?.role], sync)
-  return icons
+  // loaded 翻转（未决→已决）保证 /apps 返回的瞬间图标按真实权限收敛；
+  // iconOrder 与 installed 同批 KV 到位，翻转后再重排一次即得用户顺序
+  watch([() => apps.loaded, () => apps.installed, () => apps.enabled, () => apps.allowed, () => session.user?.role, () => apps.iconOrder], sync)
+  return {
+    icons,
+    dragStart(ic, e) {
+      dragId.value = ic.id
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', ic.id)
+      }
+    },
+    drop(ic) {
+      const from = dragId.value
+      dragId.value = ''
+      if (!from || from === ic.id) return
+      // 立即写回顺序：iconOrder 是 sync 的依赖，watch 会在渲染前重排（无需手动改 icons）
+      apps.setIconOrder(moveIcon(icons.value.map(x => x.id), from, ic.id))
+    }
+  }
 }

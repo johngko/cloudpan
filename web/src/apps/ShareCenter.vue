@@ -194,12 +194,12 @@ async function cancelUshare(s: any) {
   font-size: 10px; font-weight: 500; padding: 1px 7px; border-radius: 999px;
   background: var(--bg50); color: var(--text-2);
 }
-.sc-badge.e2e { background: rgba(31, 168, 79, 0.15); color: #1fa84f }
-.sc-badge.pwd { background: rgba(232, 163, 61, 0.18); color: #b07615 }
-.sc-badge.rw { background: rgba(1, 131, 251, 0.15); color: var(--theme-1) }
-.sc-badge.off { background: rgba(224, 82, 82, 0.15); color: #d04545 }
+.sc-badge.e2e { background: var(--success-bg); color: var(--success) }
+.sc-badge.pwd { background: var(--warning-bg); color: var(--warning) }
+.sc-badge.rw { background: var(--accent-weak); color: var(--theme-1) }
+.sc-badge.off { background: var(--danger-bg); color: var(--danger) }
 .sc-ops { flex: none; display: flex; flex-direction: column; gap: 6px }
 .sc-ops .tool-btn { font-size: 11px; padding: 4px 10px }
-.sc-ops .tool-btn.danger { color: #d04545; border-color: rgba(224, 82, 82, 0.35) }
+.sc-ops .tool-btn.danger { color: var(--danger); border-color: rgba(224, 82, 82, 0.35) }
 .sc-ops .tool-btn.danger:hover { background: rgba(224, 82, 82, 0.08) }
 </style>

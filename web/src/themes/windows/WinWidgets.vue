@@ -75,7 +75,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { fsApi, termApi, appsApi, type Policy } from '../../api/modules'
+import { fsApi, termApi, type Policy } from '../../api/modules'
 import { useAppState } from '../../stores/appstate'
 import { useTransfer } from '../../stores/transfer'
 import { useSession } from '../../stores/session'

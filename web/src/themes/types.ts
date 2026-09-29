@@ -30,6 +30,10 @@ export interface ThemeDef {
   Desktop: Component
   WindowFrame: Component
   geometry: ThemeGeometry
+  /** 主题强调色（挂到 <html> 的 --accent）：选中态/进度/焦点环等语义高亮统一取它 */
+  accentColor: string
+  /** 强调色的弱化底（--accent-weak）：选中行背景、拖框选框等大面积浅色 */
+  accentWeak: string
   /** 窗口标题栏控制按钮位置：macOS=left（红绿灯），Windows/Deepin=right */
   caption: 'left' | 'right'
   /** 是否支持贴边分屏（Windows/Deepin 有，macOS 用 zoom 语义） */

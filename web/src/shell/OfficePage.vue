@@ -21,7 +21,7 @@
     <div v-if="docUpdated" class="office-stale">
       <AppIcon name="info" :size="14" />
       <span>文档已被他人更新（保存后内容已变化）。当前编辑器仍基于打开时的版本，刷新以加载最新内容。</span>
-      <button class="office-btn" @click="() => location.reload()">刷新文档</button>
+      <button class="office-btn" @click="reloadDoc">刷新文档</button>
     </div>
 
     <!-- 编辑器主体：ONLYOFFICE DocsAPI 撑满整页 -->
@@ -224,10 +224,15 @@ function download() {
   if (isShare.value) {
     window.open(`/api/s/${shareToken}/download?st=${encodeURIComponent(q.st || '')}&path=${encodeURIComponent(q.path || '')}`)
   } else if (q.shareId) {
-    window.open(userShareApi.dlUrl(q.shareId, q.rel || ''))
+    window.open(userShareApi.dlUrl(Number(q.shareId), q.rel || ''))
   } else {
     window.open(downloadUrl(Number(q.policyId), [q.path || '']))
   }
+}
+
+// 模板里不能直接引用 location（不在 Vue 模板全局白名单内），故包一层
+function reloadDoc() {
+  window.location.reload()
 }
 
 // ---- 分享（本地盘文件）----

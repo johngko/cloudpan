@@ -174,5 +174,5 @@ async function toggle(a: SysApp) {
 .ac-switch.on { background: var(--theme-2); }
 .ac-switch.on .knob { left: 18px; }
 .ac-inst-btn { flex: none; padding: 4px 14px; font-size: 12px; }
-.ac-ver.on { color: #3fbf6f; }
+.ac-ver.on { color: var(--success); }
 </style>

@@ -8,6 +8,8 @@ interface DialogState {
   okText: string
   cancelText: string
   danger: boolean
+  // 异构 Promise resolver 槽：confirm/prompt/alert 的 resolve 签名各不相同（boolean / string|null / void），
+  // 参数位置是逆变的，写 unknown 反而放不进去，故此处保留 any（唯一一处刻意保留）
   resolver: (v: any) => void
 }
 

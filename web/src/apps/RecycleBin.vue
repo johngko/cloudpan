@@ -168,7 +168,7 @@ onBeforeUnmount(() => window.removeEventListener('cp-refresh-recycle', onRefresh
 .rb-list tbody td { padding: 7px 10px; border-bottom: 1px solid var(--bg50); color: var(--text); }
 .rb-list tbody tr { cursor: default; }
 .rb-list tbody tr:hover { background: var(--hover-b); }
-.rb-list tbody tr.selected { background: #3b91d822; }
+.rb-list tbody tr.selected { background: var(--accent-weak); }
 .rb-list td input[type="checkbox"], .rb-list th input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--theme-2); cursor: pointer; }
 .empty-hint {
   position: absolute; left: 0; right: 0; top: 46%; transform: translateY(-50%);

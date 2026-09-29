@@ -21,6 +21,8 @@ const theme: ThemeDef = {
   Desktop: MacDesktop,
   WindowFrame: MacWindowFrame,
   geometry: { top: 24, bottom: 78, left: 0, right: 0 },
+  accentColor: '#0a84ff',
+  accentWeak: '#0a84ff26',
   caption: 'left',
   snapEdges: false,
   wallpapers: WALLPAPERS,

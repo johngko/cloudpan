@@ -62,7 +62,7 @@ async function saveBlob(policyId: number, path: string, blob: Blob): Promise<voi
     return
   }
   const r = await uploadApi.init({ policyId, parent: dir, name, size: blob.size, hash: await sha256Hex(blob), chunkSize: Math.max(blob.size, 1) })
-  if (r.instant) return
+  if (r.instant === true) return // 布尔判别式必须显式比较，TS 的真值判断不收窄
   if (!r.sessionId) throw new Error('上传会话创建失败')
   await uploadApi.chunk(r.sessionId, 0, blob)
   await uploadApi.complete(r.sessionId)
@@ -84,7 +84,7 @@ export function installHostBridge(): void {
     host: location.origin,
     file: {
       // 契约（v9os compat 层）：selectFile(winId, title, filter, writable)
-      selectFile: async (_winId: unknown, title: string, filter: string | null, writable: unknown) => {
+      selectFile: async (_winId: unknown, title: string, filter: string | null, _writable: unknown) => {
         const f = (filter || '').replace(/^\./, '').split(',').map(s => s.trim()).filter(Boolean)
         const r = await requestFilePick({ title, filter: f.length ? f.join(',') : null, initial: {} })
         if (!r) return r

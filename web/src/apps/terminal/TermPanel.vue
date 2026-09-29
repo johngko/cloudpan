@@ -157,10 +157,13 @@ defineExpose({
     connect()
   }
 })
+
+// 模板里直接写 term?.focus() 会因模块级 let 被 TS 收窄成 null 而报 never，收进函数即可
+function focusTerm() { term?.focus() }
 </script>
 
 <template>
-  <div class="tp-host" ref="host" @mousedown="() => term?.focus()"></div>
+  <div class="tp-host" ref="host" @mousedown="focusTerm"></div>
 </template>
 
 <style scoped>

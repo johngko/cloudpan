@@ -242,7 +242,8 @@ function playItem(it: MediaItem, list?: MediaItem[]) {
 function playRecent(r: { key: string; pos: number; item?: MediaItem }) {
   // 列表必须按条目自身的 kind 取，不能用 items.value——「继续观看」tab 下它解析成音乐列表，
   // 会导致播放器 findIndex 落空、从第 0 项开始播错文件
-  if (r.item) openPlayer(r.item, files.value.filter(f => f.kind === r.item.kind), r.pos)
+  const it = r.item
+  if (it) openPlayer(it, files.value.filter(f => f.kind === it.kind), r.pos)
   else {
     // 文件已不在库中：仍按进度键尝试单文件播放
     const i = r.key.indexOf(':')

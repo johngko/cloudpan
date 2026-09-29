@@ -52,6 +52,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { CSSProperties } from 'vue'
 import { rawUrl, downloadUrl } from '../api/modules'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -130,7 +131,7 @@ async function loadExif() {
 }
 let sx = 0, sy = 0, boxX = 0, boxY = 0
 
-const imgStyle = computed(() => ({
+const imgStyle = computed<CSSProperties>(() => ({
   transform: `translate(${ox.value}px, ${oy.value}px) scale(${zoom.value}) rotate(${rot.value}deg) scaleX(${flipH.value ? -1 : 1})`,
   maxWidth: '92%', maxHeight: '92%', userSelect: 'none',
 }))
@@ -204,7 +205,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .iv-exif-k { color: #7d92a8; flex: none; }
 .iv-exif-v { color: #dbe6f2; text-align: right; word-break: break-all; }
 .iv-exif-empty { color: #5c6b7e; padding: 12px 0; }
-.iv-exif-gps { display: inline-block; margin-top: 10px; color: #4cc2ff; text-decoration: none; font-size: 12px; }
+.iv-exif-gps { display: inline-block; margin-top: 10px; color: var(--accent); text-decoration: none; font-size: 12px; }
 .iv-exif-gps:hover { text-decoration: underline; }
 .iv-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative;
   background:
@@ -225,6 +226,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .iv-thumb { flex: none; width: 64px; height: 48px; border-radius: 6px; overflow: hidden; cursor: pointer; opacity: .55;
   outline: 2px solid transparent; outline-offset: 1px; transition: all .15s; display: flex; align-items: center; justify-content: center; background: #0d1117; }
 .iv-thumb:hover { opacity: .9; }
-.iv-thumb.active { opacity: 1; outline-color: #4cc2ff; }
+.iv-thumb.active { opacity: 1; outline-color: var(--accent); }
 .iv-thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 </style>

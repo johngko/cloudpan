@@ -174,11 +174,11 @@ function onStatus(s: typeof status.value, msg?: string) {
         </div>
       </div>
       <SftpPanel v-if="mode === 'ssh' && connId && panelVisible"
-                 :key="sftpKey" :conn-id="connId" @toast="onToast" />
+                 :key="sftpKey ?? undefined" :conn-id="connId" @toast="onToast" />
     </div>
 
     <ConnDialog v-if="connOpen" @close="connOpen = false"
-                @saved="(cs, sel) => { loadConns(sel) }" @toast="onToast" />
+                @saved="(_cs, sel) => { loadConns(sel) }" @toast="onToast" />
 
     <!-- 轻提示 -->
     <Teleport to="body">
@@ -279,9 +279,9 @@ function onStatus(s: typeof status.value, msg?: string) {
   flex: none;
 }
 .st-connecting { color: var(--text-2); }
-.st-connecting .dot { background: #ffcb6b; animation: tb 1s ease-in-out infinite; }
+.st-connecting .dot { background: var(--warning); animation: tb 1s ease-in-out infinite; }
 .st-ready { color: var(--text); }
-.st-ready .dot { background: #3ecf7a; box-shadow: 0 0 6px #3ecf7a88; }
+.st-ready .dot { background: var(--success); box-shadow: 0 0 6px var(--success-bg); }
 .st-closed { color: var(--text-3); }
 .st-closed .dot { background: #8a8f9c; }
 .st-error { color: var(--danger); }
@@ -366,10 +366,10 @@ function onStatus(s: typeof status.value, msg?: string) {
   display: grid; place-items: center;
   border-radius: 50%;
   margin-bottom: 4px;
-  background: rgba(140, 160, 255, 0.12);
-  color: #9cb8ff;
+  background: var(--accent-weak);
+  color: var(--accent);
 }
-.term-overlay.err .term-overlay-icon { background: rgba(255, 120, 120, 0.14); color: #ff8a80; }
+.term-overlay.err .term-overlay-icon { background: var(--danger-bg); color: var(--danger); }
 .term-overlay-card b { font-size: 15px; }
 .term-overlay-card p { margin: 0; font-size: 12.5px; color: #a7abbb; line-height: 1.6; word-break: break-all; }
 .term-overlay-card .btn { margin-top: 8px; }
@@ -396,8 +396,8 @@ function onStatus(s: typeof status.value, msg?: string) {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.term-toast.ok svg { color: #3ecf7a; }
-.term-toast.err svg { color: #ff8a80; }
+.term-toast.ok svg { color: var(--success); }
+.term-toast.err svg { color: var(--danger); }
 .tst-enter-active, .tst-leave-active { transition: all .25s; }
 .tst-enter-from, .tst-leave-to { opacity: 0; transform: translate(-50%, 10px); }
 </style>

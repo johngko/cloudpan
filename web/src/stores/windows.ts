@@ -18,6 +18,8 @@ export interface WinState {
   minimized: boolean
   maximized: boolean
   z: number
+  /** 窗口负载：每个应用各不相同（explorer 带 policyId/path、office 带 shareId/rel…），
+   *  刻意保持宽松 —— 收紧成具体类型会让全部应用组件都来改这里，收益远小于波及面 */
   props: any
   prev?: WinRect
   /** 最小化飞行动画进行中（CSS .minimizing，timer 落定后转 minimized） */
@@ -47,10 +49,12 @@ export const useWindows = defineStore('windows', {
   },
   actions: {
     open(app: string, props: any = null, opts: { title?: string; icon?: string; w?: number; h?: number } = {}) {
-      // 单实例应用：聚焦已有窗口（带新 props 时同步——设置深链/浏览器 URL 等场景）。
-      // 文档类应用（officeeditor）按文档多开：组件无 props 变更监听，复用窗口会出现
-      // 标题/工具栏新文件名但预览停留在旧文件的状态，编辑保存会错位到另一文件
-      const existing = this.wins.find(w => w.app === app && (app !== 'explorer' && app !== 'notepad' && app !== 'mediaviewer' && app !== 'officeeditor' && app !== 'archiveviewer' && app !== 'mindmap' && app !== 'whiteboard' && app !== 'flowchart' && app !== 'imageeditor' && app !== 'pdfreader' && app !== 'picasa' && app !== 'musicplayer' && app !== 'epubreader' && app !== 'codeeditor' && app !== 'svgeditor' && app !== 'emlviewer' && app !== 'photopea' && app !== 'cadviewer'))
+      // 单实例应用（AppDef.multi 未置位的）：聚焦已有窗口（带新 props 时同步——设置深链/浏览器 URL 等场景）。
+      // 文档类应用在 apps.ts 里标了 multi: true，按文档多开：组件没有 props 变更监听，
+      // 复用窗口会出现标题/内容错位（旧文件预览 + 新文件名）
+      const existing = appDef(app)?.multi
+        ? undefined
+        : this.wins.find(w => w.app === app)
       if (existing) {
         if (props) existing.props = props
         this.focus(existing.id)
@@ -129,6 +133,7 @@ export const useWindows = defineStore('windows', {
       const w = this.wins.find(x => x.id === id)
       if (w) w.title = title
     },
+    // patch 同样是各应用自定义的负载片段，与 props 保持同一宽松度
     updateProps(id: number, patch: any) {
       const w = this.wins.find(x => x.id === id)
       if (!w || !patch) return

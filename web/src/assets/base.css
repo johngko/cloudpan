@@ -26,6 +26,20 @@
   --danger: #d80d1c;
   --danger-bg: #d80d1c20;
 
+  /* 语义色（应用层统一引用——裸写 hex 会在切主题/深色下失效） */
+  --success: #2e9e5b;
+  --success-bg: #2e9e5b22;
+  --warning: #b26a00;
+  --warning-bg: #ff98001f;
+  /* 主题强调色：由 ThemeDef.accentColor/accentWeak 在挂载主题时注入（见 stores/session.ts） */
+  --accent: var(--theme-2);
+  --accent-weak: #3b91d825;
+
+  /* 面层语义别名：主题只需覆盖底层 token，不必各自重写面板配色 */
+  --surface: var(--bg);
+  --surface-2: var(--bg70);
+  --border: var(--stroke-b);
+
   /* 圆角 token */
   --radius-sm: 8px;
   --radius: 12px;
@@ -72,6 +86,11 @@
   --stroke-b: #ffffff26;
   --shadow: 0 4px 12px 4px #0000002e;
   --danger-bg: #d80d1c40;
+  --success: #4caf50;
+  --success-bg: #4caf5026;
+  --warning: #ffb74d;
+  --warning-bg: #ffb74d26;
+  --accent-weak: #3b91d83d;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #app { height: 100%; overflow: hidden; }
@@ -259,6 +278,8 @@ select.input { cursor: pointer; }
 .win-resize.nw { top: -3px; left: -3px; width: 14px; height: 14px; cursor: nw-resize; }
 .win-resize.se { bottom: -3px; right: -3px; width: 14px; height: 14px; cursor: se-resize; }
 .win-resize.sw { bottom: -3px; left: -3px; width: 14px; height: 14px; cursor: sw-resize; }
+/* 触屏：标题栏与缩放手柄自行接管手势（拖窗口时不触发页面滚动/缩放） */
+.win-titlebar, .mac-titlebar, .dde-titlebar, .win-resize { touch-action: none; }
 
 /* ============ 右键菜单（基座，主题可覆盖外观） ============ */
 .ctx-menu {
@@ -304,6 +325,11 @@ select.input { cursor: pointer; }
 .np-clear:hover { color: var(--danger, #e05252); background: var(--hover-b); }
 .np-body { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
 .np-empty { padding: 28px 0; text-align: center; color: var(--text-3); font-size: 13px; }
+/* 实时推送断开提示（SSE 重连中/已放弃，改为定时刷新） */
+.np-degraded {
+  padding: 6px 10px; margin-bottom: 6px; border-radius: var(--radius-sm);
+  background: var(--warning-bg); color: var(--warning); font-size: 12px;
+}
 .np-item {
   padding: 10px 12px; border-radius: var(--radius); cursor: pointer; margin-bottom: 2px;
   border: 1px solid transparent;
@@ -424,4 +450,19 @@ select.input { cursor: pointer; }
   background-position: center !important;
   background-repeat: no-repeat !important;
   background-color: #141c2e;
+}
+
+/* ============ 无障碍：跟随系统「减少动态效果」 ============
+   关闭窗口进出场/最小化飞行/菜单弹入等全部过渡与动画（含第三方组件内联动画） */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --anim-in-dur: 0.01s;
+    --anim-out-dur: 0.01s;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

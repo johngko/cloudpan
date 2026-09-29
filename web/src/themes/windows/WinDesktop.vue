@@ -2,8 +2,9 @@
   <div class="desktop" :class="wallpaperClass(session.wallpaper)"
     @mousedown="onDeskDown" @contextmenu.prevent="onDeskCtx">
     <div class="desktop-icons">
-      <div v-for="ic in icons" :key="ic.id" class="desk-icon" :class="{ selected: sel === ic.id }"
-        @mousedown.stop="sel = ic.id" @dblclick="launch(ic)" @contextmenu.stop.prevent="onIconCtx(ic, $event)">
+      <div v-for="ic in icons" :key="ic.id" class="desk-icon" :class="{ selected: sel === ic.id }" draggable="true"
+        @mousedown.stop="sel = ic.id" @dblclick="launch(ic)" @contextmenu.stop.prevent="onIconCtx(ic, $event)"
+        @dragstart="dragStart(ic, $event)" @dragover.prevent @drop.prevent="drop(ic)">
         <div class="ico"><AppIcon :name="ic.icon" :size="44" /></div>
         <div class="lbl">{{ ic.name }}</div>
       </div>
@@ -60,7 +61,7 @@ const sel = ref('')
 const selRect = ref<null | { left: string; top: string; width: string; height: string }>(null)
 
 interface DeskIcon { id: string; name: string; icon: string; appId: string }
-const icons = useDesktopIcons([
+const { icons, dragStart, drop } = useDesktopIcons([
   { id: 'thispc', name: '此电脑', icon: 'thispc', appId: 'explorer' },
   { id: 'recycle', name: '回收站', icon: 'recycle', appId: 'recycle' }
 ])

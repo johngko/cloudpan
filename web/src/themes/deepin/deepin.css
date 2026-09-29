@@ -46,8 +46,12 @@ html.theme-deepin {
 .tb-launcher:hover { background: rgba(120,120,128,0.16); }
 .tb-launcher .ico { width: 26px; height: 26px; }
 
-/* 中区：应用（居中） */
-.dde-tb-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 0; }
+/* 中区：应用（居中）。应用过多时 flex 居中会让内容溢出盒子、盖住左启动器与右托盘按钮，
+   clip-path 把绘制与命中裁回自身盒子（负上边距保留图标上方的悬浮提示） */
+.dde-tb-center {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 0;
+  clip-path: inset(-140px 0 0 0);
+}
 .dd-app {
   position: relative; width: 40px; height: 40px; flex: none; margin: 0 2px;
   display: flex; align-items: center; justify-content: center;
@@ -380,4 +384,16 @@ html.theme-deepin {
     radial-gradient(ellipse 820px 520px at 74% 26%, rgba(200,90,200,0.36), transparent 60%),
     radial-gradient(ellipse 1000px 640px at 55% 52%, rgba(140,70,180,0.3), transparent 64%),
     linear-gradient(158deg, #1e0a20 0%, #3a1438 50%, #6e2a52 100%);
+}
+
+/* ============ 窄屏适配 ============
+   任务栏中区在窄视口可横向滚动（高度维持 48px，geometry.bottom 不变） */
+@media (max-width: 960px) {
+  .dde-tb-center { justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  .dde-tb-center::-webkit-scrollbar { display: none; }
+  .tb-launcher { width: 46px; }
+}
+@media (max-width: 640px) {
+  .tb-launcher { width: 40px; }
+  .dd-app { margin: 0 1px; }
 }

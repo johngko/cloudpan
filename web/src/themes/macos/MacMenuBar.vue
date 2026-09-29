@@ -13,6 +13,8 @@
     </div>
 
     <div class="mb-right">
+      <div class="mb-item" title="小组件" @click.stop="openWidgets"><AppIcon name="grid" :size="15" class="mb-ico" /></div>
+      <div class="mb-item" title="搜索" @click.stop="openSearch"><AppIcon name="search" :size="15" class="mb-ico" /></div>
       <div class="mb-item" title="网络测速" @click.stop="openSpeedtest"><AppIcon name="wifi" :size="15" class="mb-ico" /></div>
       <div v-if="notifyAvail" class="mb-item mb-badge" title="通知" @click.stop="notify.openPanel()">
         <AppIcon name="bell" :size="15" class="mb-ico" />
@@ -34,6 +36,12 @@
     </div>
   </div>
 
+  <!-- 全局搜索面板（Spotlight 位置：菜单栏右侧搜索图标） -->
+  <GlobalSearchPanel v-if="searchOpen" @close="searchOpen = false" />
+
+  <!-- 小组件面板（与 win12 的小组件对齐） -->
+  <WidgetsPanel v-if="widgetsOpen" @close="widgetsOpen = false" />
+
   <!-- 通知中心面板（独立于菜单栏，保证 fixed 定位正确） -->
   <div v-if="notify.open" class="notify-panel" @click.stop>
     <div class="np-head">
@@ -44,6 +52,7 @@
       </div>
     </div>
     <div class="np-body">
+      <div v-if="notify.streamDown" class="np-degraded">实时推送已断开，正在重连…（通知改为定时刷新）</div>
       <div v-if="!notify.list.length" class="np-empty">无新通知</div>
       <div v-for="n in notify.list" :key="n.id" class="np-item" :class="{ unread: !n.read }" @click="notify.markRead(n.id)">
         <div class="np-title">
@@ -66,6 +75,8 @@ import { useNotify } from '../../stores/notify'
 import { useAppState } from '../../stores/appstate'
 import { appDef } from '../../stores/apps'
 import AppIcon from '../../components/AppIcon.vue'
+import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
+import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
 const store = useWindows()
 const transfer = useTransfer()
@@ -77,8 +88,12 @@ const notifyAvail = computed(() => useAppState().isAvailable('notify'))
 const open = ref('')
 const menuX = ref(-1)
 const clock = ref('')
+// 全局搜索面板开关（Spotlight 位置）
+const searchOpen = ref(false)
+// 小组件面板开关
+const widgetsOpen = ref(false)
 
-interface MBItem { label: string; icon?: string; sep?: boolean; onClick?: () => void }
+interface MBItem { label?: string; icon?: string; sep?: boolean; onClick?: () => void }
 
 // 聚焦窗口的应用名（无窗口时显示系统名）
 const activeAppName = computed(() => {
@@ -147,6 +162,9 @@ function runItem(it: MBItem) { closeMenu(); it.onClick?.() }
 
 function openSettings() { closeMenu(); store.open('settings') }
 function openSpeedtest() { closeMenu(); store.open('speedtest') }
+// 打开全局搜索（先收起菜单/通知，避免层叠）
+function openSearch() { closeMenu(); notify.close(); searchOpen.value = true }
+function openWidgets() { closeMenu(); notify.close(); widgetsOpen.value = true }
 function fmtTime(s: string) {
   if (!s) return ''
   const d = new Date(s)
