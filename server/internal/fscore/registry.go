@@ -67,6 +67,16 @@ func (s *Service) DriverFor(p *model.Policy, user *model.User) (Driver, error) {
 	return d, nil
 }
 
+// DriverForShare 解析"他人共享内容"专用的驱动：在 DriverFor 之上套 ShareView，
+// 使管理员的跨用户可见视图不会把其他用户目录一并暴露给被共享者（详见 ForShareResolution）。
+func (s *Service) DriverForShare(p *model.Policy, user *model.User) (Driver, error) {
+	d, err := s.DriverFor(p, user)
+	if err != nil {
+		return nil, err
+	}
+	return ForShareResolution(d), nil
+}
+
 // driverCacheKey 本地策略按用户维度缓存（隔离目录随用户变化），云盘策略共享缓存
 func driverCacheKey(p *model.Policy, user *model.User) string {
 	if p.Type == "local" && user != nil {

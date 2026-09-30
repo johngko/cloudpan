@@ -243,7 +243,7 @@ func (h *UserShareHandler) loadShareByID(c *gin.Context, id uint) (*model.UserSh
 		return nil, nil, false
 	}
 	// 共享内容属于创建者：必须用创建者的隔离目录解析
-	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.OwnerID))
+	d, err := h.Site.Fs.DriverForShare(&p, userOfID(sh.OwnerID))
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return nil, nil, false

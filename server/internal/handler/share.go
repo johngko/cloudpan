@@ -425,7 +425,7 @@ func (h *ShareHandler) SaveToDrive(c *gin.Context) {
 		dto.Fail(c, 400, "分享所在存储已停用")
 		return
 	}
-	sdrv, err := h.Site.Fs.DriverFor(&p, owner)
+	sdrv, err := h.Site.Fs.DriverForShare(&p, owner)
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return
@@ -513,7 +513,7 @@ func (h *ShareHandler) Info(c *gin.Context) {
 		if !sh.IsDir {
 			var p model.Policy
 			if err := model.DB.First(&p, sh.PolicyID).Error; err == nil {
-				if d, err := h.Site.Fs.DriverFor(&p, owner); err == nil { // 分享内容在分享者的隔离目录内
+				if d, err := h.Site.Fs.DriverForShare(&p, owner); err == nil { // 分享内容在分享者的隔离目录内
 					if e, err := d.Stat(sh.Path); err == nil {
 						size = e.Size
 					}
@@ -627,7 +627,7 @@ func (h *ShareHandler) List(c *gin.Context) {
 		dto.Fail(c, 404, "存储已失效")
 		return
 	}
-	d, err := h.Site.Fs.DriverFor(&p, owner)
+	d, err := h.Site.Fs.DriverForShare(&p, owner)
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return
@@ -706,7 +706,7 @@ func (h *ShareHandler) serveShareFile(c *gin.Context, sh *model.Share, target st
 		dto.FailHTTP(c, 404, "存储已失效")
 		return
 	}
-	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID)) // 分享内容在分享者的隔离目录内
+	d, err := h.Site.Fs.DriverForShare(&p, userOfID(sh.UserID)) // 分享内容在分享者的隔离目录内
 	if err != nil {
 		dto.FailHTTP(c, 400, err.Error())
 		return

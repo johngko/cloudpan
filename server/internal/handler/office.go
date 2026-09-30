@@ -204,7 +204,7 @@ func (h *OfficeHandler) resolveShared(t *officeTarget) (*model.UserShare, *model
 	if !ok {
 		return nil, nil, nil, "", errors.New("路径越界")
 	}
-	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.OwnerID))
+	d, err := h.Site.Fs.DriverForShare(&p, userOfID(sh.OwnerID))
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
@@ -246,7 +246,7 @@ func (h *OfficeHandler) resolvePub(t *officeTarget) (*model.Share, *model.Policy
 	if !ok {
 		return nil, nil, nil, "", errors.New("路径越界")
 	}
-	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID))
+	d, err := h.Site.Fs.DriverForShare(&p, userOfID(sh.UserID))
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
@@ -473,7 +473,7 @@ func (h *OfficeHandler) ConfigShare(c *gin.Context) {
 		dto.Fail(c, 404, "存储已失效")
 		return
 	}
-	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID))
+	d, err := h.Site.Fs.DriverForShare(&p, userOfID(sh.UserID))
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return
@@ -611,7 +611,7 @@ func (h *OfficeHandler) StatusShare(c *gin.Context) {
 		dto.Fail(c, 404, "存储已失效")
 		return
 	}
-	d, err := h.Site.Fs.DriverFor(&p, userOfID(sh.UserID))
+	d, err := h.Site.Fs.DriverForShare(&p, userOfID(sh.UserID))
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
 		return

@@ -20,6 +20,8 @@ type AdminLocalDriver struct {
 	own      *LocalDriver // 管理员本人目录
 	full     *LocalDriver // 策略根（全部用户目录可见）
 	adminDir string
+	// noMerge 为真时列根目录不再合并其他用户目录（共享/公开链接解析专用，见 ShareView）
+	noMerge bool
 }
 
 // NewAdminLocalView 构造管理员本地盘视图。adminDir 为空时退化为普通全盘驱动。
@@ -36,6 +38,28 @@ func NewAdminLocalView(rootPath, adminDir string) (Driver, error) {
 		return nil, err
 	}
 	return &AdminLocalDriver{own: own, full: full, adminDir: adminDir}, nil
+}
+
+// ShareView 返回"不合并其他用户目录"的同构视图，专供共享 / 公开链接解析使用。
+//
+// 为什么需要：管理员的视图在列根目录时会把策略根下每个用户目录合并成一级目录
+// （管理员应有的能力）。但共享是"把我的文件给别人看"——若整盘共享时沿用该视图，
+// 被共享者/游客会直接看到所有其他注册用户的目录（实测缺陷：游客在共享盘里看到了
+// 用户 13519160136 的目录）。
+//
+// 只关闭"根目录合并"这一件事：共享若显式落在某个用户目录内部（管理员刻意共享
+// 某用户的文件夹），route 仍会走 full，路径照常可访问，不误伤该场景。
+func (d *AdminLocalDriver) ShareView() *AdminLocalDriver {
+	return &AdminLocalDriver{own: d.own, full: d.full, adminDir: d.adminDir, noMerge: true}
+}
+
+// ForShareResolution 把驱动调整为"共享安全"形态：管理员的跨用户视图不再合并他人目录，
+// 其余驱动原样返回。所有解析"他人共享内容"的入口都应经过它。
+func ForShareResolution(d Driver) Driver {
+	if av, ok := d.(*AdminLocalDriver); ok {
+		return av.ShareView()
+	}
+	return d
 }
 
 // firstSegment 取虚拟路径的第一段（"/a/b" → "a"；"/" → ""）
@@ -99,7 +123,7 @@ func (d *AdminLocalDriver) List(dir string) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	if dir == "/" {
+	if dir == "/" && !d.noMerge {
 		// 合并其他用户目录为一级目录（管理员本人目录不重复出现；
 		// 若本人目录下已有同名项，以本人实体为准）
 		userDirs, _ := d.otherUserDirs()
@@ -143,14 +167,15 @@ func (d *AdminLocalDriver) otherUserDirs() ([]string, error) {
 	return out, nil
 }
 
-func (d *AdminLocalDriver) Stat(p string) (*Entry, error)       { return d.route(p).Stat(p) }
-func (d *AdminLocalDriver) Mkdir(dir string) error              { return d.route(dir).Mkdir(dir) }
+func (d *AdminLocalDriver) Stat(p string) (*Entry, error)         { return d.route(p).Stat(p) }
+func (d *AdminLocalDriver) Mkdir(dir string) error                { return d.route(dir).Mkdir(dir) }
 func (d *AdminLocalDriver) Open(p string) (ReadSeekCloser, error) { return d.route(p).Open(p) }
 func (d *AdminLocalDriver) CreateFile(p string, r io.Reader) error {
 	return d.route(p).CreateFile(p, r)
 }
 func (d *AdminLocalDriver) DirectURL(p string) (string, error) { return d.route(p).DirectURL(p) }
-func (d *AdminLocalDriver) Capabilities() Cap                 { return d.own.Capabilities() }
+func (d *AdminLocalDriver) Capabilities() Cap                  { return d.own.Capabilities() }
+
 // Quota 按整盘口径（策略根全量）：管理员看到的是分区总用量
 func (d *AdminLocalDriver) Quota() (int64, int64, error) { return d.full.Quota() }
 
