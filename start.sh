@@ -31,7 +31,7 @@
 #   ./start.sh set mysql_password '你的密码'
 #   ./start.sh test-db          # 测试 MySQL 连接（顺带自动建库）
 #   ./start.sh deps             # 检查/安装依赖环境
-#   ./start.sh admin [新密码]   # 重置管理员密码（不带参数则密文输入）
+#   ./start.sh admin [新密码]   # 修改管理员账号（交互式可改用户名+密码）
 #   ./start.sh init             # 一键初始化（备份→清文件→清库→设置管理员账号→重建→启动）
 # ============================================================
 set -u
@@ -387,26 +387,66 @@ do_log() {
     tail -n "$n" "$LOG_FILE" 2>/dev/null || c_yellow "暂无日志: $LOG_FILE"
 }
 
-# ---- 重置管理员密码（复用二进制的 reset-admin 子命令） ----
-reset_admin_cmd() {
+# ---- 修改管理员账号（对现有系统立即生效；初始化用的默认账号见 admin_account_wizard） ----
+# 用法: ./start.sh admin <新密码>   只重置密码（快捷用法）
+#       ./start.sh admin           交互式：用户名、密码都可改（回车跳过不改的项）
+admin_cmd() {
     load_env
-    local pw="${1:-}"
-    if [ -z "$pw" ]; then
-        ask_secret "新管理员密码（至少 8 位，输入不回显）: "
-        pw="$REPLY"
-    fi
-    if [ "${#pw}" -lt 8 ]; then
-        c_red "密码至少 8 位"
-        return 1
-    fi
     if [ ! -x "$BIN" ]; then
         c_red "服务端二进制不存在，先执行: ./start.sh build"
         return 1
     fi
-    # reset-admin 需要与服务的数据库配置一致
     export CP_PORT CP_DATA CP_DB CP_MYSQL_HOST CP_MYSQL_PORT CP_MYSQL_USER CP_MYSQL_PASSWORD CP_MYSQL_NAME
     [ -n "${CP_MYSQL_DSN:-}" ] && export CP_MYSQL_DSN
-    "$BIN" reset-admin "$pw"
+
+    # 快捷用法：带密码参数 = 仅重置密码
+    local pw_only="${1:-}"
+    if [ -n "$pw_only" ]; then
+        if [ "${#pw_only}" -lt 8 ]; then c_red "密码至少 8 位"; return 1; fi
+        "$BIN" reset-admin "$pw_only"
+        return
+    fi
+
+    echo "── 修改管理员账号（现有系统立即生效）──"
+    echo "  只想改其中一项时，另一项直接回车跳过"
+    local u="" p=""
+    while true; do
+        ask "新用户名（回车=不改用户名）" ""
+        u="$REPLY"
+        [ -z "$u" ] && break
+        [[ "$u" =~ ^[A-Za-z0-9_-]{2,32}$ ]] && break
+        c_red "用户名需 2-32 位，仅字母/数字/下划线/短横线"
+    done
+    while true; do
+        ask_secret "新密码（至少 8 位，回车=不改密码，输入不回显）: "
+        p="$REPLY"
+        [ -z "$p" ] && break
+        if [ ${#p} -lt 8 ]; then c_red "密码至少 8 位"; continue; fi
+        ask_secret "再输一遍确认: "
+        [ "$REPLY" = "$p" ] && break
+        c_red "两次输入不一致，请重试"
+    done
+    if [ -z "$u" ] && [ -z "$p" ]; then
+        c_yellow "未输入任何修改，已取消"
+        return 0
+    fi
+    echo
+    c_cyan "──────── 修改确认 ────────"
+    [ -n "$u" ] && echo "  用户名 → $u"
+    [ -n "$p" ] && echo "  密码   → 已输入（共 ${#p} 位）"
+    echo "  影响   ：修改后全部登录会话失效，各端需重新登录；WebDAV 等用旧用户名的凭据需同步更新"
+    c_cyan "──────────────────────────"
+    if ! confirm "确认执行修改? (y=执行 n=取消)" "n"; then
+        c_yellow "已取消，未做任何改动"
+        return 0
+    fi
+    local ok=1
+    [ -n "$u" ] && { "$BIN" rename-admin "$u" || ok=0; }
+    if [ "$ok" = 1 ] && [ -n "$p" ]; then
+        "$BIN" reset-admin "$p" || ok=0
+    fi
+    [ "$ok" = 1 ] && c_green "修改完成，请用新账号重新登录"
+    return $((1 - ok))
 }
 
 # ---- 管理员账号问答 ----
@@ -553,7 +593,8 @@ CloudPan 一键管理脚本
                                mysql_dsn/data_dir/public_url/trusted_proxies/
                                admin_user/admin_password）
   ./start.sh test-db           测试 MySQL 连接（顺带自动建库）
-  ./start.sh admin [新密码]    重置管理员密码（不带参数则密文输入）
+  ./start.sh admin [新密码]    修改管理员账号（带参数=只重置密码；
+                               不带参数=交互式改用户名+密码）
   ./start.sh init              一键初始化/恢复出厂（备份→清空→设置管理员账号→重建，需 y/n 确认）
 EOF
 }
@@ -777,7 +818,7 @@ interactive_menu() {
         c_cyan "══════════════════════════════════════"
         echo "  1) 启动服务            7) 配置管理（端口/数据库）"
         echo "  2) 停止服务            8) 测试 MySQL 连接"
-        echo "  3) 重启服务            9) 重置管理员密码"
+        echo "  3) 重启服务            9) 修改管理员账号（用户名/密码）"
         echo "  4) 运行状态           10) 一键初始化（恢复出厂）"
         echo "  5) 重新构建           11) 初次安装部署向导"
         echo "  6) 查看日志            0) 退出"
@@ -791,7 +832,7 @@ interactive_menu() {
             6) do_log 80; read -r -p "—— 按回车返回菜单 ——";;
             7) config_menu; load_env;;
             8) do_test_db;;
-            9) reset_admin_cmd;;
+            9) admin_cmd;;
             10) do_init; load_env;;
             11) do_install; load_env;;
             0) echo "再见"; exit 0;;
@@ -808,7 +849,7 @@ case "$cmd" in
     build)   do_build;;
     start)   shift; do_start "$@";;
     init)    do_init;;
-    admin)   shift; reset_admin_cmd "${1:-}";;
+    admin)   shift; admin_cmd "${1:-}";;
     reset-admin)
         load_env
         "$BIN" reset-admin "$2"

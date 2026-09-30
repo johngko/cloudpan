@@ -62,9 +62,32 @@ func runResetAdmin() {
 	fmt.Println("✅ 管理员密码已重置；该账号全部已登录会话已失效。")
 }
 
+// rename-admin 运维子命令：修改管理员用户名（须在本机以服务同等环境运行）
+func runRenameAdmin() {
+	newName := ""
+	if len(os.Args) > 2 {
+		newName = strings.TrimSpace(os.Args[2])
+	}
+	if newName == "" {
+		fmt.Println("用法: cloudpan rename-admin <新用户名>")
+		os.Exit(1)
+	}
+	cfg := config.Load()
+	model.InitDB(cfg.DataDir)
+	if err := handler.RenameAdminUsername(newName); err != nil {
+		fmt.Println("修改失败:", err)
+		os.Exit(1)
+	}
+	fmt.Println("✅ 管理员用户名已修改；该账号全部已登录会话已失效，请用新用户名重新登录。")
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "reset-admin" {
 		runResetAdmin()
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "rename-admin" {
+		runRenameAdmin()
 		return
 	}
 	cfg := config.Load()

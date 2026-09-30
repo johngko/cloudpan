@@ -79,3 +79,29 @@ func ResetAdminPassword(newPass string) error {
 		"token_ver":     u.TokenVer + 1, // 旧 JWT 全部失效
 	}).Error
 }
+
+// RenameAdminUsername 运维兜底：修改首个管理员账号的用户名并注销其全部会话（TokenVer+1）。
+// 仅供服务器本机 CLI（cloudpan rename-admin <新用户名>）使用，与 ResetAdminPassword 同一攻击面假设。
+// WebDAV/基础认证用的是用户名，改名后旧凭据自然失效，需用新用户名重登。
+func RenameAdminUsername(newName string) error {
+	newName = strings.TrimSpace(newName)
+	if !model.IsValidAdminUsername(newName) {
+		return errors.New("用户名需 2-32 位，仅字母/数字/下划线/短横线")
+	}
+	var u model.User
+	if err := model.DB.Where("role = ?", "admin").Order("id").First(&u).Error; err != nil {
+		return errors.New("管理员账号不存在")
+	}
+	if u.Username == newName {
+		return errors.New("新用户名与当前用户名相同")
+	}
+	var n int64
+	model.DB.Model(&model.User{}).Where("username = ?", newName).Count(&n)
+	if n > 0 {
+		return errors.New("该用户名已被其他账号占用")
+	}
+	return model.DB.Model(&u).Updates(map[string]interface{}{
+		"username":  newName,
+		"token_ver": u.TokenVer + 1, // 旧 JWT 全部失效
+	}).Error
+}

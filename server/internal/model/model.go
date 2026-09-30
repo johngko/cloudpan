@@ -506,8 +506,8 @@ func visitorGroupProfile() UserGroup {
 	}
 }
 
-// isValidUsername 管理员初始化账号白名单：字母/数字/下划线/短横线，2-32 位
-func isValidUsername(s string) bool {
+// IsValidAdminUsername 管理员账号白名单：字母/数字/下划线/短横线，2-32 位（初始化与改名共用）
+func IsValidAdminUsername(s string) bool {
 	if len(s) < 2 || len(s) > 32 {
 		return false
 	}
@@ -564,7 +564,7 @@ func seed(dataDir string) {
 		// 两者均未提供时账号固定 admin、密码随机生成仅启动日志打印一次。
 		// 用户名做白名单校验（字母/数字/下划线/短横线，2-32 位），非法一律回落 admin
 		adminUser := strings.TrimSpace(os.Getenv("CP_ADMIN_USER"))
-		if !isValidUsername(adminUser) {
+		if !IsValidAdminUsername(adminUser) {
 			if adminUser != "" {
 				log.Printf("[CloudPan] CP_ADMIN_USER 含非法字符，已回落为 admin")
 			}
