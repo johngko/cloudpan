@@ -506,6 +506,20 @@ func visitorGroupProfile() UserGroup {
 	}
 }
 
+// isValidUsername 管理员初始化账号白名单：字母/数字/下划线/短横线，2-32 位
+func isValidUsername(s string) bool {
+	if len(s) < 2 || len(s) > 32 {
+		return false
+	}
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func seed(dataDir string) {
 	// 默认用户组禁用终端（安全加固：终端可执行任意 shell 命令，仅管理员默认可用；
 	// 管理员可在用户组权限里显式放行）
@@ -546,10 +560,27 @@ func seed(dataDir string) {
 	if uc == 0 {
 		var g UserGroup
 		DB.Where("is_default = ?", true).First(&g)
-		// 首次部署管理员密码随机生成、仅启动日志打印一次（不落库外任何位置），登录后立即改密
-		adminPwd := "admin" + randomToken(8)
-		DB.Create(&User{Username: "admin", PasswordHash: hashPwd(adminPwd), Nickname: "管理员", Role: "admin", GroupID: g.ID})
-		log.Printf("[CloudPan] 首次部署：初始管理员密码为 %s（仅本次日志输出，登录请立即修改）", adminPwd)
+		// 管理员账号初始化：优先用 CP_ADMIN_USER / CP_ADMIN_PASSWORD（start.sh 初始化向导写入），
+		// 两者均未提供时账号固定 admin、密码随机生成仅启动日志打印一次。
+		// 用户名做白名单校验（字母/数字/下划线/短横线，2-32 位），非法一律回落 admin
+		adminUser := strings.TrimSpace(os.Getenv("CP_ADMIN_USER"))
+		if !isValidUsername(adminUser) {
+			if adminUser != "" {
+				log.Printf("[CloudPan] CP_ADMIN_USER 含非法字符，已回落为 admin")
+			}
+			adminUser = "admin"
+		}
+		adminPwd := os.Getenv("CP_ADMIN_PASSWORD")
+		pwdFromEnv := len(adminPwd) >= 8
+		if !pwdFromEnv {
+			adminPwd = "admin" + randomToken(8)
+		}
+		DB.Create(&User{Username: adminUser, PasswordHash: hashPwd(adminPwd), Nickname: "管理员", Role: "admin", GroupID: g.ID})
+		if pwdFromEnv {
+			log.Printf("[CloudPan] 首次部署：管理员账号 %s 已按初始化配置创建（密码来自配置，不写入日志）", adminUser)
+		} else {
+			log.Printf("[CloudPan] 首次部署：初始管理员账号 %s 密码为 %s（仅本次日志输出，登录请立即修改）", adminUser, adminPwd)
+		}
 	}
 	// 游客账号：登录页「游客登录」的共享身份（密码随机不可知，仅经 /auth/guest 登录）。
 	// 幂等：缺失即补建；管理员关闭游客登录用站点开关 guest_login 或禁用该账号。
@@ -573,9 +604,34 @@ func seed(dataDir string) {
 			DB.Create(&SiteSetting{Key: k, Value: v})
 		}
 	}
-	var pc int64
-	DB.Model(&Policy{}).Count(&pc)
-	_ = pc // 存储策略由管理员在界面挂载，不预置
+	// 存储策略默认预置：全新部署自动挂载本地 C/D/E 盘（标称容量 C=200G / D=1000G / E=500G）。
+	// 只做一次（default_policies_seeded 标记）：此后管理员可随意增删改，重启不会复活预置盘；
+	// 已有策略的存量部署不触碰，仅落标记。
+	var dpMarker SiteSetting
+	if err := DB.Where("`key` = ?", "default_policies_seeded").First(&dpMarker).Error; err != nil || dpMarker.Key == "" {
+		var pc int64
+		DB.Model(&Policy{}).Count(&pc)
+		if pc == 0 {
+			adminID := uint(0)
+			var admin User
+			if err := DB.Where("role = ?", "admin").First(&admin).Error; err == nil {
+				adminID = admin.ID
+			}
+			gb := int64(1) << 30
+			defaultPolicies := []Policy{
+				{Name: "本地磁盘", Letter: "C", Type: "local", RootPath: filepath.Join(dataDir, "storage", "c"), Options: "{}", QuotaBytes: 200 * gb, CreatedBy: adminID},
+				{Name: "本地磁盘", Letter: "D", Type: "local", RootPath: filepath.Join(dataDir, "storage", "d"), Options: "{}", QuotaBytes: 1000 * gb, CreatedBy: adminID},
+				{Name: "本地磁盘", Letter: "E", Type: "local", RootPath: filepath.Join(dataDir, "storage", "e"), Options: "{}", QuotaBytes: 500 * gb, CreatedBy: adminID},
+			}
+			for i := range defaultPolicies {
+				p := &defaultPolicies[i]
+				_ = os.MkdirAll(p.RootPath, 0o755)
+				DB.Create(p)
+			}
+			log.Printf("[CloudPan] 已预置默认存储策略：C(200G) / D(1000G) / E(500G)，可在管理后台调整")
+		}
+		DB.Create(&SiteSetting{Key: "default_policies_seeded", Value: "1"})
+	}
 
 	// 系统功能应用：按清单补种（已存在的保留其启用状态）
 	for _, def := range apps.Manifest {
