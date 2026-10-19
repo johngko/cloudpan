@@ -446,6 +446,8 @@ html.theme-win12 {
 }
 .w12-sml > .w12-inwrap { margin-top: 14px; }
 .w12-sml-user {
+  /* flex:none：下方应用列表撑高时 flex 收缩会把头像从 100px 压扁成椭圆（曾出现 100×46 的"扁圈"） */
+  flex: none;
   height: 100px; width: 100px; border-radius: 50%;
   position: relative; top: -46px; left: 50%; transform: translateX(-50%);
   background-color: var(--w12-bggrey);
@@ -459,7 +461,8 @@ html.theme-win12 {
   font-size: 30px; color: var(--w12-text); font-weight: 400;
 }
 .w12-sml-list {
-  margin-left: 5px; margin-top: 12px; flex-grow: 1; overflow: auto;
+  /* min-height:0：允许列表在固定高度内滚动，否则其 min-content 会撑爆 flex 列并挤压头像/用户名 */
+  margin-left: 5px; margin-top: 12px; flex-grow: 1; min-height: 0; overflow: auto;
   padding-bottom: 20px; padding-right: 6px;
 }
 .w12-sml-sec { padding-left: 10px; font-size: 16px; height: 35px; line-height: 35px; color: var(--w12-text); }
