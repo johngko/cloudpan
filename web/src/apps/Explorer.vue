@@ -565,7 +565,7 @@ import { useAppState } from '../stores/appstate'
 import { canUseOffline } from '../stores/apps'
 import { useClipboard } from '../stores/ui'
 import { useTransfer } from '../stores/transfer'
-import { fsApi, shareApi, officeApi, type Policy, type FileItem } from '../api/modules'
+import { fsApi, shareApi, officeApi, clipApi, type Policy, type FileItem } from '../api/modules'
 import { rawUrl, downloadUrl } from '../api/modules'
 import { get as aget, post as apost } from '../api/http'
 import { useContextMenu } from '../stores/ui'
@@ -1731,12 +1731,32 @@ function startUpload(files: File[]) {
 }
 // 「新建」条目：工具栏下拉与空白右键共用（创意文档项按系统功能门控）
 function buildNewItems() {
-  return newEntries({
+  const items = newEntries({
     mindmap: apps.isAvailable('mindmap'),
     whiteboard: apps.isAvailable('whiteboard'),
     flowchart: apps.isAvailable('flowchart'),
     onNew: newItem
   })
+  // C4 网页剪藏（服务端代抓 + 正文抽取，落 .md 到当前目录）
+  items.push({ label: '网页剪藏…', icon: 'browser', onClick: () => clipWeb() })
+  return items
+}
+
+async function clipWeb() {
+  const url = await uiDlg.prompt('网页剪藏：输入网页地址', 'https://', '剪藏')
+  if (url === null) return
+  const u = url.trim()
+  if (!/^https?:\/\//i.test(u)) { toast.error('请输入 http/https 开头的完整地址'); return }
+  const p = currentPolicy.value
+  if (!p) return
+  toast.show('正在抓取并抽取正文…', 'info')
+  try {
+    const r = await clipApi.clip({ url: u, policyId: p.id, dir: activeTab.value?.path || '/', snapshot: false })
+    toast.success('已剪藏为 ' + (r.path.split('/').pop() || r.path))
+    refresh()
+  } catch (e: any) {
+    toast.error('剪藏失败：' + (e?.message || '未知错误'))
+  }
 }
 // 工具栏「新建」下拉（Windows 资源管理器同款）
 function newMenu(e: MouseEvent) {

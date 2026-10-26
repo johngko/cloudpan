@@ -112,6 +112,10 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.POST("/fs/archive", site.Archive)
 		// B7 媒体预览边车回填（浏览器端上传后生成：视频 sprite / 音频波形）
 		ug.POST("/fs/preview", middleware.AppGate("preview"), site.PreviewUpload)
+		// C2 图片 OCR 结果入库（识别在浏览器端 tesseract.js 完成，这里只接收文本进全文索引）
+		ug.POST("/fs/ocr", middleware.AppGate("ocr"), site.SaveOcr)
+		// C4 网页剪藏（服务端代抓 + 正文抽取 + 可选快照；SSRF 防护同离线下载）
+		ug.POST("/clip", middleware.AppGate("clip"), site.Clip)
 		// 压缩包在线浏览（受「压缩包浏览器」功能门控）
 		ug.GET("/fs/archive/list", middleware.AppGate("archive_view"), site.ArchiveList)
 		ug.GET("/fs/archive/raw", middleware.AppGate("archive_view"), site.ArchiveRaw)

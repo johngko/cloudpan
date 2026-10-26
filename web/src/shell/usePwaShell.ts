@@ -2,6 +2,7 @@
 // 由 ShellHost 在 Desktop 挂载后调用（登录态 + 数据门就绪之后），离开桌面即停。
 import { drainShareInbox, resubscribePush } from '../utils/pwa'
 import { runBackup, startBackupLoop, BACKUP_DIR } from '../utils/mobileBackup'
+import { resumeOcrQueue } from '../utils/ocrQueue'
 import { fsApi } from '../api/modules'
 import { useTransfer } from '../stores/transfer'
 import { useToast } from '../stores/dialog'
@@ -40,6 +41,8 @@ export function pwaDesktopStart(): void {
     if (pid) await drainShareInbox(pid, (p, parent, files) => transfer.addFiles(p, parent, files), toast)
     // 2) 已授权用户静默补订阅（服务端重启/换 VAPID 后自愈）
     await resubscribePush()
+    // 2.5) C2：恢复未完成的图片 OCR 队列（刷新后走 /fs/raw 重取原图）
+    resumeOcrQueue()
     // 3) 相册自动备份循环（开关/句柄不在时 runBackup 自行 0 跳过）
     if (!backupTimer) {
       backupTimer = startBackupLoop(

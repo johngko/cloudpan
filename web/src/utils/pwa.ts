@@ -1,7 +1,7 @@
 // B9 PWA 前端件：SW 注册、Web Push 订阅、Share Target 收件箱排空。
 // SW 只做「收」：share POST 落 IndexedDB / push 弹通知；「处理」（上传、落盘、订阅上报）
 // 都在登录态应用内做——SW 里没有登录凭据。
-import { pushApi, fsApi, rawUrl } from '../api/modules'
+import { pushApi, fsApi, clipApi } from '../api/modules'
 
 export function swSupported(): boolean {
   return 'serviceWorker' in navigator && (window.isSecureContext || ['127.0.0.1', 'localhost'].includes(location.hostname))
@@ -110,11 +110,22 @@ export async function drainShareInbox(policyId: number, transferAdd: (pid: numbe
       const parts = e.url ? [e.url] : []
       if (e.text) parts.push(e.text)
       if (parts.length) {
-        const name = dir + '/剪藏-' + new Date(e.at).toISOString().replace(/[-:T]/g, '').slice(0, 14) + '.md'
-        await fsApi.writeText(policyId, name, parts.join('\n'))
-        // 让文件管理器视图（若开着）感知新文件
-        void rawUrl(policyId, name)
-        window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId, path: dir } }))
+        const stamp = new Date(e.at).toISOString().replace(/[-:T]/g, '').slice(0, 14)
+        if (e.url) {
+          // C4：链接走服务端 readability 正文剪藏（比裸存 URL 有用得多）；失败退回原始记录
+          try {
+            await clipApi.clip({ url: e.url, policyId, dir, snapshot: false })
+            window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId, path: dir } }))
+          } catch {
+            const fb = dir + '/剪藏-' + stamp + '.md'
+            await fsApi.writeText(policyId, fb, parts.join('\n'))
+            window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId, path: dir } }))
+          }
+        } else {
+          const name = dir + '/剪藏-' + stamp + '.md'
+          await fsApi.writeText(policyId, name, parts.join('\n'))
+          window.dispatchEvent(new CustomEvent('cp-refresh-explorer', { detail: { policyId, path: dir } }))
+        }
       }
       const db = await openShareDB()
       await new Promise<void>((resolve, reject) => {

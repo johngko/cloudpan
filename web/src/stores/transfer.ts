@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { uploadApi, settingsApi, userShareApi, type UploadStatus } from '../api/modules'
 import { sha256, Sha256, EMPTY_SHA256 } from '../utils/sha256'
 import { scheduleMediaSidecar } from '../utils/mediaPrep'
+import { scheduleOcr } from '../utils/ocrQueue'
 import { useWindows } from './windows'
 import { useToast } from './dialog'
 
@@ -428,8 +429,9 @@ export const useTransfer = defineStore('transfer', {
         t.uploaded = t.size
         t.progress = 100
         this.refreshExplorer(t)
-        // 秒传副本同样没有媒体边车（键含 mtime），同样回填
+        // 秒传副本同样没有媒体边车（键含 mtime），同样回填；OCR 同样排队（C2）
         scheduleMediaSidecar({ policyId: t.policyId, parent: t.parent, name: t.name, size: t.size, file: t.file })
+        scheduleOcr({ policyId: t.policyId, parent: t.parent, name: t.name, size: t.size, file: t.file })
         return
       }
       t.sessionId = init.sessionId
@@ -504,8 +506,9 @@ export const useTransfer = defineStore('transfer', {
           t.progress = 100
           this.refreshExplorer(t)
           // B7：上传完成后台异步生成媒体预览边车（视频 sprite / 音频波形），
-          // 失败静默，不影响上传结果
+          // 失败静默，不影响上传结果；C2：图片 OCR 同样入后台队列
           scheduleMediaSidecar({ policyId: t.policyId, parent: t.parent, name: t.name, size: t.size, file: t.file })
+          scheduleOcr({ policyId: t.policyId, parent: t.parent, name: t.name, size: t.size, file: t.file })
           return
         }
         if (d.status === 'aborted') {

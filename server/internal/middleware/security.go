@@ -69,7 +69,10 @@ func dsOrigins() []string {
 func buildCSP(origins []string) string {
 	joined := strings.Join(origins, " ")
 	csp := "default-src 'self'; " +
-		"script-src 'self' 'unsafe-inline'; " +
+		"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
+		// 'wasm-unsafe-eval'：主应用内运行同源 WebAssembly（C2 tesseract.js OCR 的
+		// core wasm 在主文档派生的 worker 里编译——worker 继承文档 CSP）。
+		// 该指令只放行 wasm 编译，不等价也不隐含 'unsafe-eval'。
 		// data:：TOAST UI 图片编辑器等组件以 data:text/css 动态注入图标主题样式；
 		// data: 内容无法发起网络请求，不扩大外部可达面（img/font 已放行 data:）
 		"style-src 'self' 'unsafe-inline' data:; " +
@@ -82,6 +85,9 @@ func buildCSP(origins []string) string {
 		// 内嵌播放器的 fetch；blob URL 只能由同源页面创建，不扩大外部可达面
 		"connect-src 'self' blob: https://api.open-meteo.com https://air-quality-api.open-meteo.com; " +
 		"font-src 'self' data:; " +
+		// worker-src：C2 的 tesseract.js 把同源 worker.min.js 包成 blob: worker 启动
+		//（与 ace/picasa 例外同款）；blob worker 脚本只可能由同源页面构造，无外部面
+		"worker-src 'self' blob:; " +
 		"frame-src 'self'; " +
 		"frame-ancestors 'none'; " +
 		"object-src 'none'; " +

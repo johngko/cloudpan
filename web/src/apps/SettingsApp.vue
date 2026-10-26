@@ -246,6 +246,19 @@
               对新建的上传任务生效，进行中的任务保持原分片
             </div>
           </div>
+          <div class="form-row" style="margin-top: 22px">
+            <label>图片文字识别（OCR）</label>
+            <div style="display: flex; gap: 10px; align-items: center">
+              <label style="display: flex; gap: 8px; align-items: center; cursor: pointer; font-size: 13px">
+                <input type="checkbox" v-model="ocrOn" @change="saveOcrPref" />启用
+              </label>
+              <span style="font-size: 12.5px; color: var(--text-2)">上传后在浏览器本地识别图片文字（中英），自动进入全文检索</span>
+            </div>
+            <div style="font-size: 11.5px; color: var(--text-3); margin-top: 6px; max-width: 620px">
+              识别完全在本地浏览器进行（tesseract.js，英文+简体中文语言包已内置），文件不出本机；
+              后台低优先级排队执行，单图 ≤8MB，CPU 占用低但会持续一点时间；关闭后新上传不再识别
+            </div>
+          </div>
           <div v-if="upSaved" style="font-size: 12px; color: var(--success); margin-top: 14px">已保存</div>
         </template>
 
@@ -782,10 +795,20 @@ async function saveUploadSettings() {
     upSavedTimer = window.setTimeout(() => { upSaved.value = false }, 2000)
   } catch (e: any) { toast.error('保存失败: ' + (e?.message || '未知错误')) }
 }
+
+// C2 图片 OCR 开关（用户 KV，默认开；关闭后上传不再排队识别）
+const ocrOn = ref(true)
+async function loadOcrPref() {
+  try { ocrOn.value = (await settingsApi.get(['image_ocr'])).image_ocr !== 'off' } catch { /* 默认开 */ }
+}
+async function saveOcrPref() {
+  try { await settingsApi.set('image_ocr', ocrOn.value ? 'on' : 'off') } catch (e: any) { toast.error('保存失败: ' + (e?.message || '未知错误')) }
+}
 onMounted(() => {
   loadShares()
   loadUserShares()
   loadOffline()
+  loadOcrPref()
   void transfer.loadPrefs().then(() => { upConc.value = transfer.prefs.concurrency; upChunk.value = transfer.prefs.chunkMB })
   pollTimer = window.setInterval(() => { if (tab.value === 'offline') loadOffline() }, 3000)
 })

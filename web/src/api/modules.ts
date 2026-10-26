@@ -189,6 +189,17 @@ export const pushApi = {
   subs: () => get<{ subs: { id: number; host: string; endpoint: string; createdAt: string }[] }>('/push/subs')
 }
 
+// C2 图片 OCR：识别在前端 tesseract.js 完成，这里只回传文本入全文索引
+export const ocrApi = {
+  save: (policyId: number, path: string, text: string) => post('/fs/ocr', { policyId, path, text })
+}
+
+// C4 网页剪藏：服务端代抓 + 正文抽取（SSRF 防护同离线下载），返回落盘路径
+export const clipApi = {
+  clip: (d: { url: string; policyId: number; dir: string; snapshot: boolean }) =>
+    post<{ path: string; title: string }>('/clip', d, { timeout: 45000 })
+}
+
 export const siteApi = {
   publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
 }
