@@ -681,6 +681,7 @@ func (h *UserShareHandler) Delete(c *gin.Context) {
 			}
 		}
 		_ = d.Delete(full)
+		emitFileEvent(middleware.CurrentUser(c), "file.delete", sh.PolicyID, full, webhookBase(full), map[string]interface{}{"sharedBy": sh.OwnerID})
 	}
 	// 上传时计入的是共享创建者的用量，删除同样退还给创建者（对称记账）
 	if released > 0 {

@@ -18,6 +18,7 @@
       </template>
       <template v-else>
         <div class="avatar">{{ initial }}</div>
+        <img v-if="session.site.brandLogo" class="cp-brand-logo" :src="session.site.brandLogo" alt="" />
         <div class="uname">{{ session.site.siteName }}</div>
         <form style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px" @submit.prevent="doLogin">
           <input class="input" type="text" placeholder="用户名" v-model="username" autofocus />

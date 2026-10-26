@@ -43,6 +43,7 @@
       <a :href="'#/s/' + session.site.demoShare">体验在线文档</a>
     </div>
     <div class="w12-login-site">{{ session.site.siteName }} · CloudPan</div>
+    <img v-if="session.site.brandLogo" class="cp-brand-logo" :src="session.site.brandLogo" alt="" />
 
     <div class="w12-login-power">
       <button title="关机" @click="shutdown">

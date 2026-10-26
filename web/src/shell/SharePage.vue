@@ -4,10 +4,11 @@
       <div class="glass" style="width: 760px; max-width: 92vw; max-height: 86vh; border-radius: var(--radius-3xl); display: flex; flex-direction: column; overflow: hidden">
         <div style="padding: 22px 26px; border-bottom: 1px solid var(--stroke); display: flex; align-items: center; gap: 12px">
           <AppIcon :name="info.isDir ? 'folder' : 'file'" :size="30" />
+          <img v-if="brandLogo" class="cp-brand-logo" :src="brandLogo" alt="" style="width:30px;height:30px" />
           <div style="flex: 1">
             <div style="font-size: 17px; font-weight: 600">{{ info.name || '...' }}</div>
             <div style="font-size: 12px; color: var(--text-3); margin-top: 3px">
-              {{ info.owner }} 分享{{ !info.isDir && info.size ? ' · ' + fmt(info.size) : '' }}{{ info.expiresAt ? ' · ' + new Date(info.expiresAt).toLocaleDateString() + ' 到期' : '' }}
+              {{ info.owner }} 分享{{ !info.isDir && info.size ? ' · ' + fmt(info.size) : '' }}{{ expireText }}
               · {{ info.views || 0 }} 次浏览 · {{ info.downloads || 0 }} 次下载
               <span v-if="!info.isDir && editing['']" class="share-editing" :title="'当前还有协作者在线编辑：' + editing['']"><span class="share-editing-dot"></span>正在编辑：{{ editing[''] }}</span>
             </div>
@@ -154,6 +155,7 @@ import { encDecryptText, encDecryptBlob } from '../utils/crypto'
 import { resolveTheme, availableThemes } from '../themes/registry'
 import { wallpaperClass } from '../assets/wallpapers'
 import { getToken } from '../api/http'
+import { siteApi } from '../api/modules'
 
 // 分享页为公开页：按站点主题渲染（管理员全局设置，游客/登录用户访问都一致），拉取失败回落 win12
 const siteTheme = ref('win12')
@@ -193,6 +195,23 @@ watch(() => route.params.token, (nt, ot) => {
   if (nt !== ot) location.reload()
 })
 const info = ref<any>({})
+
+// A10：分享页品牌化 + 有效期实时倒计时
+const brandLogo = ref('')
+const nowTick = ref(Date.now())
+siteApi.publicInfo().then(d => { brandLogo.value = d.brandLogo || '' }).catch(() => {})
+const expireTimer = window.setInterval(() => (nowTick.value = Date.now()), 1000)
+onBeforeUnmount(() => clearInterval(expireTimer))
+const expireText = computed(() => {
+  const e = info.value?.expiresAt ? new Date(info.value.expiresAt).getTime() : 0
+  if (!e) return ''
+  const ms = e - nowTick.value
+  if (ms <= 0) return ' · 已到期'
+  const d = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000) % 24
+  const m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60
+  const seg = d ? `${d} 天 ${h} 小时` : h ? `${h} 小时 ${m} 分` : `${m} 分 ${s} 秒`
+  return ` · 剩余 ${seg}`
+})
 const items = ref<any[]>([])
 const pwd = ref('')
 const stoken = ref('')

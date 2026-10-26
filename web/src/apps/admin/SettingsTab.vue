@@ -7,6 +7,10 @@
       <div class="ac-set-lbl"><b>站点名称</b><span>显示在登录页与开始菜单</span></div>
       <input class="input" v-model="settings.site_name" style="width: 260px" />
     </div>
+    <div class="ac-set-row">
+      <div class="ac-set-lbl"><b>品牌 Logo</b><span>图片 URL（https 或站内路径，如 /uploads/brand.png）；登录页与分享页显示，留空不显示</span></div>
+      <input class="input" v-model="settings.brand_logo" style="width: 360px" placeholder="https://…/logo.png" />
+    </div>
     <div class="ac-set-row" style="flex-direction: column; align-items: flex-start; gap: 6px">
       <div class="ac-set-lbl"><b>公告</b><span>登录页展示，支持 Markdown（标题/加粗/链接/列表/图片等），留空则不显示</span></div>
       <textarea class="input" v-model="settings.announcement" rows="5" style="width: 100%; max-width: 560px; resize: vertical; line-height: 1.6"

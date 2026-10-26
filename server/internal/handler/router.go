@@ -155,6 +155,15 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 		ug.GET("/shares", middleware.AppGate("share"), sh.Mine)
 		ug.POST("/shares", middleware.AppGate("share"), sh.Create)
+		// B16 文件事件 Webhook（用户级管理；全局钩子仅管理员）
+		wh := &WebhookHandler{}
+		ug.GET("/webhooks", middleware.AppGate("webhook"), wh.List)
+		ug.POST("/webhooks", middleware.AppGate("webhook"), wh.Create)
+		ug.PUT("/webhooks", middleware.AppGate("webhook"), wh.Update)
+		ug.DELETE("/webhooks", middleware.AppGate("webhook"), wh.Delete)
+		ug.GET("/webhooks/events", middleware.AppGate("webhook"), wh.ListEvents)
+		ug.POST("/webhooks/test", middleware.AppGate("webhook"), wh.TestFire)
+		ug.GET("/webhooks/deliveries", middleware.AppGate("webhook"), wh.RecentDeliveries)
 		ug.DELETE("/shares/:id", middleware.AppGate("share"), sh.Cancel)
 		// 端到端加密分享：属主上传本地加密后的密文（body = 密文字节流）
 		ug.POST("/shares/:id/encrypt-file", middleware.AppGate("share"), sh.EncryptFile)

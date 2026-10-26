@@ -19,6 +19,7 @@
       </template>
       <template v-else>
         <div class="avatar">{{ initial }}</div>
+        <img v-if="session.site.brandLogo" class="cp-brand-logo" :src="session.site.brandLogo" alt="" />
         <div class="mac-login-name">{{ session.site.siteName }}</div>
         <form @submit.prevent="doLogin">
           <input class="mac-login-input" type="text" placeholder="用户名" v-model="username" autofocus />

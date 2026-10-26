@@ -466,6 +466,8 @@ func (h *UploadHandler) runMerge(x ctx3, sess *model.UploadSession, p *model.Pol
 	model.DB.Create(&model.AuditLog{UserID: x.user.ID, Username: x.user.Username, Action: action, Detail: p.Name + ":" + targetVP})
 	touchPolicyUsage(p.ID) // 合并落盘，盘用量立即失效重算
 	finishUploadTask(sess.ID)
+	// B16 事件：合并落盘才算「文件创建」，此刻通知自动化最准
+	emitFileEvent(x.user, "file.create", p.ID, targetVP, sess.Name, map[string]interface{}{"size": entry.Size, "hash": sess.Hash})
 }
 
 // mergeFailed 合并失败：会话回 uploading（客户端可重发 complete 重试合并），

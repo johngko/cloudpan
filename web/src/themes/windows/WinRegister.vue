@@ -13,6 +13,7 @@
     </div>
     <div class="w12-login-reg" style="bottom: 40px"><a href="#/login">返回登录</a></div>
     <div class="w12-login-site">{{ session.site.siteName }} · CloudPan</div>
+    <img v-if="session.site.brandLogo" class="cp-brand-logo" :src="session.site.brandLogo" alt="" />
   </div>
 </template>
 

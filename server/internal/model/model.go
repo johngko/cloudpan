@@ -418,6 +418,31 @@ type UserSetting struct {
 	Value  string `gorm:"type:text" json:"value"`
 }
 
+// Webhook B16 文件事件外发钩子。UserID=0 为全局钩子（管理员配置，对所有用户生效）
+type Webhook struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"index" json:"userId"`
+	Name      string    `gorm:"size:100" json:"name"`
+	URL       string    `gorm:"size:512" json:"url"`
+	Secret    string    `gorm:"size:128" json:"secret"`
+	Events    string    `gorm:"size:255" json:"events"`    // JSON 数组；空 = 全部事件
+	PathRegex string    `gorm:"size:255" json:"pathRegex"` // 路径过滤正则；空 = 不过滤
+	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// WebhookDelivery 持久化投递队列（重启续投）：pending → delivered / failed
+type WebhookDelivery struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	HookID    uint      `gorm:"index" json:"hookId"`
+	Payload   string    `gorm:"type:text" json:"payload"`
+	Attempts  int       `json:"attempts"`
+	NextTry   time.Time `gorm:"index" json:"nextTry"`
+	Status    string    `gorm:"size:16;index" json:"status"` // pending | delivered | failed
+	LastError string    `gorm:"size:512" json:"lastError"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type SiteSetting struct {
 	Key   string `gorm:"size:64;primaryKey" json:"key"`
 	Value string `gorm:"type:text" json:"value"`
@@ -529,7 +554,8 @@ func InitDB(dataDir string) {
 	// quota_mb 列首次新增时，SQLite 会把存量行填 0（=不限量），必须回填 -1（=随组）
 	quotaColNew := !DB.Migrator().HasColumn(&User{}, "quota_mb")
 	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &UpdateLog{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{},
-		&FileTag{}, &FileTagging{}, &RecentOpen{}, &ApiToken{}, &FileText{}); err != nil {
+		&FileTag{}, &FileTagging{}, &RecentOpen{}, &ApiToken{}, &FileText{},
+		&Webhook{}, &WebhookDelivery{}); err != nil {
 		log.Fatalf("建表失败: %v", err)
 	}
 	// 存量秒传索引回填副本行（旧版本只有 SourcePath 单源记录）

@@ -263,6 +263,69 @@
           <div v-if="!offTasks.length" style="color: var(--text-3); padding: 30px; text-align: center">暂无离线任务</div>
         </template>
 
+        <!-- B16 文件事件 Webhook -->
+        <template v-else-if="tab === 'webhook'">
+          <h2 style="font-size: 19px; margin-bottom: 6px">文件事件 Webhook</h2>
+          <div style="font-size: 12.5px; color: var(--text-3); margin-bottom: 14px">
+            文件创建/改名/删除/分享等变更实时 POST 到你的自动化服务（n8n、HomeAssistant、自建接收端）。
+            请求带 <code>X-CloudPan-Event</code> 与可选 <code>X-CloudPan-Signature: sha256=HMAC(secret)</code>；
+            失败自动重试（5 次退避），投递记录保留 7 天。默认禁止内网目标，服务端设
+            <code>CP_WEBHOOK_ALLOW_PRIVATE=1</code> 可放开（同局域网 HA/n8n 场景）。
+          </div>
+          <table class="file-list" style="position: static; max-width: 860px">
+            <thead><tr><th>名称</th><th>URL</th><th>事件</th><th>路径过滤</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="h in hooks" :key="h.id">
+                <td>{{ h.name }}<span v-if="h.userId === 0" style="color:var(--warn)"> · 全局</span></td>
+                <td style="font-size:12px">{{ h.url }}</td>
+                <td style="font-size:12px">{{ h.events ? JSON.parse(h.events).length + ' 项' : '全部' }}</td>
+                <td style="font-size:12px">{{ h.pathRegex || '—' }}</td>
+                <td>
+                  <label style="cursor:pointer"><input type="checkbox" :checked="h.enabled" @change="toggleHook(h)" /> 启用</label>
+                </td>
+                <td style="white-space:nowrap">
+                  <button class="btn" @click="testHook(h)">测试</button>
+                  <button class="btn" @click="removeHook(h)">删除</button>
+                </td>
+              </tr>
+              <tr v-if="!hooks.length"><td colspan="6" style="color: var(--text-3)">暂无钩子，用下方表单创建一个</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top: 18px; padding: 14px 16px; border: 1px solid var(--stroke); border-radius: 10px; max-width: 860px">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px">新建钩子</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px">
+              <input class="input" v-model="whForm.name" placeholder="名称" style="width:150px" />
+              <input class="input" v-model="whForm.url" placeholder="https://n8n.example.com/webhook/xxx" style="flex:1;min-width:280px" />
+              <input class="input" v-model="whForm.secret" placeholder="签名密钥（可选）" style="width:180px" />
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px">
+              <input class="input" v-model="whForm.pathRegex" placeholder="路径正则过滤，如 \.docx$（留空 = 不过滤）" style="flex:1;min-width:280px" />
+              <label v-if="isAdmin" style="font-size:12.5px;display:flex;align-items:center;gap:4px"><input type="checkbox" v-model="whForm.global" /> 全局钩子（对所有用户生效）</label>
+            </div>
+            <div style="display: flex; gap: 10px 14px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 10px">
+              <label v-for="e in whEvents" :key="e" style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="checkbox" :checked="whForm.events.includes(e)" @change="toggleEv(e)" /> {{ e }}
+              </label>
+              <span v-if="!whForm.events.length" style="color:var(--text-3)">（不勾 = 订阅全部事件）</span>
+            </div>
+            <button class="btn primary" :disabled="whBusy" @click="createHook">创建</button>
+          </div>
+          <div style="font-size: 13px; font-weight: 600; margin: 18px 0 8px">最近投递</div>
+          <table class="file-list" style="position: static; max-width: 860px">
+            <thead><tr><th>时间</th><th>钩子</th><th>状态</th><th>次数</th><th>错误</th></tr></thead>
+            <tbody>
+              <tr v-for="d in whDeliveries" :key="d.id">
+                <td>{{ String(d.createdAt).slice(0, 19).replace('T', ' ') }}</td>
+                <td>#{{ d.hookId }}</td>
+                <td :style="d.status === 'failed' ? 'color:var(--danger)' : d.status === 'pending' ? 'color:var(--warn)' : ''">{{ d.status }}</td>
+                <td>{{ d.attempts }}</td>
+                <td style="font-size:12px">{{ d.lastError || '' }}</td>
+              </tr>
+              <tr v-if="!whDeliveries.length"><td colspan="5" style="color: var(--text-3)">暂无投递记录</td></tr>
+            </tbody>
+          </table>
+        </template>
+
         <!-- 我的操作记录 -->
         <template v-else-if="tab === 'logs'">
           <h2 style="font-size: 19px; margin-bottom: 6px">操作记录</h2>
@@ -312,7 +375,7 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, type AuditItem, type ApiTokenItem } from '../api/modules'
+import { fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
@@ -384,6 +447,7 @@ const tabs = computed(() => [
   { id: 'shares', name: '我的分享', icon: 'share' },
   { id: 'upload', name: '上传', icon: 'upload' },
   ...(canOffline.value ? [{ id: 'offline', name: '离线下载', icon: 'download' }] : []),
+  { id: 'webhook', name: 'Webhook', icon: 'share' },
   { id: 'logs', name: '操作记录', icon: 'list' },
   { id: 'about', name: '关于', icon: 'info' }
 ])
@@ -424,6 +488,57 @@ async function removeToken(t: ApiTokenItem) {
   } catch (e: any) { toast.error(e?.message || '撤销失败') }
 }
 watch(tab, v => { if (v === 'account' && !session.isGuest) loadTokens() }, { immediate: true })
+
+// ---- B16 Webhook tab ----
+const hooks = ref<any[]>([])
+const whEvents = ref<string[]>([])
+const whDeliveries = ref<any[]>([])
+const whBusy = ref(false)
+const whForm = ref<{ name: string; url: string; secret: string; pathRegex: string; events: string[]; global: boolean }>(
+  { name: '', url: '', secret: '', pathRegex: '', events: [], global: false })
+async function loadHooks() {
+  try {
+    const mine = await webhookApi.list()
+    let all = mine
+    if (session.user?.role === 'admin') {
+      try { all = [...(await webhookApi.list('global')), ...mine] } catch { /* 保留自己的 */ }
+    }
+    hooks.value = all
+    whDeliveries.value = await webhookApi.deliveries()
+  } catch { /* ignore */ }
+}
+async function createHook() {
+  whBusy.value = true
+  try {
+    await webhookApi.create(whForm.value)
+    whForm.value = { name: '', url: '', secret: '', pathRegex: '', events: [], global: whForm.value.global }
+    toast.success('钩子已创建')
+    await loadHooks()
+  } catch (e: any) { toast.error(e.message || '创建失败') }
+  whBusy.value = false
+}
+async function toggleHook(h: any) {
+  try {
+    await webhookApi.update(h.id, { name: h.name, url: h.url, secret: h.secret, pathRegex: h.pathRegex, events: h.events ? JSON.parse(h.events) : [], enabled: !h.enabled })
+    h.enabled = !h.enabled
+  } catch (e: any) { toast.error(e.message || '更新失败') }
+}
+async function toggleEv(e: string) {
+  const i = whForm.value.events.indexOf(e)
+  if (i >= 0) whForm.value.events.splice(i, 1); else whForm.value.events.push(e)
+}
+async function testHook(h: any) {
+  try { await webhookApi.test(h.id); toast.success('测试事件已入队，稍后看投递记录') } catch (e: any) { toast.error(e.message) }
+}
+async function removeHook(h: any) {
+  try { await webhookApi.remove(h.id); await loadHooks() } catch (e: any) { toast.error(e.message) }
+}
+watch(tab, v => {
+  if (v === 'webhook') {
+    if (!whEvents.value.length) webhookApi.events().then(x => whEvents.value = x).catch(() => {})
+    loadHooks()
+  }
+})
 
 // 我的操作记录（懒加载：切到该页签才请求，避免打开设置就多打一次接口）
 const LOG_PAGE_SIZE = 20

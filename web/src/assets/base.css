@@ -609,6 +609,8 @@ select.input { cursor: pointer; }
 .hk-foot { margin-top: 4px; font-size: 11.5px; color: var(--text-3); }
 
 /* --- B15 View Transitions：主题切换交叉淡化、资源管理器导航滑动 --- */
+.cp-brand-logo { width: 40px; height: 40px; border-radius: 10px; object-fit: contain; }
+
 html.vt-fwd::view-transition-old(root) { animation: vt-out-left 0.2s ease both; }
 html.vt-fwd::view-transition-new(root) { animation: vt-in-right 0.26s ease both; }
 html.vt-back::view-transition-old(root) { animation: vt-out-right 0.2s ease both; }

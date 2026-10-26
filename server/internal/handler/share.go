@@ -150,6 +150,7 @@ func (h *ShareHandler) Create(c *gin.Context) {
 		model.DB.Model(&sh).UpdateColumn("preview_enabled", false)
 	}
 	middleware.Audit(c, "share", p.Name+":"+vp)
+	emitFileEvent(middleware.CurrentUser(c), "share.create", p.ID, vp, webhookBase(vp), map[string]interface{}{"token": sh.Token})
 	dto.OK(c, sh)
 }
 
@@ -181,6 +182,9 @@ func (h *ShareHandler) Cancel(c *gin.Context) {
 	model.DB.Where("id = ? AND user_id = ?", c.Param("id"), x.user.ID).Delete(&model.Share{})
 	if sh.Token != "" {
 		_ = os.RemoveAll(h.shareDataDir(sh.Token))
+	}
+	if sh.ID != 0 {
+		emitFileEvent(middleware.CurrentUser(c), "share.cancel", sh.PolicyID, sh.Path, webhookBase(sh.Path), map[string]interface{}{"token": sh.Token})
 	}
 	dto.OK(c, nil)
 }

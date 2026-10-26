@@ -48,6 +48,7 @@ func InitTaskPool(svc *fscore.Service, btDir string) {
 // sweepLoop 定期清扫：游客 24h 临时工作区 + 假死上传会话（每小时，回收要细粒度，
 // 假死会话占的是 2×文件大小的临时盘）+ 孤儿分片/回收站超期项（每 6 小时，重盘扫描）
 func (p *TaskPool) sweepLoop() {
+	startWebhookWorker() // B16：与清扫同生命周期拉起投递 worker
 	p.reconcileQuotas() // 启动即对账（先于各类清扫，避免与其配额扣减交叉竞争）
 	p.sweepUploads()
 	fscore.PruneAll()

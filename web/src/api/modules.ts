@@ -172,7 +172,7 @@ export const authApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[] }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
 }
 
 // 在线 Office：实时协作「正在编辑」状态
@@ -182,6 +182,17 @@ export const officeApi = {
   // 文件列表批量只读查询：不把查看者登记为编辑者
   statusBatch: (items: { key: string; policyId?: number; path?: string; shareId?: number; rel?: string }[]) =>
     post<Record<string, { editors: { name: string; mode: string }[]; modTime: number }>>('/office/status-batch', items)
+}
+
+// B16 文件事件 Webhook（用户级；管理员可建 global 全局钩子）
+export const webhookApi = {
+  list: (scope?: string) => get<any[]>('/webhooks' + (scope ? '?scope=' + scope : '')),
+  events: () => get<string[]>('/webhooks/events'),
+  create: (d: any) => post('/webhooks', d),
+  update: (id: number, d: any) => put(`/webhooks?id=${id}`, d),
+  remove: (id: number) => del(`/webhooks?id=${id}`),
+  test: (id: number) => post(`/webhooks/test?id=${id}`),
+  deliveries: () => get<any[]>('/webhooks/deliveries'),
 }
 
 export const notifyApi = {

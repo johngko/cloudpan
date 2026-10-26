@@ -138,6 +138,7 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 		"guestLogin":       guestLogin,
 		"theme":            theme,
 		"demoShare":        demoShare,
+		"brandLogo":        strings.TrimSpace(s["brand_logo"]),
 		"wallpaperCatalog": wpCatalog,
 		// 视频转码（CAD/媒体播放器"转码播放"开关的依据）：off/auto/sw + ffmpeg 是否可用
 		"transcodeMode":   s["video_transcode"],
@@ -405,6 +406,7 @@ func (h *SiteHandler) Mkdir(c *gin.Context) {
 		return
 	}
 	middleware.Audit(c, "mkdir", p.Name+":"+vp)
+	emitFileEvent(middleware.CurrentUser(c), "file.mkdir", p.ID, vp, webhookBase(vp), nil)
 	dto.OK(c, gin.H{"path": vp})
 }
 
@@ -446,6 +448,7 @@ func (h *SiteHandler) Rename(c *gin.Context) {
 		}
 	}
 	middleware.Audit(c, "rename", p.Name+":"+in.Path+" -> "+in.NewName)
+	emitFileEvent(middleware.CurrentUser(c), "file.rename", p.ID, in.Path, webhookBase(in.Path), map[string]interface{}{"to": in.NewName})
 	dto.OK(c, nil)
 }
 
@@ -531,6 +534,9 @@ func (h *SiteHandler) Move(c *gin.Context) {
 		}
 	}
 	middleware.Audit(c, "move", fmt.Sprintf("%s: %v -> %s", p.Name, in.Paths, dst))
+	for _, srcp := range in.Paths {
+		emitFileEvent(middleware.CurrentUser(c), "file.move", p.ID, srcp, webhookBase(srcp), map[string]interface{}{"dst": dst})
+	}
 	dto.OK(c, nil)
 }
 
@@ -733,6 +739,9 @@ func (h *SiteHandler) Copy(c *gin.Context) {
 	addQuota(x.user.ID, add)
 	touchPolicyUsage(p.ID) // 复制产生新副本，用量增加
 	middleware.Audit(c, "copy", fmt.Sprintf("%s: %v -> %s", p.Name, in.Paths, dst))
+	for _, srcp := range in.Paths {
+		emitFileEvent(middleware.CurrentUser(c), "file.copy", p.ID, srcp, webhookBase(srcp), map[string]interface{}{"dst": dst})
+	}
 	dto.OK(c, nil)
 }
 
@@ -932,7 +941,11 @@ func (h *SiteHandler) CrossCopy(c *gin.Context) {
 	}
 	addQuota(x.user.ID, add)
 	touchPolicyUsage(dp.ID) // 目标盘产生新副本（源保留，仅目标盘用量变化）
-	middleware.Audit(c, "cross-copy", fmt.Sprintf("%s <- %v", dp.Name, in.Items))
+		middleware.Audit(c, "cross-copy", fmt.Sprintf("%s <- %v", dp.Name, in.Items))
+	for _, it := range items {
+		nm := webhookBase(it.src)
+		emitFileEvent(middleware.CurrentUser(c), "file.copy", dp.ID, dstDir+"/"+nm, nm, nil)
+	}
 	dto.OK(c, gin.H{"done": true})
 }
 
@@ -1027,7 +1040,11 @@ func (h *SiteHandler) CrossMove(c *gin.Context) {
 		moveIDs = append(moveIDs, s.sp.ID)
 	}
 	touchPolicyUsage(moveIDs...) // 目标盘增加、本地源盘进回收站减少
-	middleware.Audit(c, "cross-move", fmt.Sprintf("%s <- %v", dp.Name, in.Items))
+		middleware.Audit(c, "cross-move", fmt.Sprintf("%s <- %v", dp.Name, in.Items))
+	for _, s := range srcs {
+		nm := webhookBase(s.src)
+		emitFileEvent(middleware.CurrentUser(c), "file.move", dp.ID, dstDir+"/"+nm, nm, map[string]interface{}{"fromPolicy": s.sp.ID})
+	}
 	dto.OK(c, gin.H{"done": true})
 }
 
@@ -1062,6 +1079,9 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 	}
 	touchPolicyUsage(p.ID) // 文件已移出盘根（进回收站），用量立即失效
 	middleware.Audit(c, "delete", fmt.Sprintf("%s: %v", p.Name, in.Paths))
+	for _, delp := range in.Paths {
+		emitFileEvent(middleware.CurrentUser(c), "file.delete", p.ID, delp, webhookBase(delp), nil)
+	}
 	dto.OK(c, nil)
 }
 
@@ -1209,6 +1229,7 @@ func (h *SiteHandler) WriteText(c *gin.Context) {
 		dto.Fail(c, 400, "保存失败："+err.Error())
 		return
 	}
+	emitFileEvent(middleware.CurrentUser(c), "file.write", p.ID, vp, webhookBase(vp), map[string]interface{}{"size": len(in.Content)})
 	if add != 0 {
 		model.DB.Model(&model.User{}).Where("id = ?", x.user.ID).
 			UpdateColumn("used_bytes", quotaExpr(add))
@@ -2244,6 +2265,7 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 	}
 	// 版本恢复产生新物理副本：登记之（版本原件仍是另一份存活副本）
 	fscore.HashPathCopied(ver.PhysicalPath, physTarget)
+	emitFileEvent(middleware.CurrentUser(c), "file.restore", in.PolicyID, in.Path, webhookBase(in.Path), map[string]interface{}{"version": ver.Version})
 	dto.OK(c, gin.H{"version": ver.Version, "path": in.Path})
 }
 
