@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { uploadApi, settingsApi, userShareApi, type UploadStatus } from '../api/modules'
 import { sha256, Sha256, EMPTY_SHA256 } from '../utils/sha256'
+import { scheduleMediaSidecar } from '../utils/mediaPrep'
 import { useWindows } from './windows'
 import { useToast } from './dialog'
 
@@ -111,6 +112,26 @@ function saveHashCache(t: TransferTask): void {
     if (ks.length > 200) for (const k of ks.slice(0, ks.length - 100)) delete m[k]
     localStorage.setItem(HASH_CACHE_KEY, JSON.stringify(m))
   } catch { /* 配额满：放弃本次缓存，不影响上传 */ }
+}
+
+// B14：哈希全部移出主线程（worker 内 subtle 或纯 JS 增量），大文件哈希期间
+// UI 不再卡顿。创建失败（旧内核/沙箱 webview）标记降级，回退原主线程路径。
+let hashWorkerBroken = false
+function hashInWorker(file: File, size: number): Promise<{ hash: string; buf?: ArrayBuffer }> {
+  return new Promise((resolve, reject) => {
+    let w: Worker
+    try {
+      w = new Worker(new URL('../workers/hash.worker.ts', import.meta.url), { type: 'module' })
+    } catch (e) { reject(e); return }
+    w.onmessage = (e: MessageEvent<{ hash?: string; buf?: ArrayBuffer; error?: string }>) => {
+      w.terminate()
+      const d = e.data
+      if (d.hash) resolve({ hash: d.hash, buf: d.buf })
+      else reject(new Error(d.error || '哈希计算失败'))
+    }
+    w.onerror = () => { w.terminate(); reject(new Error('哈希 Worker 异常')) }
+    w.postMessage({ file, size })
+  })
 }
 
 // 虚拟路径拼接（slash 风格，parent 恒以 / 开头）
@@ -259,6 +280,24 @@ export const useTransfer = defineStore('transfer', {
         saveHashCache(t)
         return
       }
+      // B14：优先走 Worker（小文件整块 subtle / 大文件增量纯 JS，全离主线程；
+      // ≤16MB 时整块 buffer transfer 回来，分片循环直接复用）
+      if (!hashWorkerBroken) {
+        try {
+          const r = await hashInWorker(t.file!, t.size)
+          t.hash = r.hash
+          if (r.buf && t.size <= SMALL_FILE) t.buffer = r.buf
+          saveHashCache(t)
+          return
+        } catch (e: unknown) {
+          // Worker 不可用才降级；文件读取出错在下面的主线程路径会抛同样的错，
+          // 错误信息以主线程路径为准（更贴近任务展示）
+          if (String(errMsg(e)).includes('Worker')) {
+            hashWorkerBroken = true
+            console.warn('[CloudPan 哈希 Worker 不可用，降级主线程]', errMsg(e))
+          }
+        }
+      }
       if (t.size <= SMALL_FILE) {
         let buf: ArrayBuffer
         try {
@@ -389,6 +428,8 @@ export const useTransfer = defineStore('transfer', {
         t.uploaded = t.size
         t.progress = 100
         this.refreshExplorer(t)
+        // 秒传副本同样没有媒体边车（键含 mtime），同样回填
+        scheduleMediaSidecar({ policyId: t.policyId, parent: t.parent, name: t.name, size: t.size, file: t.file })
         return
       }
       t.sessionId = init.sessionId
@@ -462,6 +503,9 @@ export const useTransfer = defineStore('transfer', {
           t.uploaded = t.size
           t.progress = 100
           this.refreshExplorer(t)
+          // B7：上传完成后台异步生成媒体预览边车（视频 sprite / 音频波形），
+          // 失败静默，不影响上传结果
+          scheduleMediaSidecar({ policyId: t.policyId, parent: t.parent, name: t.name, size: t.size, file: t.file })
           return
         }
         if (d.status === 'aborted') {

@@ -102,6 +102,8 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/fs/wallpaper", site.Wallpaper)
 		ug.GET("/fs/download", site.Download)
 		ug.POST("/fs/archive", site.Archive)
+		// B7 媒体预览边车回填（浏览器端上传后生成：视频 sprite / 音频波形）
+		ug.POST("/fs/preview", middleware.AppGate("preview"), site.PreviewUpload)
 		// 压缩包在线浏览（受「压缩包浏览器」功能门控）
 		ug.GET("/fs/archive/list", middleware.AppGate("archive_view"), site.ArchiveList)
 		ug.GET("/fs/archive/raw", middleware.AppGate("archive_view"), site.ArchiveRaw)

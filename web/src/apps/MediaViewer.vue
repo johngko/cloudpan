@@ -22,6 +22,8 @@
         </div>
       </div>
       <div ref="apEl"></div>
+      <!-- B7 音频波形边车：有数据才显示；点击定位播放 -->
+      <canvas v-if="wave" ref="waveEl" class="mv-wave" @click="seekWave" title="点击定位"></canvas>
       <div v-if="!hasLrc" class="mv-nolrc">暂无歌词（可将同名 .lrc 文件放在同一目录）</div>
     </div>
     <!-- 底部导航（多文件时） -->
@@ -42,6 +44,7 @@ import APlayer from 'aplayer'
 import 'aplayer/dist/APlayer.min.css'
 import { getToken } from '../api/http'
 import { fsApi, rawUrl, settingsApi, coverUrl } from '../api/modules'
+import { fetchWave, fetchSprite, type WaveMeta } from '../utils/mediaPrep'
 import { useSession } from '../stores/session'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -102,6 +105,47 @@ async function fetchCover(it: any): Promise<string> {
     if (blob.size > 4 * 1024 * 1024) return '' // 异常大图丢弃
     return URL.createObjectURL(blob)
   } catch { return '' }
+}
+
+// ---- B7 音频波形：上传时回填的 peaks 边车（无则整条不显示）----
+const wave = ref<WaveMeta | null>(null)
+const waveEl = ref<HTMLCanvasElement>()
+function drawWave() {
+  const cv = waveEl.value
+  const w = wave.value
+  if (!cv || !w) return
+  const dpr = window.devicePixelRatio || 1
+  const cw = cv.clientWidth || 520
+  const ch = 46
+  if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr) }
+  const g = cv.getContext('2d')
+  if (!g) return
+  g.setTransform(dpr, 0, 0, dpr, 0, 0)
+  g.clearRect(0, 0, cw, ch)
+  const played = ap && ap.duration ? Math.min(1, Math.max(0, ap.audioTime / ap.duration)) : 0
+  const n = w.peaks.length
+  const bw = cw / n
+  for (let i = 0; i < n; i++) {
+    const h = Math.max(1.5, w.peaks[i] * (ch - 10))
+    g.fillStyle = i / n <= played ? '#4cc2ff' : 'rgba(160,180,200,.28)'
+    g.fillRect(i * bw, (ch - h) / 2, Math.max(1, bw - 1), h)
+  }
+}
+function seekWave(ev: MouseEvent) {
+  const cv = waveEl.value
+  if (!cv || !wave.value || !ap || !ap.duration) return
+  const r = cv.getBoundingClientRect()
+  const frac = Math.min(0.999, Math.max(0, (ev.clientX - r.left) / r.width))
+  ap.seekTo(frac * ap.duration)
+  drawWave()
+}
+async function loadWave(it: any, token: number) {
+  wave.value = null
+  const m = await fetchWave(it.policyId, it.path)
+  if (token !== building) return
+  wave.value = m
+  await nextTick()
+  drawWave()
 }
 
 // ---- 观看进度（用户设置 KV：media_progress）----
@@ -271,6 +315,12 @@ async function build() {
     }
     if (subtitle) opts.subtitle = subtitle
     art = new Artplayer(opts)
+    // B7 拖动预览：上传时回填的 sprite 边车（Artplayer 网格缩略图；无则 404 静默降级）
+    fetchSprite(current.value.policyId, current.value.path).then(spr => {
+      if (spr && token === building && art) {
+        art.thumbnails = { url: spr.pngUrl, number: spr.meta.n, column: spr.meta.cols, width: spr.meta.w, height: spr.meta.h }
+      }
+    })
     // Artplayer 5.x：原生 video 事件统一以 video: 前缀重新 emit（video:pause/video:timeupdate/video:ended），
     // 且 on() 第三参是 ctx 而非 options——一次性监听要用 art.once()
     if (startAt > 0) {
@@ -298,12 +348,14 @@ async function build() {
     const apOpts: any = { container: apEl.value, theme: '#4cc2ff', autoplay: true, volume: 0.8, audio: [audio] }
     if (lrc) { audio.lrc = lrc; apOpts.lrcType = 2 }
     ap = new APlayer(apOpts)
+    loadWave(current.value, token)
     if (startAt > 0) {
       ap.on('ready', () => {
         setTimeout(() => { if (ap && Number.isFinite(ap.duration) && startAt < ap.duration - 3) ap.seekTo(startAt) }, 400)
       })
     }
     ap.on('timeupdate', () => {
+      if (wave.value) drawWave()
       const now = Date.now()
       if (now - lastSaved > 10000) { lastSaved = now; saveProgress() }
     })
@@ -315,6 +367,7 @@ async function build() {
 function destroy() {
   art?.destroy(false); art = null
   ap?.destroy(); ap = null
+  wave.value = null
   setCover('')
 }
 

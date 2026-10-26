@@ -1427,6 +1427,11 @@ func (h *SiteHandler) Raw(c *gin.Context) {
 		h.serveCover(c, x, d, rc, vp, name)
 		return
 	}
+	// ?pv=json|png 媒体预览边车（B7：浏览器端上传时回填的视频 sprite / 音频波形）
+	if pv := c.Query("pv"); pv != "" {
+		h.servePV(c, x, d, vp, pv)
+		return
+	}
 	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename*=UTF-8''%s`, dispositionOf(name), urlEscape(name)))
 	// no-cache 允许 304 协商缓存，但文件被在线编辑覆盖后必须重新拉取最新内容
 	c.Header("Cache-Control", "no-cache")

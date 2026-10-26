@@ -482,6 +482,19 @@ export function rawUrl(policyId: number, path: string) {
 export function coverUrl(policyId: number, path: string) {
   return `/api/fs/raw?policyId=${policyId}&path=${encodeURIComponent(path)}&cover=1&t=${getToken()}`
 }
+// B7 媒体预览边车（浏览器端上传时回填）：pvUrl 读取（不存在 404 由调用方降级），
+// previewUpload 上传（video: sprite PNG + 元数据；audio: 波形 peaks）
+export function pvUrl(policyId: number, path: string, want: 'json' | 'png') {
+  return `/api/fs/raw?policyId=${policyId}&path=${encodeURIComponent(path)}&pv=${want}&t=${getToken()}`
+}
+export function previewUpload(policyId: number, path: string, meta: unknown, sprite?: Blob) {
+  const fd = new FormData()
+  fd.append('policyId', String(policyId))
+  fd.append('path', path)
+  fd.append('meta', JSON.stringify(meta))
+  if (sprite) fd.append('sprite', sprite, 'sprite.png')
+  return post('/fs/preview', fd)
+}
 export function downloadUrl(policyId: number, paths: string[]) {
   const q = paths.map(p => 'path=' + encodeURIComponent(p)).join('&')
   return `/api/fs/download?policyId=${policyId}&${q}&t=${getToken()}`
