@@ -147,6 +147,14 @@ func SecurityHeaders() gin.HandlerFunc {
 		if strings.HasPrefix(c.Request.URL.Path, "/webapps/cad/") {
 			csp = strings.Replace(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' 'unsafe-eval'", 1)
 		}
+		// 图片预览（webapps/picasa）HEIC/HEIF 支持（A9）：iPhone 照片浏览器原生
+		// 解不了，前端懒加载同源 libheif wasm（static/heic/heic2any.min.js）转 JPEG。
+		// libheif 的 emscripten 胶水会 eval 运行时字符串（同 cad），blob worker 需
+		// worker-src。仅该 webapp 子树放宽（同源资源，不扩大外部面）。
+		if strings.HasPrefix(c.Request.URL.Path, "/webapps/picasa/") {
+			csp = strings.Replace(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' 'unsafe-eval'", 1)
+			csp = csp + "; worker-src 'self' blob:"
+		}
 		h.Set("Content-Security-Policy", csp)
 		c.Next()
 	}

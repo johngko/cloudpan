@@ -1414,9 +1414,9 @@ async function openItem(f: FileItem) {
   const siblings = sortedItems.value
     .filter((x: any) => !x.isDir)
     .map((x: any) => ({ policyId: (x as any).policyId || pid, path: x.path, name: x.name, size: x.size, ext: (x.ext || '').toLowerCase() }))
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) {
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'heic', 'heif'].includes(ext)) {
     // 默认图片打开统一走 Picasa（图片查看器已下线）；list 供左右翻页
-    store.open('picasa', { ...p, list: siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(x.ext)) }, { title: f.name + ' - Picasa 图片预览', icon: 'image', w: 980, h: 660 })
+    store.open('picasa', { ...p, list: siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'heic', 'heif'].includes(x.ext)) }, { title: f.name + ' - Picasa 图片预览', icon: 'image', w: 980, h: 660 })
   } else if (['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
     store.open('mediaviewer', { ...p, list: siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext)) }, { title: f.name + ' - 媒体播放器', icon: 'media', w: 900, h: 620 })
   } else if (ext === 'pdf' && apps.isAvailable('pdf_reader')) {
@@ -1519,7 +1519,7 @@ function openWith(f: FileItem, app: 'mediaviewer' | 'notepad' | 'officeeditor' |
   // 否则记事本等应用拿到 policyId=undefined 会退化为只读空文档
   const withList: any = { ...f, ext, policyId: pid }
   // 图片/媒体：传入同类文件列表（图片为全部图片，音视频为全部音视频）
-  if (app === 'picasa') withList.list = siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(x.ext))
+  if (app === 'picasa') withList.list = siblings.filter(x => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'heic', 'heif'].includes(x.ext))
   else if (app === 'mediaviewer') withList.list = siblings.filter(x => ['mp4', 'webm', 'mkv', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(x.ext))
   else if (app === 'officeeditor') {
     // 列表项自身不带 policyId/shareId（双击走 openItem 会用当前盘回退，这里直接展开 f 会丢字段
@@ -1557,7 +1557,7 @@ function openWith(f: FileItem, app: 'mediaviewer' | 'notepad' | 'officeeditor' |
 function buildOpenWith(f: FileItem) {
   const ext = (f.ext || '').toLowerCase()
   const items: any[] = [{ label: '默认程序', icon: iconOf(f), onClick: () => openItem(f) }]
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)) {
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'heic', 'heif'].includes(ext)) {
     if (apps.isAvailable('picasa'))
       items.push({ label: 'Picasa 图片预览', icon: 'image', onClick: () => openWith(f, 'picasa') })
     if (apps.isAvailable('image_editor'))

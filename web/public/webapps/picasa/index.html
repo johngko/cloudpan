@@ -85,8 +85,35 @@
       }
       window.htmlEncode = window.htmlEncode || htmlEncode;
 
+      // ===== HEIC/HEIF 前端解码（A9）：iPhone 照片浏览器原生解不了，
+      // 用同源 libheif wasm（heic2any 自带，懒加载 1.3MB，只在遇到 heic 时拉取）
+      // 现转 JPEG。解码失败回落原 URL（picasa 自带错误遮罩兜底）。=====
+      const heicDecoded = new Map(); // 原始 URL → 解码 Promise（blob: URL 或回落原 URL）
+      function fileExt(f){
+        return String((f && f.ext) || (String((f&&f.name)||'').match(/\.([a-z0-9]+)$/i)||[])[1] || '').toLowerCase();
+      }
+      function isHeic(ext){ return /^(heic|heif)$/.test(ext); }
+      function loadHeicLib(){
+        if(window.heic2any) return Promise.resolve();
+        return new Promise(function(res,rej){
+          var s=document.createElement('script');
+          s.src='static/heic/heic2any.min.js';
+          s.onload=res; s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      function ensureHeic(url){
+        if(heicDecoded.has(url)) return heicDecoded.get(url);
+        var p = fetch(url).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.blob(); })
+          .then(function(blob){ return loadHeicLib().then(function(){ return window.heic2any({blob:blob,toType:'image/jpeg',quality:0.92}); }); })
+          .then(function(out){ return URL.createObjectURL(Array.isArray(out)?out[0]:out); })
+          .catch(function(){ return url; });
+        heicDecoded.set(url,p);
+        return p;
+      }
+
       function itemFromFile(file){
-        return [[file.url,file.url,file.url], htmlEncode(file.name||''), [0,0], '', {src:file.url,title:file.name||'',data:file}];
+        return [[file.url,file.url,file.url], htmlEncode(file.name||''), [0,0], '', {src:file.url,title:file.name||'',data:file,ext:fileExt(file)}];
       }
 
       function buildItems(file){
@@ -138,6 +165,22 @@
           instance.frame.onclick=function(e){ e&&e.stopPropagation&&e.stopPropagation(); return false; };
           instance.CloseBox.onclick=function(e){ e&&e.stopPropagation&&e.stopPropagation(); return false; };
         };
+        // 翻页时当前张还是未解码的 heic：后台解码完成后用 picasa 自带 resetImage
+        // 原地换源重绘（换源后 trip[1] 变 blob: URL，天然防重复触发/死循环）
+        instance.loadImageBefore=function(){
+          const it = instance.arrItems[instance.currentNo];
+          const trip = it && it[0];
+          if(!trip || !isHeic(it[4] && it[4].ext)) return;
+          if(String(trip[1]).indexOf('blob:') === 0) return;
+          const src = trip[1];
+          ensureHeic(src).then(function(u){
+            if(u === src) return;
+            const cur = instance.arrItems[instance.currentNo];
+            if(!cur || cur[0] !== trip) return;
+            trip[0] = trip[1] = trip[2] = u;
+            instance.resetImage(u);
+          });
+        };
       }
 
       async function selectFile(){ const f=await sdk()?.file?.selectFile(null,'请选择图片文件','jpg,jpeg,png,gif,bmp,webp,ico','false'); if(f)openFile(f); }
@@ -148,12 +191,25 @@
         const imageData = buildItems(file);
         if(!imageData.items.length)return;
         document.getElementById('app').innerHTML='';
-        if(!player){
-          player=new Picasa();
-          patchPicasa(player);
-          window.myPicasa=player;
+        const boot=function(){
+          if(!player){
+            player=new Picasa();
+            patchPicasa(player);
+            window.myPicasa=player;
+          }
+          player.play(imageData.items,imageData.index);
+        };
+        const cur = imageData.items[imageData.index];
+        if(cur && isHeic(cur[4] && cur[4].ext) && String(cur[0][1]).indexOf('blob:') !== 0){
+          // 首张是 heic：先解码再进播放器，避免原生解码失败的错误遮罩闪现
+          document.getElementById('app').innerHTML='<div class="empty"><p>正在解码 HEIC…</p></div>';
+          ensureHeic(cur[0][1]).then(function(u){
+            cur[0][0]=cur[0][1]=cur[0][2]=u;
+            boot();
+          });
+          return;
         }
-        player.play(imageData.items,imageData.index);
+        boot();
       }
 
       function parseInitial(){
