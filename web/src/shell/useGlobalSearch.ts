@@ -33,7 +33,7 @@ const DOC_EXTS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf', 'txt', 'md
 const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'heic', 'tif', 'tiff', 'avif']
 
 // 设置页深链（与 SettingsApp 侧边栏一致）
-const SETTINGS_AREAS = [
+export const SETTINGS_AREAS = [
   { id: 'person', name: '个性化', icon: 'sun', kws: ['主题', '壁纸', '深色', '外观', '个性化'] },
   { id: 'account', name: '账号', icon: 'user', kws: ['账号', '账户', '密码', '昵称', 'webdav'] },
   { id: 'shares', name: '我的分享', icon: 'share', kws: ['分享', '外链'] },

@@ -51,3 +51,5 @@ export function hotkeyGroups(): HotkeyGroup[] {
 
 /** Ctrl/⌘+K 的全局信号：桌面 chrome（任务栏/菜单栏/Dock）watch 它来弹出全局搜索 */
 export const globalSearchTick = ref(0)
+// B2 命令面板：主题桌面挂的 <CommandPalette/> 监听此计数（Ctrl/⌘+K）
+export const paletteTick = ref(0)

@@ -26,6 +26,7 @@
     <DialogHost />
     <AltTabSwitcher v-if="altTab" :wins="tabWins" :idx="altTabIdx" @pick="pickWin" @close="closeAltTab" />
     <HotkeysHelp v-if="helpOpen" @close="closeHelp" />
+    <CommandPalette />
     <DeepinLock v-if="session.locked" @unlock="session.locked = false" />
     <TransferPanel v-if="transfer.visible" />
   </div>
@@ -45,6 +46,7 @@ import DeepinDock from './DeepinDock.vue'
 import WeatherWidget from '../../shell/WeatherWidget.vue'
 import AltTabSwitcher from '../../shell/AltTabSwitcher.vue'
 import HotkeysHelp from '../../shell/HotkeysHelp.vue'
+import CommandPalette from '../../shell/CommandPalette.vue'
 import { useShellHotkeys } from '../../shell/useShellHotkeys'
 import DeepinLauncher from './DeepinLauncher.vue'
 import DeepinLock from './DeepinLock.vue'

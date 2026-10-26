@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useWindows, type WinState } from '../stores/windows'
 import { isMobileLayout } from '../utils/mobile'
-import { registerHotkey, allHotkeys, globalSearchTick } from './hotkeys'
+import { registerHotkey, allHotkeys, globalSearchTick, paletteTick } from './hotkeys'
 
 /** 输入控件里的按键不劫持（Ctrl+A/方向键/Alt+Tab 都属于用户） */
 function inField(e: KeyboardEvent) {
@@ -97,9 +97,9 @@ export function useShellHotkeys() {
   })
   reg({
     id: 'search', group: '桌面', keys: ['Ctrl / ⌘', 'K'],
-    desc: '全局搜索（文件、应用、设置、网页）',
+    desc: '命令面板（动作 / 应用 / 文件 / 最近，> 仅动作）',
     match: e => (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K'),
-    run: () => { globalSearchTick.value++ },
+    run: () => { paletteTick.value++ },
   })
   reg({
     id: 'desk-prev', group: '桌面', keys: ['Alt+Ctrl', 'PageUp'],
