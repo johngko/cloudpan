@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useWindows, type WinState } from '../../stores/windows'
 import { useTransfer } from '../../stores/transfer'
 import { useSession } from '../../stores/session'
@@ -76,6 +76,7 @@ import { useAppState } from '../../stores/appstate'
 import { appDef } from '../../stores/apps'
 import AppIcon from '../../components/AppIcon.vue'
 import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
+import { globalSearchTick } from '../../shell/hotkeys'
 import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
 const store = useWindows()
@@ -90,6 +91,7 @@ const menuX = ref(-1)
 const clock = ref('')
 // 全局搜索面板开关（Spotlight 位置）
 const searchOpen = ref(false)
+watch(globalSearchTick, () => { searchOpen.value = true }) // Ctrl/⌘+K
 // 小组件面板开关
 const widgetsOpen = ref(false)
 

@@ -572,6 +572,7 @@ import { userShareApi } from '../api/modules'
 import { collectDropFiles } from '../utils/drop'
 import { createEncryptedShare } from '../utils/shareEncrypt'
 import { copyText } from '../utils/clipboard'
+import { withViewTransition, vtNavigate } from '../utils/viewTransition'
 import { sortEntries, nextSort } from './explorer/sortEntries'
 import type { TaskItem } from '../api/modules'
 import { uniqueName, batchRename } from './explorer/fileNames'
@@ -639,7 +640,8 @@ const contentMode = computed<boolean>({
 })
 const viewMode = computed<'grid' | 'list'>({
   get: () => activeTab.value?.viewMode ?? 'grid',
-  set: v => { if (activeTab.value) activeTab.value.viewMode = v }
+  // 网格/列表切换走 View Transition：同一批条目两种排布做一次交叉淡化（B15）
+  set: v => { withViewTransition(() => { if (activeTab.value) activeTab.value.viewMode = v }) }
 })
 const history = computed<string[]>(() => activeTab.value?.history ?? [])
 const fwdStack = computed<string[]>(() => activeTab.value?.fwdStack ?? [])
@@ -941,6 +943,7 @@ function back() {
   if (cur === null) return
   t.fwdStack.push(path.value)
   path.value = cur
+  navDir = 'back'
   load()
 }
 function fwd() {
@@ -950,6 +953,7 @@ function fwd() {
   if (next === null) return
   t.history.push(path.value)
   path.value = next
+  navDir = 'fwd'
   load()
 }
 function goUp() {
@@ -960,8 +964,12 @@ function goto(p: string) {
   if (!currentPolicy.value) return
   pushHistory(p)
   path.value = p
+  navDir = 'fwd'
   load()
 }
+
+// 本次 load 结果用哪个方向的 View Transition（back=从左滑回，fwd=向右滑入/钻入）
+let navDir: 'back' | 'fwd' | null = null
 
 async function load() {
   if (!currentPolicy.value) return
@@ -975,7 +983,8 @@ async function load() {
       return
     }
     const d = await fsApi.list(currentPolicy.value.id, path.value)
-    items.value = d.items
+    const dir = navDir; navDir = null
+    vtNavigate(() => { items.value = d.items }, dir)
     // 侧栏「文件收藏」跳转：进入所在目录后自动选中该文件（预览面板即时可见）
     if (pendingSelect.value) {
       const want = pendingSelect.value

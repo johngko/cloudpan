@@ -4,6 +4,7 @@ import { clearToken } from '../api/http'
 import { applyWallpaperEffect } from '../assets/wallpapers'
 import type { ThemeId } from '../themes/types'
 import { resolveTheme, availableThemes } from '../themes/registry'
+import { withViewTransition } from '../utils/viewTransition'
 
 const sysDarkMQ = window.matchMedia('(prefers-color-scheme: dark)')
 // 存量迁移：旧版只存 cp_dark 布尔（'1'/'0'）；未存过偏好（新用户）默认跟随系统
@@ -59,7 +60,7 @@ export const useSession = defineStore('session', {
         sysDarkBound = true
         const self = this
         const onChange = () => {
-          if (self.darkMode === 'auto') { self.dark = sysDarkMQ.matches; applyTheme(self.dark, self.osTheme) }
+          if (self.darkMode === 'auto') withViewTransition(() => { self.dark = sysDarkMQ.matches; applyTheme(self.dark, self.osTheme) })
         }
         if (sysDarkMQ.addEventListener) sysDarkMQ.addEventListener('change', onChange)
         else sysDarkMQ.addListener(onChange) // Safari <14 兜底
@@ -88,11 +89,14 @@ export const useSession = defineStore('session', {
     // 快捷开关（任务栏/快速设置）：翻转生效值并固定为手动模式（auto 下点击一次即离开 auto）
     setDark(v: boolean) { this.setDarkMode(v ? 'dark' : 'light') },
     setDarkMode(m: 'auto' | 'light' | 'dark') {
-      this.darkMode = m
-      this.dark = effDark(m)
-      localStorage.setItem('cp_dark_mode', m)
-      localStorage.setItem('cp_dark', this.dark ? '1' : '0') // 生效值同步旧键，兼容旧读取点
-      applyTheme(this.dark, this.osTheme)
+      // 深浅色切换走 View Transition：全站一次交叉淡化，代替 token 硬闪
+      withViewTransition(() => {
+        this.darkMode = m
+        this.dark = effDark(m)
+        localStorage.setItem('cp_dark_mode', m)
+        localStorage.setItem('cp_dark', this.dark ? '1' : '0') // 生效值同步旧键，兼容旧读取点
+        applyTheme(this.dark, this.osTheme)
+      })
     },
     // 应用主题（不持久化——主题以站点设置为准）；当前壁纸若不属于新主题则回落到新主题默认壁纸
     applyOsTheme(id: ThemeId) {

@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useWindows } from '../../stores/windows'
 import { visibleApps, type AppDef } from '../../stores/apps'
 import { useTransfer } from '../../stores/transfer'
@@ -82,6 +82,7 @@ import { useContextMenu } from '../../stores/ui'
 import AppIcon from '../../components/AppIcon.vue'
 import WindowPeek from '../../shell/WindowPeek.vue'
 import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
+import { globalSearchTick } from '../../shell/hotkeys'
 import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
 defineEmits<{ (e: 'launcher'): void }>()
@@ -96,6 +97,7 @@ const notifyAvail = computed(() => useAppState().isAvailable('notify'))
 const TRASH: AppDef = { id: 'recycle', name: '回收站', icon: 'recycle', w: 960, h: 600 }
 // 全局搜索面板开关（任务栏右侧搜索入口）
 const searchOpen = ref(false)
+watch(globalSearchTick, () => { searchOpen.value = true }) // Ctrl/⌘+K
 // 小组件面板开关
 const widgetsOpen = ref(false)
 const dockApps = computed(() =>

@@ -120,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useWindows, type WinState } from '../../stores/windows'
 import { useSession } from '../../stores/session'
 import { useNotify } from '../../stores/notify'
@@ -132,6 +132,7 @@ import WinSearchWin from './WinSearchWin.vue'
 import WinWidgets from './WinWidgets.vue'
 import WinControl from './WinControl.vue'
 import WinDateBox from './WinDateBox.vue'
+import { globalSearchTick } from '../../shell/hotkeys'
 
 const store = useWindows()
 const session = useSession()
@@ -145,6 +146,7 @@ const panel = ref<PanelId | null>(null)
 const shown = ref(false)
 let closeTimer: number
 
+watch(globalSearchTick, () => { if (globalSearchTick.value > 0) openPanel('search') }) // Ctrl/⌘+K
 function openPanel(p: PanelId) {
   if (panel.value === p) { closePanel(); return }
   window.clearTimeout(closeTimer)

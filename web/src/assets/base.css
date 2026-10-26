@@ -579,3 +579,44 @@ select.input { cursor: pointer; }
 .wp-close:hover { background: #d80d1c; color: #fff; }
 /* Dock 上已有运行窗口预览时，隐藏旧的名称 tooltip 避免重叠 */
 .dock-app:has(> .win-peek):hover .tip, .dd-app:has(> .win-peek):hover .tip { opacity: 0; }
+
+/* --- B11 快捷键速查浮层（? / F1）--- */
+.hotkeys-mask {
+  position: fixed; inset: 0; z-index: 9650;
+  background: rgba(8, 10, 16, 0.38); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+}
+.hotkeys-card {
+  width: min(760px, 92vw); max-height: 84vh; overflow: auto;
+  border-radius: 14px; background: var(--bg); border: 1px solid var(--stroke);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); padding: 16px 18px;
+}
+.hk-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.hk-title { font-size: 15px; font-weight: 600; color: var(--text); flex: 1; }
+.hk-close { display: inline-flex; padding: 5px; border: none; border-radius: 6px; background: transparent; color: var(--text-3); cursor: pointer; }
+.hk-close:hover { background: var(--hover-b); }
+.hk-cols { columns: 2; column-gap: 26px; }
+@media (max-width: 640px) { .hk-cols { columns: 1; } }
+.hk-group { break-inside: avoid; margin-bottom: 14px; }
+.hk-gtitle { font-size: 12px; font-weight: 600; color: var(--text-3); margin: 0 0 6px; }
+.hk-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; }
+.hk-keys { flex: none; min-width: 118px; display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.hk-keys kbd {
+  font-family: inherit; font-size: 11px; padding: 2px 6px; border-radius: 5px; white-space: nowrap;
+  border: 1px solid var(--stroke); border-bottom-width: 2px; background: var(--hover-b); color: var(--text);
+}
+.hk-desc { font-size: 12.5px; color: var(--text); }
+.hk-foot { margin-top: 4px; font-size: 11.5px; color: var(--text-3); }
+
+/* --- B15 View Transitions：主题切换交叉淡化、资源管理器导航滑动 --- */
+html.vt-fwd::view-transition-old(root) { animation: vt-out-left 0.2s ease both; }
+html.vt-fwd::view-transition-new(root) { animation: vt-in-right 0.26s ease both; }
+html.vt-back::view-transition-old(root) { animation: vt-out-right 0.2s ease both; }
+html.vt-back::view-transition-new(root) { animation: vt-in-left 0.26s ease both; }
+@keyframes vt-out-left { to { opacity: 0; transform: translateX(-26px); } }
+@keyframes vt-out-right { to { opacity: 0; transform: translateX(26px); } }
+@keyframes vt-in-right { from { opacity: 0; transform: translateX(26px); } }
+@keyframes vt-in-left { from { opacity: 0; transform: translateX(-26px); } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}
