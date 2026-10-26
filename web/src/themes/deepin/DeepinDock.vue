@@ -9,7 +9,7 @@
     <!-- 中区：应用（居中）——类名带 dde 前缀，避免与 win.css 的 .tb-center（绝对定位）冲突 -->
     <div class="dde-tb-center">
       <template v-for="a in dockApps" :key="a.id">
-        <div class="dd-app" :class="{ running: running(a.id) }" @click="clickApp(a)"
+        <div class="dd-app" data-min-anchor :data-app="a.id" :class="{ running: running(a.id) }" @click="clickApp(a)"
           @contextmenu.prevent="quitMenu(a, $event)">
           <AppIcon :name="a.icon" :size="30" class="ico" />
           <div v-if="running(a.id)" class="dot" :class="{ multi: winCount(a.id) > 1 }"></div>

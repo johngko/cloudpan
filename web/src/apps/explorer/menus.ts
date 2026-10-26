@@ -24,6 +24,18 @@ export function newEntries(o: NewEntriesOpts): MenuItem[] {
   ]
 }
 
+// ---- 「压缩打包」格式子菜单（A11 级联）----
+// 格式集合与后端 archiveFormatOf 可创建的归档一致（bzip2/xz 仅支持解压）
+export function archiveFormatItems(o: { on: { archive: (format?: string) => void } }): MenuItem[] {
+  return [
+    { label: '自定义名称…', onClick: () => o.on.archive() },
+    { separator: true },
+    { label: 'ZIP', onClick: () => o.on.archive('zip') },
+    { label: 'TAR.GZ', onClick: () => o.on.archive('tar.gz') },
+    { label: 'TAR', onClick: () => o.on.archive('tar') }
+  ]
+}
+
 // ---- 空白区右键 ----
 
 export interface BlankMenuOpts {
@@ -157,7 +169,7 @@ export interface ItemMenuOpts {
     copy: () => void
     pasteInto: () => void
     rename: () => void
-    archive: () => void
+    archive: (format?: string) => void
     extract: () => void
     del: () => void
     props: () => void
@@ -201,7 +213,7 @@ export function itemMenu(o: ItemMenuOpts): MenuItem[] {
       { separator: true },
       ...(o.tags?.length ? [{ label: '标签', icon: 'tag', children: o.tags } as MenuItem] : []),
       ...(o.pdfMerge ? [o.pdfMerge] : []),
-      ...(o.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: o.on.archive, disabled: o.readOnly }] as MenuItem[] : []),
+      ...(o.allowArchive ? [{ label: '压缩打包', icon: 'archive', disabled: o.readOnly, children: archiveFormatItems(o) } as MenuItem] : []),
       { label: '删除', icon: 'trash', danger: true, onClick: o.on.del, disabled: o.readOnly },
       { separator: true },
       { label: '属性', icon: 'info', onClick: o.on.props }
@@ -214,7 +226,7 @@ export function itemMenu(o: ItemMenuOpts): MenuItem[] {
   ]
   const del: MenuItem = { label: '删除', icon: 'trash', danger: true, onClick: o.on.del, disabled: o.readOnly }
   const archive: MenuItem[] = o.allowArchive
-    ? [{ label: '压缩打包', icon: 'archive', onClick: o.on.archive, disabled: o.readOnly }]
+    ? [{ label: '压缩打包', icon: 'archive', disabled: o.readOnly, children: archiveFormatItems(o) } as MenuItem]
     : []
   const star: MenuItem[] = o.guest ? [] : [starItem(o)] // 游客为共享账号：收藏是共享状态，入口隐藏（后端 GuestReadOnly 兜底）
 

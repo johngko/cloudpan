@@ -30,7 +30,7 @@
 
     <!-- 运行窗口任务胶囊（1:1：每窗 38px，渐变指示条，min 时图标弹跳收起） -->
     <div class="w12-taskbar" :class="{ on: tasks.length > 0 }">
-      <div v-for="w in tasks" :key="w.id" class="w12-tapp"
+      <div v-for="w in tasks" :key="w.id" data-min-anchor :data-app="w.app" class="w12-tapp"
         :class="{ foc: store.activeId === w.id && !w.minimized && !w.minimizing, min: w.minimized || w.minimizing }"
         :title="w.title" @click.stop="clickWin(w)">
         <AppIcon :name="w.icon" :size="26" />

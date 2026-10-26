@@ -1,18 +1,19 @@
 <template>
-  <!-- 全局对话框 -->
-  <div class="dlg-host-mask" v-if="dlg.d" @click.self="dlg.cancel()">
-    <div class="dlg-host" ref="dlgEl" role="dialog" aria-modal="true" :aria-label="dlg.d.title" tabindex="-1"
-      :class="{ danger: dlg.d.danger }">
+  <!-- 全局对话框（A8：原生 <dialog> showModal —— 顶层堆叠、原生焦点陷阱/Esc/焦点归还，
+       遮罩用 ::backdrop，入口动画用 @starting-style） -->
+  <dialog class="dlg-host-mask" ref="dlgEl" v-if="dlg.d" :aria-label="dlg.d.title"
+    @close="onNativeClose" @click="onBackdrop">
+    <div class="dlg-host" :class="{ danger: dlg.d.danger }">
       <div class="dlg-title">{{ dlg.d.title }}</div>
       <div class="dlg-msg" v-if="dlg.d.message">{{ dlg.d.message }}</div>
       <input v-if="dlg.d.kind === 'prompt'" class="input dlg-input" v-model="dlg.d.inputValue"
-        ref="inputEl" @keyup.enter="dlg.ok()" @keyup.esc="dlg.cancel()" />
+        ref="inputEl" @keyup.enter="dlg.ok()" />
       <div class="dlg-btns">
         <button v-if="dlg.d.kind !== 'alert'" class="btn" @click="dlg.cancel()">{{ dlg.d.cancelText }}</button>
         <button class="btn" :class="dlg.d.danger ? 'danger' : 'primary'" @click="dlg.ok()">{{ dlg.d.okText }}</button>
       </div>
     </div>
-  </div>
+  </dialog>
   <!-- 全局 Toast -->
   <div class="toast-wrap">
     <div v-for="t in toast.list" :key="t.id" class="toast-item" :class="t.kind">
@@ -23,61 +24,52 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { useUiDialog, useToast } from '../stores/dialog'
 import AppIcon from '../components/AppIcon.vue'
 
 const dlg = useUiDialog()
 const toast = useToast()
 const inputEl = ref<HTMLInputElement>()
-const dlgEl = ref<HTMLElement | null>(null)
-// 打开前的焦点元素：关闭时归还焦点（无障碍）
-let prevFocus: HTMLElement | null = null
+const dlgEl = ref<HTMLDialogElement | null>(null)
 
-// 模态键盘行为：Esc 取消；Tab 焦点陷阱（只在对话框内循环，不逃逸到背后的桌面）
-function onDocKey(e: KeyboardEvent) {
-  if (!dlg.d) return
-  if (e.key === 'Escape') { e.preventDefault(); dlg.cancel(); return }
-  if (e.key !== 'Tab') return
-  const root = dlgEl.value
-  if (!root) return
-  const focusables = root.querySelectorAll<HTMLElement>(
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-  )
-  if (!focusables.length) return
-  const first = focusables[0]
-  const last = focusables[focusables.length - 1]
-  const act = document.activeElement as HTMLElement | null
-  if (e.shiftKey && (act === first || !act || !root.contains(act))) { e.preventDefault(); last.focus() }
-  else if (!e.shiftKey && act === last) { e.preventDefault(); first.focus() }
+// Esc / backdrop-cancel 走原生 close：把未决对话框按「取消」落定
+function onNativeClose() {
+  if (dlg.d) dlg.cancel()
+}
+// 点遮罩（事件 target 落在 dialog 自身而非卡片）= 取消
+function onBackdrop(e: MouseEvent) {
+  if (e.target === dlgEl.value) dlg.cancel()
 }
 
+// 焦点陷阱/Esc/焦点归还原生由 <dialog> 负责，这里只管开合与输入聚焦
 watch(() => dlg.d, async d => {
   if (!d) {
-    document.removeEventListener('keydown', onDocKey, true)
-    const p = prevFocus
-    prevFocus = null
-    p?.focus?.() // 归还焦点
+    if (dlgEl.value?.open) dlgEl.value.close()
     return
   }
-  prevFocus = document.activeElement as HTMLElement | null
-  document.addEventListener('keydown', onDocKey, true)
   await nextTick()
+  try { dlgEl.value?.showModal() } catch { /* 已在 open 状态时重复调用会抛，忽略 */ }
   if (d.kind === 'prompt') {
     inputEl.value?.focus()
     inputEl.value?.select()
-  } else {
-    dlgEl.value?.focus() // 非输入型对话框：焦点进对话框，Tab/Esc 才生效
   }
-})
-
-onBeforeUnmount(() => document.removeEventListener('keydown', onDocKey, true))
+}, { immediate: true })
 </script>
 
 <style scoped>
 .dlg-host-mask {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.28); z-index: 9500;
-  display: flex; align-items: center; justify-content: center;
+  /* 原生 <dialog>：撑满视口做居中容器，遮罩色放 ::backdrop（A8 顶层浮层写法） */
+  position: fixed; inset: 0; margin: 0; width: 100vw; height: 100vh;
+  max-width: 100vw; max-height: 100vh; padding: 0; border: 0; background: transparent;
+  display: grid; place-items: center;
+}
+.dlg-host-mask::backdrop {
+  background: rgba(0,0,0,0.28);
+  transition: opacity 0.16s ease, overlay 0.16s allow-discrete;
+}
+@starting-style {
+  .dlg-host-mask::backdrop { opacity: 0; }
 }
 .dlg-host {
   width: 400px; max-width: 90vw; border-radius: var(--radius-2xl); padding: 22px 24px;

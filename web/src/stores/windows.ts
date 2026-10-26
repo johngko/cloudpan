@@ -34,6 +34,9 @@ export interface WinState {
   minimizing?: boolean
   /** 从最小化恢复的飞行动画进行中（CSS .restoring） */
   restoring?: boolean
+  /** A11 方向性最小化：飞离/飞回目标相对窗口中心的偏移（CSS --min-dx/--min-dy） */
+  minDx?: number
+  minDy?: number
 }
 
 let nextId = 1
@@ -150,6 +153,17 @@ export const useWindows = defineStore('windows', {
       const w = this.wins.find(x => x.id === id)
       if (!w || w.minimized || w.minimizing) return
       // 最小化：先播飞离动画（.minimizing），timer 落定才真正隐藏
+      // A11 方向性：把该应用任务栏按钮中心与窗口中心的偏移写进 minDx/minDy，
+      // 帧组件把它挂成 CSS 变量，win-min-out/in 的 translate 即指向按钮（Mac Genie 式）
+      try {
+        const anchor = (w.app ? document.querySelector(`[data-min-anchor][data-app="${w.app}"]`) : null)
+          || document.querySelector('.w12-taskbar, .dde-taskbar, .mac-dock')
+        if (anchor) {
+          const r = anchor.getBoundingClientRect()
+          w.minDx = Math.round(r.left + r.width / 2 - (w.x + w.w / 2))
+          w.minDy = Math.round(r.top + r.height / 2 - (w.y + w.h / 2))
+        } else { w.minDx = undefined; w.minDy = undefined }
+      } catch { /* 无 DOM 环境（单测/SSR）跳过 */ }
       w.minimizing = true
       if (this.activeId === id) {
         const others = this.wins.filter(x => !x.minimized && !x.minimizing && x.id !== id).sort((a, b) => b.z - a.z)

@@ -1,7 +1,11 @@
 <template>
-  <div class="ctx-menu" ref="menuEl" role="menu" tabindex="-1" v-if="store.visible"
+  <!-- A8：原生 Popover API（manual）—— 顶层堆叠（不再与窗口 z-index 竞争），
+       开合仍由 store 掌控（auto 的 light-dismiss 会把右键手势自己的 pointerup 误判为外部点击）。
+       外部点击关闭 = 本组件 document mousedown 监听；Esc = onKey；样式动画走 @starting-style -->
+  <div class="ctx-menu" ref="menuEl" role="menu" tabindex="-1" popover="manual" v-if="store.visible"
+    :class="{ 'ctx-fallback': fallback }"
     :style="{ left: x + 'px', top: y + 'px' }"
-    @click.stop @mousedown.stop @contextmenu.prevent @keydown="onKey">
+    @click.stop @mousedown.stop @contextmenu.prevent @keydown="onKey" @toggle="onToggle">
     <template v-for="(item, i) in store.items" :key="i">
       <div v-if="item.separator" class="ctx-sep" role="separator"></div>
       <div v-else class="ctx-item" role="menuitem" tabindex="-1"
@@ -36,14 +40,29 @@ import AppIcon from '../components/AppIcon.vue'
 const store = useContextMenu()
 const hovered = ref(-1)
 const menuEl = ref<HTMLElement | null>(null)
+// 极少数场景 showPopover 会因缺少 transient activation 被拒（NotAllowedError）：
+// 退回普通 fixed 渲染（v-if 还在），功能不受影响
+const fallback = ref(false)
 const x = computed(() => Math.min(store.x, window.innerWidth - 230))
 const y = computed(() => Math.min(store.y, window.innerHeight - store.items.length * 34 - 20))
 
 watch(() => store.visible, async v => {
   hovered.value = -1
-  // 无障碍：显示后把焦点移进菜单，方向键/Enter/Esc 才能生效
-  if (v) { await nextTick(); menuEl.value?.focus() }
+  if (v) {
+    fallback.value = false
+    await nextTick()
+    try { menuEl.value?.showPopover() } catch { fallback.value = true }
+    // 无障碍：显示后把焦点移进菜单，方向键/Enter/Esc 才能生效
+    menuEl.value?.focus()
+  } else {
+    menuEl.value?.hidePopover()
+  }
 })
+
+// 浏览器 light-dismiss / Esc 关闭 → 同步 store，避免 visible 悬空
+function onToggle(e: Event) {
+  if ((e as Event & { newState?: string }).newState !== 'open') store.hide()
+}
 
 // 可交互项（跳过分隔线与禁用项）在 store.items 中的下标
 function selectableIndexes(): number[] {

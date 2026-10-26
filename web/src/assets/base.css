@@ -260,8 +260,8 @@ select.input { cursor: pointer; }
 /* 最小化飞离 / 恢复飞入（默认飞向底部；mac/deepin 覆盖飞行方向） */
 .window.minimizing { animation: win-min-out 0.28s var(--anim-pop) forwards; pointer-events: none; }
 .window.restoring { animation: win-min-in 0.28s var(--anim-pop) forwards; }
-@keyframes win-min-out { to { opacity: 0; transform: scale(0.15) translateY(46vh); } }
-@keyframes win-min-in { from { opacity: 0; transform: scale(0.15) translateY(46vh); } }
+@keyframes win-min-out { to { opacity: 0; transform: translate(var(--min-dx, 0px), var(--min-dy, 46vh)) scale(0.15); } }
+@keyframes win-min-in { from { opacity: 0; transform: translate(var(--min-dx, 0px), var(--min-dy, 46vh)) scale(0.15); } }
 .window.foc {
   background: var(--bg70);
   backdrop-filter: saturate(4) blur(60px) contrast(0.9);
@@ -291,9 +291,22 @@ select.input { cursor: pointer; }
   -webkit-backdrop-filter: blur(30px) saturate(2);
   border: 1px solid var(--stroke);
   box-shadow: var(--shadow);
-  animation: ctx-in 0.14s ease;
+  opacity: 0; transform: scale(0.92) translateY(-4px);
   transform-origin: top left;
 }
+/* A8：popover 入口动画改用 @starting-style + transition（顶层浮层的现代写法）；
+   UA 的 :popover-open 默认边框/背景/overflow:auto 会裁剪级联子菜单，逐项清掉 */
+.ctx-menu:popover-open {
+  opacity: 1; transform: none;
+  border: 1px solid var(--stroke); background: var(--contextmenu);
+  overflow: visible;
+  transition: opacity 0.14s ease, transform 0.14s ease, overlay 0.14s allow-discrete;
+}
+@starting-style {
+  .ctx-menu:popover-open { opacity: 0; transform: scale(0.92) translateY(-4px); }
+}
+/* showPopover 被拒时的退回渲染（无 transient activation 的极端场景） */
+.ctx-menu.ctx-fallback { display: block !important; opacity: 1; transform: none; animation: ctx-in 0.14s ease; }
 @keyframes ctx-in { from { opacity: 0; transform: scale(0.92) translateY(-4px); } to { opacity: 1; transform: scale(1); } }
 .ctx-item {
   display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: var(--radius-sm);
@@ -308,6 +321,7 @@ select.input { cursor: pointer; }
 .ctx-sub {
   left: calc(100% - 4px) !important; top: -6px !important; position: absolute;
   min-width: 150px; display: block;
+  opacity: 1; transform: none; /* 子菜单不是 popover，须抵消基类的入场前隐藏态 */
 }
 .ctx-sep { height: 1px; background: var(--stroke-b); margin: 5px 8px; }
 

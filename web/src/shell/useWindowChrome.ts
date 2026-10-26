@@ -92,8 +92,14 @@ export function useWindowChrome(w: WinState) {
         borderRadius: '0'
       }
     }
-    return { left: w.x + 'px', top: w.y + 'px', width: w.w + 'px', height: w.h + 'px', zIndex: w.z }
+    return { left: w.x + 'px', top: w.y + 'px', width: w.w + 'px', height: w.h + 'px', zIndex: w.z, ...minFlyVars() }
   })
+
+  // A11 方向性最小化：把 store 里算好的飞行偏移挂成 CSS 变量（win-min-out/in 的 translate 引用）
+  function minFlyVars(): Record<string, string> {
+    if (w.minDx == null || w.minDy == null) return {}
+    return { '--min-dx': w.minDx + 'px', '--min-dy': w.minDy + 'px' }
+  }
 
   function focusWin() { store.focus(w.id) }
   function minimize() { store.minimize(w.id) }

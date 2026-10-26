@@ -7,7 +7,7 @@
     </div>
 
     <template v-for="(a, i) in dockApps" :key="a.id">
-      <div class="dock-app" :class="{ bouncing: bouncing.has(a.id) }" @click="clickApp(a)" @contextmenu.prevent="quitMenu(a, $event)" :style="t(i + 1)">
+      <div class="dock-app" data-min-anchor :data-app="a.id" :class="{ bouncing: bouncing.has(a.id) }" @click="clickApp(a)" @contextmenu.prevent="quitMenu(a, $event)" :style="t(i + 1)">
         <AppIcon :name="a.icon" :size="48" class="ico" />
         <div v-if="running(a.id)" class="dot"></div>
         <div class="tip">{{ a.name }}</div>

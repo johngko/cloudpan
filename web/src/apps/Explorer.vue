@@ -79,7 +79,7 @@
       <button class="tool-btn" :disabled="selPaths.length !== 1 || onSharedDrive || readOnly" @click="renameSel"><AppIcon name="rename" :size="15" />重命名</button>
       <button class="tool-btn" :disabled="selPaths.length < 2 || onSharedDrive || readOnly" @click="batchRenameOpen" title="对选中项批量重命名"><AppIcon name="rename" :size="15" />批量重命名</button>
       <button class="tool-btn" :disabled="!selPaths.length || readOnly || (onSharedDrive && !inWritableShare)" @click="deleteSel"><AppIcon name="trash" :size="15" />删除</button>
-      <button class="tool-btn" v-if="group.allowArchive && selPaths.length && !onSharedDrive && !readOnly" @click="archiveSel"><AppIcon name="archive" :size="15" />压缩</button>
+      <button class="tool-btn" v-if="group.allowArchive && selPaths.length && !onSharedDrive && !readOnly" @click="archiveSel()"><AppIcon name="archive" :size="15" />压缩</button>
       <button class="tool-btn" v-if="singleZipSelected && !onSharedDrive" @click="extractSel"><AppIcon name="archive" :size="15" />解压</button>
       <div style="flex: 1"></div>
       <button class="tool-btn m-hide" :class="{ 'global-on': previewMode }" title="预览窗格（Alt+P）" @click="togglePreview">
@@ -2019,10 +2019,21 @@ async function deleteSel() {
     load()
   } catch (e: any) { toast.error(e.message) }
 }
-async function archiveSel() {
+async function archiveSel(format?: string) {
   if (!currentPolicy.value) return
-  const name = await uiDlg.prompt('压缩打包（.zip / .tar / .tar.gz）', 'archive.zip', '压缩')
-  if (!name) return
+  let name = ''
+  if (format) {
+    // 子菜单直接指定格式：单选用「原名+后缀」，多选用时间戳名（后端同名自动加序号）
+    const ext = format === 'tar.gz' ? '.tar.gz' : format === 'tar' ? '.tar' : '.zip'
+    const one = selPaths.value.length === 1 ? selPaths.value[0].replace(/\/+$/, '') : ''
+    let base = one ? (one.split('/').pop() || 'archive')
+      : 'archive_' + new Date().toISOString().slice(5, 16).replace(/[T:]/g, '')
+    if (!base.toLowerCase().endsWith(ext)) base += ext
+    name = base
+  } else {
+    name = await uiDlg.prompt('压缩打包（.zip / .tar / .tar.gz）', 'archive.zip', '压缩')
+    if (!name) return
+  }
   try {
     const final = /\.(zip|tar|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(name) ? name : name + '.zip'
     await fsApi.archive(currentPolicy.value.id, selPaths.value, final)
