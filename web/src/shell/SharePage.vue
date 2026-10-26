@@ -12,7 +12,7 @@
               <span v-if="!info.isDir && editing['']" class="share-editing" :title="'当前还有协作者在线编辑：' + editing['']"><span class="share-editing-dot"></span>正在编辑：{{ editing[''] }}</span>
             </div>
           </div>
-          <button class="btn" v-if="authed && !info.encrypted" :disabled="saveBusy" @click="openSaveDlg()"
+          <button class="btn" v-if="authed && !info.encrypted && !info.collectOnly" :disabled="saveBusy" @click="openSaveDlg()"
             :title="!info.isDir && isTextFile(info.name) ? '保存到自己的网盘，可用记事本打开继续编辑' : '一键保存到自己的网盘'">
             <AppIcon name="cloud" :size="15" /> {{ !info.isDir && isTextFile(info.name) ? '存到我的记事本' : '保存到网盘' }}
           </button>
@@ -43,7 +43,30 @@
         </div>
 
         <div v-else style="flex: 1; overflow: auto; padding: 12px">
-          <div v-if="errMsg" class="empty-hint">{{ errMsg }}</div>
+          <!-- 文件收集模式：只进不出，访客只能上传 -->
+          <div v-if="info.collectOnly" style="padding: 22px 12px; display: flex; flex-direction: column; align-items: center; gap: 14px">
+            <AppIcon name="upload" :size="42" style="opacity: 0.75" />
+            <div style="color: var(--text-2); font-size: 14px; text-align: center">
+              这是<strong>文件收集</strong>链接：把文件上传到 {{ info.owner }} 的网盘，上传后无法在此查看或下载已有内容
+            </div>
+            <button class="btn primary" :disabled="collectBusy" @click="collectInput?.click()">
+              <AppIcon name="upload" :size="15" /> {{ collectBusy ? '上传中…' : '选择文件上传' }}
+            </button>
+            <input ref="collectInput" type="file" multiple style="display: none" @change="onCollectPick" />
+            <div v-for="c in collectList" :key="c.name" style="width: 100%; max-width: 520px">
+              <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 4px">
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ c.name }}</span>
+                <span :style="{ color: c.err ? '#ff8a80' : c.done ? '#7ee2a8' : 'var(--text-3)', flex: 'none', marginLeft: '10px' }">
+                  {{ c.err ? '✗ ' + c.err : c.done ? '✓ 已提交' : c.pct >= 100 ? '正在合并…' : c.pct + '%' }}
+                </span>
+              </div>
+              <div style="height: 4px; border-radius: 2px; background: rgba(127,127,127,0.2)">
+                <div :style="{ height: '4px', borderRadius: '2px', background: c.err ? '#ff8a80' : 'var(--accent, #3b91d8)', width: c.pct + '%' }"></div>
+              </div>
+            </div>
+            <div style="font-size: 11.5px; color: var(--text-3)">单文件最大 2 GB；多个文件依次上传，上传完成即进入对方的网盘目录</div>
+          </div>
+          <div v-else-if="errMsg" class="empty-hint">{{ errMsg }}</div>
           <table v-else class="file-list" style="width: 100%; border-collapse: collapse; font-size: 13px">
             <tbody>
               <tr v-for="f in items" :key="f.relPath" style="cursor: pointer"
@@ -252,6 +275,46 @@ async function doSave() {
     setTimeout(() => { saved.value = '' }, 6000)
   } catch (e: any) { saveMsg.value = e.message }
   finally { saveBusy.value = false }
+}
+
+// ---- 文件收集模式的匿名分片上传（复用 /s/:token/upload/*，无需登录，按 st 校验提取码）----
+const collectInput = ref<HTMLInputElement>()
+const collectBusy = ref(false)
+const collectList = ref<{ name: string; pct: number; done: boolean; err?: string }[]>([])
+async function onCollectPick(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = [...(input.files || [])]
+  input.value = ''
+  for (const f of files) await uploadCollected(f)
+  collectBusy.value = collectList.value.some(c => !c.done && !c.err)
+}
+async function uploadCollected(file: File) {
+  const row: { name: string; pct: number; done: boolean; err?: string } = { name: file.name, pct: 0, done: false }
+  collectList.value.push(row)
+  collectBusy.value = true
+  try {
+    const init: any = (await api.post(`/s/${token}/upload/init`,
+      { name: file.name, size: file.size, chunkSize: 4 << 20 },
+      { params: { st: stoken.value } })).data
+    if (init.code !== 0) throw new Error(init.msg)
+    const { sessionId, chunkSize: cs } = init.data
+    const total = Math.max(1, Math.ceil(file.size / cs))
+    for (let i = 0; i < total; i++) {
+      const blob = file.slice(i * cs, (i + 1) * cs)
+      const r: any = (await api.put(`/s/${token}/upload/chunk/${sessionId}/${i}`, blob, {
+        params: { st: stoken.value },
+        headers: { 'Content-Type': 'application/octet-stream' },
+        onUploadProgress: ev => { row.pct = Math.min(99, Math.round(((i * cs + (ev.loaded || 0)) / file.size) * 100)) }
+      })).data
+      if (r.code !== 0) throw new Error(r.msg)
+    }
+    row.pct = 100
+    const fin: any = (await api.post(`/s/${token}/upload/complete`, { sessionId }, { params: { st: stoken.value } })).data
+    if (fin.code !== 0) throw new Error(fin.msg)
+    row.done = true // 服务端已接收并开始合并（配额不足等错误已在 complete 返回）
+  } catch (err: any) {
+    row.err = err?.message || '上传失败'
+  }
 }
 
 onMounted(async () => {

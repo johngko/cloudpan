@@ -75,6 +75,7 @@ const APP_LOADERS: Record<string, () => Promise<any>> = {
   tasks: () => import('../apps/TaskCenter.vue'),
   wallpapers: () => import('../apps/WallpaperCenter.vue'),
   storage_analysis: () => import('../apps/StorageAnalysis.vue'),
+  pdfbox: () => import('../apps/PdfBox.vue'),
   photos: () => import('../apps/Photos.vue'),
   officeeditor: () => import('../apps/OfficeEditor.vue'),
   archiveviewer: () => import('../apps/ArchiveViewer.vue'),

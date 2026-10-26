@@ -10,6 +10,8 @@ export interface ExplorerTab {
   path: string
   keyword: string
   globalMode: boolean
+  /** 全局搜索子模式：false=按文件名，true=按文件内容（懒索引） */
+  contentMode: boolean
   viewMode: 'grid' | 'list'
   history: string[]
   fwdStack: string[]
@@ -17,7 +19,7 @@ export interface ExplorerTab {
 
 /** 新建标签页的初始状态（大图标视图、无搜索、无历史） */
 export function newTab(policyId: number | null = null, path = '/'): ExplorerTab {
-  return { policyId, path, keyword: '', globalMode: false, viewMode: 'grid', history: [], fwdStack: [] }
+  return { policyId, path, keyword: '', globalMode: false, contentMode: false, viewMode: 'grid', history: [], fwdStack: [] }
 }
 
 /**

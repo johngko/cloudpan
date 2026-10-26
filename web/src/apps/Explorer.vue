@@ -24,7 +24,8 @@
         <button class="tool-btn" @click="refresh" title="刷新"><AppIcon name="refresh" :size="16" /></button>
       </div>
       <div class="crumb" style="flex: 1; margin: 0 8px">
-        <span v-if="!currentPolicy">此电脑</span>
+        <span v-if="aggView">{{ aggView.label }}</span>
+        <span v-else-if="!currentPolicy">此电脑</span>
         <template v-else-if="onSharedDrive">
           <span @click="goto('/')">共享</span>
           <template v-if="currentShare">
@@ -53,6 +54,10 @@
         <button class="tool-btn" :class="{ 'global-on': globalMode }" :title="globalMode ? '当前：全局搜索（点击切回本盘）' : '当前：本盘搜索（点击切换全局）'"
           @click="toggleGlobal">
           <AppIcon :name="globalMode ? 'cloud' : 'drive'" :size="15" />
+        </button>
+        <button v-if="globalMode" class="tool-btn" :class="{ 'global-on': contentMode }" :title="contentMode ? '当前：搜文件内容（本地盘文本文件，懒索引）' : '当前：搜文件名（点击切到内容检索）'"
+          @click="toggleContent">
+          <AppIcon :name="contentMode ? 'txt' : 'search'" :size="15" />
         </button>
       </div>
     </div>
@@ -85,13 +90,25 @@
 
     <div style="flex: 1; position: relative; display: flex; overflow: hidden">
       <!-- 侧栏 -->
-      <div class="exp-side" :class="{ 'm-open': navOpen }" @click="navOpen = false" style="width: 210px; flex: none; border-right: 1px solid var(--stroke); overflow: auto; padding: 10px 8px">
+      <div class="exp-side" :class="{ 'm-open': navOpen }" @click="navOpen = false">
         <div class="side-title">快速访问</div>
         <div v-for="s in stars" :key="s.id" class="side-item" :title="s.name"
-          @click="openPolicyId(s.policyId, s.path)">
-          <AppIcon name="starFill" :size="15" /><span>{{ s.name }}</span>
+          @click="clickStar(s)">
+          <AppIcon :name="s.isDir === false ? iconOfName(s.name) : 'folder'" :size="15" /><span>{{ s.name }}</span>
         </div>
-        <div v-if="!stars.length" class="side-item" style="color: var(--text-3)">收藏的目录会显示在这里</div>
+        <div v-if="!stars.length" class="side-item" style="color: var(--text-3)">收藏的文件夹/文件会显示在这里</div>
+        <div class="side-title" style="margin-top: 10px">标签</div>
+        <div v-for="t in tags" :key="'tg' + t.id" class="side-item"
+          :class="{ active: aggView && aggView.kind === 'tag' && aggView.id === t.id }" :title="t.name"
+          @click="openAggView('tag', t.id, '标签: ' + t.name)">
+          <span class="tag-dot" :style="{ background: t.color }"></span><span style="flex: 1">{{ t.name }}</span>
+          <span style="font-size: 10.5px; color: var(--text-3)">{{ t.count }}</span>
+        </div>
+        <div v-if="!tags.length" class="side-item" style="color: var(--text-3)">文件右键「标签」可打标签</div>
+        <div class="side-item" style="margin-top: 4px" :class="{ active: aggView && aggView.kind === 'recent' }"
+          @click="openAggView('recent', 0, '最近使用')">
+          <AppIcon name="clock" :size="15" /><span>最近使用</span>
+        </div>
         <div class="side-title" style="margin-top: 10px">此电脑</div>
         <div v-for="p in realPolicies" :key="p.id" class="side-item" :class="{ active: currentPolicy && currentPolicy.id === p.id }"
           @click="openPolicy(p)">
@@ -175,6 +192,7 @@
           <div v-if="virtualGrid && gridPadTop" class="vt-pad" :style="{ height: gridPadTop + 'px' }"></div>
           <FileGrid :items="gridItems" :sel-set="selSet" :editing="editing"
             :icon-of="iconOf" :is-thumb="isThumb" :thumb-url="thumbUrl" :name-parts="nameParts"
+            :tag-color="tagColor" :tag-name="tagName"
             @item-down="onItemDown" @item-open="onItemOpen" @item-ctx="onItemCtx"
             @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" @item-up="onItemUp" />
           <div v-if="virtualGrid && gridPadBottom" class="vt-pad" :style="{ height: gridPadBottom + 'px' }"></div>
@@ -195,6 +213,7 @@
               <tr v-if="virtualList && listWin.padTop" class="vpad" :style="{ height: listWin.padTop + 'px' }"><td :colspan="5"></td></tr>
               <FileList :items="listItems" :sel-set="selSet" :editing="editing"
                 :icon-of="iconOf" :name-parts="nameParts" :fmt="fmt" :fmt-time="fmtTime"
+                :tag-color="tagColor" :tag-name="tagName"
                 @item-down="onItemDown" @item-open="onItemOpen" @item-ctx="onItemCtx"
                 @item-drag="onItemDrag" @item-drop="onDropTo" @check-toggle="toggleCheck" @item-up="onItemUp" />
               <!-- 窗口化：下占位行 -->
@@ -225,6 +244,11 @@
           <AppIcon v-else :name="iconOf(selItem)" :size="64" />
         </div>
         <div class="pp-name" :title="selItem.name">{{ selItem.name }}</div>
+        <div class="pp-tags" v-if="!onSharedDrive && !session.isGuest">
+          <span v-for="tid in selItem.tags || []" :key="tid" class="pp-tag"
+            :style="{ color: tagColor(tid), borderColor: tagColor(tid) }">{{ tagName(tid) }}</span>
+          <button class="pp-tag add" @click="openTagMenuForSel($event)">＋ 标签</button>
+        </div>
         <div class="pp-row"><span>类型</span><b>{{ selItem.isDir ? '文件夹' : (selItem.ext ? selItem.ext.toUpperCase() + ' 文件' : '文件') }}</b></div>
         <div class="pp-row"><span>大小</span><b>{{ selItem.isDir ? '—' : fmt(selItem.size) }}</b></div>
         <div class="pp-row"><span>修改时间</span><b>{{ fmtTime(selItem.modTime) }}</b></div>
@@ -275,14 +299,19 @@
             <option :value="30">30 天</option>
           </select>
         </div>
+        <div class="row" v-if="shareTarget && (shareTarget as any).isDir">
+          <label style="display: flex; align-items: center; gap: 6px">
+            <input type="checkbox" v-model="shareCollect" :disabled="shareEnc" />文件收集模式（只进不出：访客只能上传，看不到目录内已有文件）
+          </label>
+        </div>
         <div class="row" style="display: flex; gap: 18px">
-          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareAllowDl" />允许下载</label>
-          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="sharePreview" />允许预览</label>
-          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareEdit" :disabled="shareEnc" />允许在线编辑</label>
+          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareAllowDl" :disabled="shareCollect" />允许下载</label>
+          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="sharePreview" :disabled="shareCollect" />允许预览</label>
+          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" v-model="shareEdit" :disabled="shareEnc || shareCollect" />允许在线编辑</label>
         </div>
         <div class="row">
           <label style="display: flex; align-items: center; gap: 6px">
-            <input type="checkbox" v-model="shareEnc" :disabled="encBusy" />端到端加密（E2E）
+            <input type="checkbox" v-model="shareEnc" :disabled="encBusy || shareCollect" />端到端加密（E2E）
           </label>
         </div>
         <div class="row" style="font-size: 12px; color: var(--text-3)">
@@ -603,6 +632,11 @@ const globalMode = computed<boolean>({
   get: () => activeTab.value?.globalMode ?? false,
   set: v => { if (activeTab.value) activeTab.value.globalMode = v }
 })
+// 内容检索模式（仅全局搜索时可用；随标签页持久化）
+const contentMode = computed<boolean>({
+  get: () => (activeTab.value?.globalMode ?? false) && !!activeTab.value?.contentMode,
+  set: v => { if (activeTab.value) activeTab.value.contentMode = v }
+})
 const viewMode = computed<'grid' | 'list'>({
   get: () => activeTab.value?.viewMode ?? 'grid',
   set: v => { if (activeTab.value) activeTab.value.viewMode = v }
@@ -675,6 +709,7 @@ const canBack = computed(() => history.value.some(p => p !== path.value))
 onMounted(async () => {
   await loadPolicies()
   await loadStars()
+  loadTags()
   // 优先恢复持久化在窗口 store 的标签页状态：整页编辑器（#/office）会卸载桌面外壳，
   // 关闭返回后本组件重建，本地 tabs 若不持久化就会退回默认「此电脑」视图
   const saved: any[] = Array.isArray(props.props?.tabs) ? props.props.tabs : []
@@ -685,6 +720,7 @@ onMounted(async () => {
       path: typeof t.path === 'string' && t.path ? t.path : '/',
       keyword: t.keyword || '',
       globalMode: !!t.globalMode,
+      contentMode: !!t.contentMode,
       viewMode: t.viewMode === 'list' ? 'list' : 'grid',
       history: Array.isArray(t.history) ? t.history.filter((x: any) => typeof x === 'string') : [],
       fwdStack: Array.isArray(t.fwdStack) ? t.fwdStack.filter((x: any) => typeof x === 'string') : []
@@ -863,6 +899,15 @@ async function loadStars() {
   try { stars.value = await fsApi.starList() } catch { stars.value = [] }
   try { sharedWithMe.value = await userShareApi.withMe() } catch { sharedWithMe.value = [] }
 }
+// 侧栏收藏点击：目录直接进入；文件进入所在目录并自动选中（load() 内消费 pendingSelect）
+function clickStar(s: { policyId: number; path: string; name: string; isDir: boolean }) {
+  if (s.isDir === false) {
+    pendingSelect.value = s.path
+    openPolicyId(s.policyId, s.path.slice(0, s.path.lastIndexOf('/') || 1) || '/')
+  } else {
+    openPolicyId(s.policyId, s.path)
+  }
+}
 
 function openSharedDrive() {
   if (!activeTab.value) addTab(SHARED_POLICY, '/')
@@ -920,6 +965,7 @@ function goto(p: string) {
 
 async function load() {
   if (!currentPolicy.value) return
+  aggView.value = null // 任何目录导航都退出聚合视图
   loading.value = true
   searching.value = false
   selSet.value = new Set()
@@ -930,6 +976,12 @@ async function load() {
     }
     const d = await fsApi.list(currentPolicy.value.id, path.value)
     items.value = d.items
+    // 侧栏「文件收藏」跳转：进入所在目录后自动选中该文件（预览面板即时可见）
+    if (pendingSelect.value) {
+      const want = pendingSelect.value
+      pendingSelect.value = ''
+      if (d.items.some(x => x.path === want)) selSet.value = new Set([want])
+    }
     store.setTitle(props.winId, `${currentPolicy.value.name} (${currentPolicy.value.letter})${path.value === '/' ? '' : ' - ' + path.value}`)
   } catch (e: any) {
     items.value = []
@@ -982,14 +1034,163 @@ async function loadShared() {
 }
 
 function refresh() {
+  if (aggView.value) { const v = aggView.value; openAggView(v.kind, v.id, v.label); loadTags(); return }
   if (globalMode.value && keyword.value) { doSearch(); return }
   if (keyword.value) doSearch()
   else load()
   loadStars()
+  loadTags()
 }
 
 // 当前列表是否来自搜索结果（用于清空关键词时恢复目录列表）
 const searching = ref(false)
+
+// ---- 标签体系 + 最近使用（跨盘聚合的「虚拟文件夹」）----
+// 列表接口的目录装饰已带每条路径的 tags（见 fs.go List），条目/预览直接用；
+// 聚合视图（标签视图/最近视图）把对象映射成 FileItem 混排展示，打开走条目自身 policyId（同全局搜索语义）。
+const TAG_PALETTE = ['#3b91d8', '#5db56a', '#e8964a', '#e05d5d', '#e2c04b', '#8a6fd8', '#d86fa8', '#7f8c99']
+const tags = ref<{ id: number; name: string; color: string; count: number }[]>([])
+const aggView = ref<null | { kind: 'tag' | 'recent'; id: number; label: string }>(null)
+const pendingSelect = ref('') // 侧栏点文件收藏：跳目录后待选中路径
+
+async function loadTags() {
+  try { tags.value = await fsApi.tagList() } catch { tags.value = [] }
+}
+function tagColor(id: number) { return tags.value.find(t => t.id === id)?.color || '#8a93a0' }
+function tagName(id: number) { return tags.value.find(t => t.id === id)?.name || '' }
+function iconOfName(name: string) {
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : ''
+  return fileIcon({ ext, isDir: false } as any, session.osTheme)
+}
+function aggToItem(o: { policyId: number; path: string; name: string; isDir: boolean }, ts: number): FileItem {
+  const ext = o.isDir ? '' : (o.name.includes('.') ? o.name.slice(o.name.lastIndexOf('.') + 1).toLowerCase() : '')
+  return { name: o.name, path: o.path, isDir: o.isDir, size: 0, modTime: ts, ext, policyId: o.policyId, letter: '' } as unknown as FileItem
+}
+async function openAggView(kind: 'tag' | 'recent', id: number, label: string) {
+  aggView.value = { kind, id, label }
+  loading.value = true
+  searching.value = false
+  keyword.value = ''
+  selSet.value = new Set()
+  try {
+    if (kind === 'tag') {
+      const objs = await fsApi.tagObjects(id)
+      items.value = objs.map(o => aggToItem(o, new Date(o.createdAt).getTime() || Date.now()))
+    } else {
+      const objs = await fsApi.recentList()
+      items.value = objs.map(o => aggToItem(o, new Date(o.openedAt).getTime() || Date.now()))
+    }
+    store.setTitle(props.winId, label)
+  } catch { items.value = [] } finally { loading.value = false }
+}
+
+/** 整组替换语义：在当前标签集上切换一个标签后提交（条目来自列表装饰时 tags 已就位） */
+async function toggleTagFor(f: FileItem, tagId: number) {
+  if (onSharedDrive.value || session.isGuest) return
+  const pid = (f as any).policyId || currentPolicy.value?.id
+  if (!pid) return
+  const cur = new Set<number>(f.tags || [])
+  if (cur.has(tagId)) cur.delete(tagId)
+  else cur.add(tagId)
+  try {
+    await fsApi.tagSet(pid, f.path, f.name, f.isDir, [...cur])
+    f.tags = [...cur]
+    loadTags()
+  } catch (e: any) { toast.error(e.message) }
+}
+/** 多选批量：以第一个选中项的标签状态决定 增/删，作用到全部选中项 */
+async function toggleTagForSelection(tagId: number) {
+  const targets = items.value.filter(i => selSet.value.has(i.path))
+  if (!targets.length) return
+  const has = new Set(targets[0].tags || []).has(tagId)
+  for (const f of targets) {
+    const cur = new Set<number>(f.tags || [])
+    if (has) cur.delete(tagId)
+    else if (cur.size < 10) cur.add(tagId)
+    const pid = (f as any).policyId || currentPolicy.value?.id
+    if (!pid) continue
+    try {
+      await fsApi.tagSet(pid, f.path, f.name, f.isDir, [...cur])
+      f.tags = [...cur]
+    } catch { /* 单项失败不阻断批量 */ }
+  }
+  loadTags()
+}
+/** 新建标签（名称 prompt + 调色板轮转色）并立即应用到目标条目 */
+async function createTagAndApply(target: FileItem | null) {
+  const name = await uiDlg.prompt('新建标签', '', '创建')
+  if (!name || !name.trim()) return
+  const color = TAG_PALETTE[tags.value.length % TAG_PALETTE.length]
+  try {
+    const t = await fsApi.tagCreate(name.trim(), color)
+    await loadTags()
+    if (target && selPaths.value.length > 1) await toggleTagForSelection(t.id)
+    else if (target) await toggleTagFor(target, t.id)
+  } catch (e: any) { toast.error(e.message) }
+}
+/** 标签子菜单（右键菜单与预览面板「＋ 标签」共用；checked = 当前条目已有该标签） */
+function buildTagMenu(f: FileItem | null): any[] {
+  if (!f || onSharedDrive.value || session.isGuest) return []
+  const cur = new Set<number>(f.tags || [])
+  const multi = selPaths.value.length > 1
+  const items2: any[] = tags.value.map(t => ({
+    label: t.name,
+    checked: multi ? cur.has(t.id) : cur.has(t.id),
+    onClick: () => multi ? toggleTagForSelection(t.id) : toggleTagFor(f, t.id)
+  }))
+  if (items2.length) {
+    items2.push({ separator: true })
+    items2.push({ label: '清除本条标签', onClick: () => multi ? clearTagsSelection() : toggleTagClear(f) })
+  }
+  items2.push({ label: '新建标签…', icon: 'plus', onClick: () => createTagAndApply(f) })
+  return items2
+}
+async function toggleTagClear(f: FileItem) {
+  if (!(f.tags || []).length) return
+  const pid = (f as any).policyId || currentPolicy.value?.id
+  if (!pid) return
+  try { await fsApi.tagSet(pid, f.path, f.name, f.isDir, []); f.tags = []; loadTags() } catch (e: any) { toast.error(e.message) }
+}
+async function clearTagsSelection() {
+  for (const f of items.value.filter(i => selSet.value.has(i.path))) await toggleTagClear(f)
+}
+/** 预览面板「＋ 标签」：在按钮处弹同一份标签菜单 */
+function openTagMenuForSel(e: MouseEvent) {
+  if (!selItem.value) return
+  ctx.show(e.clientX, e.clientY, buildTagMenu(selItem.value))
+}
+
+// ---- PDF 工具箱（pdfcpu 云端处理；见 apps/PdfBox.vue） ----
+function pdfTargetPolicy(f: FileItem): number | undefined {
+  return (f as any).policyId || currentPolicy.value?.id
+}
+async function pdfInfoFor(f: FileItem) {
+  const pid = pdfTargetPolicy(f)
+  if (!pid) return
+  try {
+    const r = await fsApi.pdfInfo(pid, f.path)
+    uiDlg.alert('PDF 信息', `${f.name}：共 ${r.pages} 页`)
+  } catch (e: any) { toast.error(e.message || 'PDF 解析失败') }
+}
+function openPdfBox(files: FileItem[]) {
+  const pid = pdfTargetPolicy(files[0])
+  if (!pid) return
+  store.open('pdfbox', { policyId: pid, paths: files.map(x => x.path) },
+    { title: files.length === 1 ? `PDF 工具箱 - ${files[0].name}` : `PDF 合并（${files.length} 个）`, icon: 'pdfreader' })
+}
+function buildPdfMenu(f: FileItem): any[] {
+  return [
+    { label: '页数信息', onClick: () => pdfInfoFor(f) },
+    { label: '工具箱（拆分…）', onClick: () => openPdfBox([f]) }
+  ]
+}
+/** 多选菜单项：选中里 ≥2 个 PDF 才出现 */
+function buildPdfMergeMenu(): any | null {
+  if (selPaths.value.length < 2) return null
+  const pdfs = items.value.filter(i => selSet.value.has(i.path) && i.ext === 'pdf')
+  if (pdfs.length < 2) return null
+  return { label: `合并为 PDF（${pdfs.length} 份）`, icon: 'pdfreader', onClick: () => openPdfBox(pdfs) }
+}
 
 // 搜索命中高亮：切分逻辑在 ./explorer/highlight（纯逻辑 + 单测）。
 // 非搜索态直接返回整段（同一个 <template> 渲染，不会多出 DOM），
@@ -1018,7 +1219,17 @@ async function doSearch() {
   searching.value = true
   selSet.value = new Set()
   try {
-    if (globalMode.value) {
+    if (globalMode.value && contentMode.value) {
+      // 内容全文检索（懒索引，仅本地盘文本文件）：返回包装体带 partial/note
+      const r = await fsApi.searchContent(keyword.value)
+      if (seq !== searchSeq) return
+      if (r.partial && r.note) toast.show(r.note)
+      items.value = r.items.map((h: any) => ({
+        name: h.name, isDir: h.isDir, size: h.size, modTime: h.modTime, ext: h.ext,
+        path: h.path, policyId: h.policyId, letter: h.letter, policyName: h.policyName,
+        snippet: h.snippet
+      }))
+    } else if (globalMode.value) {
       // 全局跨盘搜索：遍历所有可见存储
       const hits = await fsApi.globalSearch(keyword.value)
       if (seq !== searchSeq) return
@@ -1050,6 +1261,12 @@ watch(keyword, v => {
 
 function toggleGlobal() {
   globalMode.value = !globalMode.value
+  doSearch()
+}
+
+function toggleContent() {
+  if (!globalMode.value) globalMode.value = true
+  if (activeTab.value) activeTab.value.contentMode = !activeTab.value.contentMode
   doSearch()
 }
 
@@ -1184,6 +1401,7 @@ async function openItem(f: FileItem) {
     return
   }
   const p = { policyId: pid, path: f.path, name: f.name, size: f.size, ext }
+  fsApi.recentRecord(pid, f.path, f.name, false).catch(() => {}) // 最近使用上报（尽力而为；后端 upsert+裁剪）
   const siblings = sortedItems.value
     .filter((x: any) => !x.isDir)
     .map((x: any) => ({ policyId: (x as any).policyId || pid, path: x.path, name: x.name, size: x.size, ext: (x.ext || '').toLowerCase() }))
@@ -1927,14 +2145,17 @@ const sharePreview = ref(true)
 const shareEdit = ref(true)
 const shareLink = ref('')
 const shareEnc = ref(false)
+const shareCollect = ref(false)
 const encBusy = ref(false)
 const encProgress = ref('')
+// 收集模式强制「只进不出」：关掉下载/预览/编辑开关的呈现（后端 Create 也强制）
+watch(shareCollect, v => { if (v) { shareAllowDl.value = false; sharePreview.value = false; shareEdit.value = false } })
 function shareSel() {
   if (selPaths.value.length !== 1) return
   if (onSharedDrive.value) { toast.error('共享盘内不能创建分享链接'); return }
   shareTarget.value = items.value.find(i => i.path === selPaths.value[0]) || null
   sharePwd.value = ''; shareExpire.value = 0; shareMaxDl.value = 0; shareLink.value = ''
-  shareEnc.value = false; encBusy.value = false; encProgress.value = ''
+  shareEnc.value = false; shareCollect.value = false; encBusy.value = false; encProgress.value = ''
   shareShow.value = true
 }
 // 分享对话框打开时重置在线编辑开关为默认值（允许）
@@ -1965,7 +2186,8 @@ async function doShare() {
       policyId: currentPolicy.value.id, path: t.path,
       password: sharePwd.value || undefined, expireDays: shareExpire.value,
       remainDownloads: (Number.isFinite(shareMaxDl.value) && shareMaxDl.value > 0) ? Math.floor(shareMaxDl.value) : 0,
-      allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value, allowEdit: shareEdit.value
+      allowDownload: shareAllowDl.value, previewEnabled: sharePreview.value, allowEdit: shareEdit.value,
+      collectOnly: shareCollect.value || undefined
     })
     shareLink.value = location.origin + location.pathname + '#/s/' + s.token
   } catch (e: any) {
@@ -2244,6 +2466,10 @@ function showItemMenu(f: FileItem, x: number, y: number) {
   const multi = selPaths.value.length > 1
   const menu = itemMenu({
     f,
+    tags: buildTagMenu(f),
+    pdf: !multi && !onSharedDrive.value && !readOnly.value && f.ext === 'pdf'
+      ? { label: 'PDF 工具箱', icon: 'pdfreader', children: buildPdfMenu(f) } : undefined,
+    pdfMerge: multi ? buildPdfMergeMenu() : undefined,
     multi,
     multiCount: selPaths.value.length,
     shared: onSharedDrive.value,
@@ -2337,7 +2563,7 @@ function onPolicyCtx(p: Policy, e: MouseEvent) {
 async function toggleStar(f: FileItem) {
   if (!currentPolicy.value) return
   if (f.starred) await fsApi.starRemove(currentPolicy.value.id, f.path)
-  else await fsApi.starAdd(currentPolicy.value.id, f.path, f.name)
+  else await fsApi.starAdd(currentPolicy.value.id, f.path, f.name, f.isDir)
   load(); loadStars()
 }
 
@@ -2421,9 +2647,33 @@ function fmtTime(ms: number) {
 .side-title { font-size: 11px; font-weight: 600; color: var(--text-3); padding: 10px 10px 6px; letter-spacing: 0.5px; }
 /* 侧栏：macOS Finder 式毛玻璃 vibrancy（半透明 + 饱和提升，透出窗口底材） */
 .exp-side {
+  width: 210px; flex: none; border-right: 1px solid var(--stroke); overflow: auto; padding: 10px 8px;
   background: color-mix(in srgb, var(--card) 62%, transparent);
   backdrop-filter: blur(24px) saturate(1.5);
   -webkit-backdrop-filter: blur(24px) saturate(1.5);
+}
+/* 窗口级响应式（容器查询按「窗口宽度」而非屏幕宽度）：拖窄 Explorer 窗口时
+   预览窗格 → 侧栏收窄 → 侧栏收进 ☰ 抽屉，逐级让位给文件列表。
+   与 html[data-mobile] 的整屏手机布局互不干扰（后者按屏幕判定，优先级更高）。 */
+.app-root { container-type: inline-size; }
+@container (max-width: 920px) {
+  .preview-pane { display: none; }
+}
+@container (max-width: 640px) {
+  .exp-side { width: 172px; }
+}
+@container (max-width: 520px) {
+  .m-nav { display: inline-flex; }
+  .exp-side {
+    position: absolute; top: 0; bottom: 0; left: 0; z-index: 30;
+    width: min(230px, 78%);
+    background: var(--card);
+    border-right: 1px solid var(--stroke-b);
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+    box-shadow: 2px 0 14px rgba(0, 0, 0, 0.18);
+  }
+  .exp-side.m-open { transform: translateX(0); }
 }
 .side-item {
   display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px;
@@ -2472,6 +2722,16 @@ function fmtTime(ms: number) {
 .pp-row b { color: var(--text); font-weight: 500; text-align: right; word-break: break-all; }
 .pp-actions { display: flex; gap: 8px; margin-top: 10px; }
 .pp-actions .btn { flex: 1; padding: 6px 0; }
+/* 预览面板标签区：描边彩色胶囊 + 虚线「＋ 标签」按钮 */
+.pp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pp-tag {
+  font-size: 11.5px; line-height: 1; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid; background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.pp-tag.add { color: var(--text-3); border-style: dashed; cursor: pointer; }
+.pp-tag.add:hover { color: var(--text); }
+/* 侧栏标签色点 */
+.tag-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 
 /* 此电脑：驱动器卡片（Win11 资源管理器标准样式） */
 .sec-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 12px; letter-spacing: 0.2px; }

@@ -69,12 +69,19 @@
       <!-- 同内容多副本 -->
       <div v-else class="sa-list">
         <div class="sa-note">
-          同内容文件在秒传时已按<b>硬链接</b>存储，<b>不额外占用空间</b>；这里仅用于「同一份文件散落在多处」的整理参考。
+          同内容文件在秒传时已按<b>硬链接</b>存储，<b>不额外占用空间</b>；这里用于「同一份文件散落在多处」的整理：
+          多余副本可移入回收站（可还原，清空回收站才真正释放空间）。
+        </div>
+        <div v-if="dupExtra.length" style="display: flex; gap: 8px; align-items: center; margin: 2px 0 4px">
+          <button class="btn" @click="cleanAllDups">一键整理：每组保留第一份，其余 {{ dupExtra.length }} 个移入回收站</button>
         </div>
         <div v-for="g in data.duplicates" :key="g.hash" class="sa-dup">
           <div class="sa-row-head">
             <span class="sa-row-name">{{ fmtBytes(g.size) }} · {{ g.count }} 处</span>
-            <span class="sa-tag" :class="{ hl: g.hardLinked }">{{ g.hardLinked ? '硬链接（不占额外空间）' : '独立副本（占用额外空间）' }}</span>
+            <span style="display: flex; align-items: center; gap: 8px">
+              <span class="sa-tag" :class="{ hl: g.hardLinked }">{{ g.hardLinked ? '硬链接（不占额外空间）' : '独立副本（占用额外空间）' }}</span>
+              <button v-if="g.paths.length > 1" class="btn" @click="cleanGroup(g)">保留第一份</button>
+            </span>
           </div>
           <div v-for="(p, i) in g.paths" :key="i" class="sa-dup-path">
             <span :title="p">{{ p }}</span>
@@ -92,7 +99,7 @@ import { ref, computed, onMounted } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import { useWindows } from '../stores/windows'
 import { useUiDialog, useToast } from '../stores/dialog'
-import { fsApi, type Policy, type StorageAnalysis, type StorageLargestItem } from '../api/modules'
+import { fsApi, type Policy, type StorageAnalysis, type StorageLargestItem, type StorageDupGroup } from '../api/modules'
 import { fileIcon } from './explorer/fileIcons'
 
 const store = useWindows()
@@ -154,6 +161,23 @@ function reveal(path: string) {
   const dir = path.slice(0, path.lastIndexOf('/')) || '/'
   store.open('explorer', { policyId: policyId.value, path: dir }, { title: '文件资源管理器', icon: 'explorer', w: 1000, h: 640 })
 }
+
+// 重复副本清理：每组保留第一份，其余移入回收站（dup-purge 接口，可还原）
+const dupExtra = computed(() => (data.value?.duplicates || []).flatMap(g => g.paths.slice(1)))
+async function purgeDups(paths: string[], desc: string) {
+  if (!paths.length) return
+  const ok = await uiDlg.confirm('整理重复副本', `将把${desc}移入回收站。移入后仍可还原，清空回收站才真正释放空间。确定？`, { danger: true, okText: '移入回收站' })
+  if (!ok) return
+  try {
+    await fsApi.dupPurge(policyId.value, paths)
+    toast.success('已移入回收站，可在回收站还原')
+    await load()
+  } catch (e: any) {
+    toast.error(e?.message || '清理失败')
+  }
+}
+function cleanGroup(g: StorageDupGroup) { purgeDups(g.paths.slice(1), `该组 ${g.paths.length - 1} 份多余副本`) }
+function cleanAllDups() { purgeDups(dupExtra.value, `全部 ${dupExtra.value.length} 份多余副本`) }
 
 // 删除（进回收站，走既有删除接口）
 async function del(f: StorageLargestItem) {

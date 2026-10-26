@@ -131,6 +131,9 @@ export function isExtractable(ext?: string, name?: string): boolean {
 
 export interface ItemMenuOpts {
   f: ItemMenuTarget
+  tags?: MenuItem[] // 「标签」级联子菜单（已用勾选态 + 「新建标签…」）；空则整项不显示
+  pdf?: MenuItem // 「PDF 工具箱」级联（仅 .pdf 文件）；其余情况不传
+  pdfMerge?: MenuItem // 多选菜单里的「合并为 PDF」（仅选中 ≥2 个 PDF）
   multi: boolean // 多选（>1 项）时只保留批量操作
   multiCount: number
   shared: boolean
@@ -196,6 +199,8 @@ export function itemMenu(o: ItemMenuOpts): MenuItem[] {
       { label: '剪切', icon: 'cut', onClick: o.on.cut, disabled: o.readOnly },
       { label: '复制', icon: 'copy', onClick: o.on.copy, disabled: o.readOnly },
       { separator: true },
+      ...(o.tags?.length ? [{ label: '标签', icon: 'tag', children: o.tags } as MenuItem] : []),
+      ...(o.pdfMerge ? [o.pdfMerge] : []),
       ...(o.allowArchive ? [{ label: '压缩打包', icon: 'archive', onClick: o.on.archive, disabled: o.readOnly }] as MenuItem[] : []),
       { label: '删除', icon: 'trash', danger: true, onClick: o.on.del, disabled: o.readOnly },
       { separator: true },
@@ -222,6 +227,7 @@ export function itemMenu(o: ItemMenuOpts): MenuItem[] {
       ...(o.canShareUser ? [{ label: '共享…', icon: 'user', onClick: o.on.shareUser }] as MenuItem[] : []),
       { separator: true },
       ...star,
+      ...(o.tags?.length ? [{ label: '标签', icon: 'tag', children: o.tags } as MenuItem] : []),
       ...ops,
       { label: '粘贴到内部', icon: 'paste', onClick: o.on.pasteInto, disabled: !o.hasClip || o.readOnly },
       { label: '重命名', icon: 'rename', onClick: o.on.rename, disabled: o.readOnly },
@@ -242,6 +248,8 @@ export function itemMenu(o: ItemMenuOpts): MenuItem[] {
     { label: '提取直链', icon: 'link', onClick: o.on.dlink },
     { separator: true },
     ...star,
+    ...(o.tags?.length ? [{ label: '标签', icon: 'tag', children: o.tags } as MenuItem] : []),
+    ...(o.pdf ? [o.pdf] : []),
     ...ops,
     { label: '重命名', icon: 'rename', onClick: o.on.rename, disabled: o.readOnly },
     { separator: true },

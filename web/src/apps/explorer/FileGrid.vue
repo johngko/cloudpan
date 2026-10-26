@@ -11,6 +11,8 @@
         <AppIcon v-else :name="iconOf(f)" :size="46" />
       </div>
       <div class="f-name"><span v-if="editing[f.path]" class="editing-dot" :title="'正在编辑：' + editing[f.path]"></span><template v-for="(p, pi) in nameParts(f.name)" :key="pi"><mark v-if="p.hit">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template></div>
+      <!-- 标签圆点：绝对定位在条目左下，不参与布局（窗口化固定行高不受影响） -->
+      <span v-if="f.tags?.length && tagColor" class="f-tags"><i v-for="tid in f.tags" :key="tid" :style="{ background: tagColor(tid) }" :title="tagName(tid)"></i></span>
     </div>
   </template>
 </template>
@@ -28,6 +30,8 @@ defineProps<{
   isThumb: (f: FileItem) => boolean
   thumbUrl: (f: FileItem) => string
   nameParts: (name: string) => { t: string; hit: boolean }[]
+  tagColor?: (id: number) => string
+  tagName?: (id: number) => string
 }>()
 
 defineEmits<{
@@ -69,6 +73,10 @@ defineEmits<{
   background: color-mix(in srgb, var(--theme-2) 40%, transparent);
   color: inherit; border-radius: 2px; padding: 0 1px;
 }
+/* 标签圆点：左下角叠加（绝对定位，窗口化固定行高不受影响） */
+.f-tags { position: absolute; left: 8px; bottom: 7px; z-index: 2; display: flex; gap: 3px; }
+.f-tags i { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.4); }
+.dark .f-tags i { box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35); }
 /* 大文件夹窗口化：行高必须固定，窗口计算才成立（普通目录不套用）
    （112 = 12+10 内边距 + 46 图标 + 8 间距 + 两行 12px×1.35 名称 + 2 边框，取整留余） */
 .file-grid.virtual .file-item { height: 112px; }

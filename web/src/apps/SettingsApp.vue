@@ -60,6 +60,21 @@
             屏幕宽度：{{ viewport.narrow ? '≤ 640px（窄屏）' : '> 640px（宽屏）' }}；
             当前生效：<b>{{ viewport.mobile ? '手机布局' : '桌面布局' }}</b>
           </div>
+          <div style="font-size: 13px; color: var(--text-2); margin: 24px 0 10px">
+            深色模式。跟随系统时，界面深浅随操作系统的深浅色设置实时切换（Windows/macOS/Android/iOS 的深色时间表或手动切换都会生效）。
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; max-width: 560px">
+            <div v-for="m in darkModes" :key="m.id"
+              style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: var(--radius); border: 1.5px solid var(--stroke); background: var(--card)"
+              :style="session.darkMode === m.id ? { borderColor: 'var(--theme-2)', background: 'var(--hover-b)' } : {}"
+              @click="session.setDarkMode(m.id)">
+              <div style="flex: 1">
+                <div style="font-size: 14px; font-weight: 600">{{ m.name }}</div>
+                <div style="font-size: 11.5px; color: var(--text-3); margin-top: 2px">{{ m.desc }}</div>
+              </div>
+              <AppIcon v-if="session.darkMode === m.id" name="check" :size="16" style="color: var(--theme-2)" />
+            </div>
+          </div>
         </template>
 
         <!-- 账号 -->
@@ -108,6 +123,46 @@
                 挂载地址：http://你的服务器地址/dav/{{ session.user?.username }}
               </div>
               <div v-else style="font-size: 12px; color: var(--text-3); margin-top: 6px">当前用户组未启用 WebDAV</div>
+            </div>
+            <div class="form-row" style="margin-top: 22px">
+              <label>API 令牌（第三方工具/脚本的独立凭据）</label>
+              <div style="font-size: 12px; color: var(--text-3); max-width: 620px; line-height: 1.7; margin-bottom: 10px">
+                用于 rclone、CLI、自动化脚本等第三方访问，支持 <code>Authorization: Bearer 令牌</code> 请求头与 <code>?t=令牌</code> 参数；
+                只读令牌会拒绝一切写操作。令牌可单独撤销、可设有效期；明文仅在创建时显示一次，丢失只能撤销重建。
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                <input class="input" v-model="tokName" placeholder="令牌名称（如 rclone）" style="width: 170px" />
+                <select class="input" v-model="tokScope">
+                  <option value="rw">读写</option>
+                  <option value="ro">只读</option>
+                </select>
+                <select class="input" v-model="tokExpire">
+                  <option :value="0">永久有效</option>
+                  <option :value="30">30 天</option>
+                  <option :value="90">90 天</option>
+                  <option :value="365">1 年</option>
+                </select>
+                <button class="btn" @click="createToken">创建令牌</button>
+              </div>
+              <div v-if="newToken" style="margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--accent-weak); font-size: 13px; max-width: 620px">
+                ⚠️ 请立即保存令牌，此后不再显示：<br />
+                <code style="word-break: break-all">{{ newToken }}</code>
+                <button class="btn" style="margin-left: 8px" @click="copyText(newToken); toast.success('已复制')">复制</button>
+              </div>
+              <table class="file-list" style="position: static; margin-top: 12px; max-width: 720px">
+                <thead><tr><th>名称</th><th>权限</th><th>令牌</th><th>到期</th><th>最近使用</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="t in tokens" :key="t.id">
+                    <td>{{ t.name }}</td>
+                    <td>{{ t.scopes === 'ro' ? '只读' : '读写' }}</td>
+                    <td><code>{{ t.prefix }}</code></td>
+                    <td>{{ t.expiresAt ? String(t.expiresAt).slice(0, 10) : '永久' }}</td>
+                    <td>{{ t.lastUsedAt ? String(t.lastUsedAt).slice(0, 16).replace('T', ' ') : '从未使用' }}</td>
+                    <td><button class="btn" @click="removeToken(t)">撤销</button></td>
+                  </tr>
+                  <tr v-if="!tokens.length"><td colspan="6" style="color: var(--text-3)">暂无令牌</td></tr>
+                </tbody>
+              </table>
             </div>
           </template>
         </template>
@@ -257,7 +312,7 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { fsApi, shareApi, authApi, userShareApi, auditApi, type AuditItem } from '../api/modules'
+import { fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, type AuditItem, type ApiTokenItem } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
@@ -315,6 +370,12 @@ const layoutModes = [
   { id: 'on', name: '始终使用手机布局', desc: '窗口铺满屏幕、触屏交互；适合手机与小平板' },
   { id: 'off', name: '始终使用桌面布局', desc: '保留浮动窗口与桌面图标双击；适合宽屏' }
 ] as const
+/** 深色模式偏好三选一（本机偏好，存 localStorage，不影响其他用户） */
+const darkModes = [
+  { id: 'auto', name: '跟随系统', desc: '随操作系统的深浅色设置实时切换（推荐）' },
+  { id: 'light', name: '浅色', desc: '始终使用浅色界面' },
+  { id: 'dark', name: '深色', desc: '始终使用深色界面' }
+] as const
 
 const tabs = computed(() => [
   ...(isAdmin.value ? [{ id: 'person', name: '个性化', icon: 'sun' }] : []),
@@ -337,6 +398,32 @@ watch(() => winProps.props?.tab, v => { if (v && tabs.value.some(t => t.id === v
 const nickname = ref(session.user?.nickname || '')
 const oldPwd = ref(''); const newPwd = ref(''); const davPwd = ref('')
 const shares = ref<any[]>([])
+
+// API 令牌管理（懒加载：切到账号页签才请求）
+const tokens = ref<ApiTokenItem[]>([])
+const tokName = ref(''); const tokScope = ref<'rw' | 'ro'>('rw'); const tokExpire = ref(0)
+const newToken = ref('')
+async function loadTokens() {
+  try { tokens.value = await tokenApi.list() } catch { tokens.value = [] }
+}
+async function createToken() {
+  if (!tokName.value.trim()) { toast.error('请填写令牌名称'); return }
+  try {
+    const r = await tokenApi.create(tokName.value.trim(), tokScope.value, Number(tokExpire.value))
+    newToken.value = r.token
+    tokName.value = ''
+    await loadTokens()
+  } catch (e: any) { toast.error(e?.message || '创建失败') }
+}
+async function removeToken(t: ApiTokenItem) {
+  if (!await uiDlg.confirm('撤销令牌', `撤销「${t.name}」后使用该令牌的第三方工具将立即无法访问，确定？`, { danger: true, okText: '撤销' })) return
+  try {
+    await tokenApi.remove(t.id)
+    if (newToken.value) newToken.value = ''
+    await loadTokens()
+  } catch (e: any) { toast.error(e?.message || '撤销失败') }
+}
+watch(tab, v => { if (v === 'account' && !session.isGuest) loadTokens() }, { immediate: true })
 
 // 我的操作记录（懒加载：切到该页签才请求，避免打开设置就多打一次接口）
 const LOG_PAGE_SIZE = 20

@@ -33,7 +33,10 @@ export interface AdminPolicyRow {
 export interface FileItem {
   name: string; isDir: boolean; size: number; modTime: number; ext: string
   path: string; starred?: boolean
+  /** 目录列表装饰：该条目身上的标签 ID（无标签时后端不下发该字段） */
+  tags?: number[]
   letter?: string // 搜索/跨盘结果带盘符，用于同名路径去重（grid key）
+  snippet?: string // 内容检索命中的上下文摘要（仅搜内容时下发）
 }
 
 /** 通知（GET /notify：裸数组，直接序列化后端 model.Notification） */
@@ -41,9 +44,20 @@ export interface NotifyItem {
   id: number; userId: number; type: string; title: string; content: string
   refId: number; read: boolean; cleared: boolean; createdAt: string
 }
-/** 收藏的目录（GET /stars） */
+/** 收藏的目录/文件（GET /stars；isDir=false 为文件，点击进所在目录并选中） */
 export interface StarItem {
-  id: number; userId: number; policyId: number; path: string; name: string; createdAt: string
+  id: number; userId: number; policyId: number; path: string; name: string; isDir: boolean; createdAt: string
+}
+/** 用户标签（GET /tags；count = 关联对象数） */
+export interface TagItem { id: number; name: string; color: string; count: number }
+/** 标签下的对象（GET /tags/:id/objects；冗余 name/isDir 供聚合视图直接渲染） */
+export interface TagObject { id: number; tagId: number; userId: number; policyId: number; path: string; name: string; isDir: boolean; createdAt: string }
+/** 最近打开（GET /recent） */
+export interface RecentItem { id: number; userId: number; policyId: number; path: string; name: string; isDir: boolean; openedAt: string }
+/** API 令牌（GET /tokens；明文只在创建响应里出现一次，列表仅含 prefix） */
+export interface ApiTokenItem {
+  id: number; userId: number; name: string; prefix: string; scopes: string
+  expiresAt: string | null; lastUsedAt: string | null; createdAt: string
 }
 /** 回收站条目（GET /recycle；后端 trashPath 标了 json:"-"，不会下发） */
 export interface RecycleItem {
@@ -76,10 +90,13 @@ export interface StorageAnalysis {
   truncated: boolean   // 遍历触顶（统计不完整）
   scanned: number
 }
-/** 全局搜索命中（GET /fs/global-search；kind=browse 时为各盘顶层首屏） */
+/** 全局搜索命中（GET /fs/global-search；kind=browse 时为各盘顶层首屏；
+ *  kind=content 时返回 {items,partial,note} 包装且命中带 snippet 上下文摘要） */
 export interface SearchHit extends FileItem {
   policyId: number; letter: string; policyName: string; policyType: string
+  snippet?: string
 }
+export interface ContentSearchResult { items: SearchHit[]; partial: boolean; note: string }
 /** 后端任务（GET /tasks、GET /offline：直接序列化 model.Task）。
  *  注意 props 是 **JSON 字符串**（字段随任务类型不同），用前必须 JSON.parse */
 export interface TaskItem {
@@ -109,7 +126,7 @@ export interface SharedEntry {
 export interface ShareItem {
   id: number; userId: number; policyId: number; path: string; name: string; isDir: boolean
   token: string; hasPassword: boolean; expiresAt: string | null; remainDownloads: number
-  previewEnabled: boolean; allowDownload: boolean; allowEdit: boolean; encrypted: boolean
+  previewEnabled: boolean; allowDownload: boolean; allowEdit: boolean; encrypted: boolean; collectOnly: boolean
   views: number; downloads: number; createdAt: string
 }
 /** 新建分享的返回（POST /shares：直接序列化 model.Share → 无 hasPassword，多 encSalt） */
@@ -138,6 +155,7 @@ export interface PolicyIn { name: string; letter: string; type: string; rootPath
 export interface ShareCreateIn {
   policyId: number; path: string; password?: string; expireDays?: number
   remainDownloads?: number; allowDownload?: boolean; previewEnabled?: boolean; allowEdit?: boolean
+  collectOnly?: boolean // 文件收集模式：只进不出（须为目录；强制禁下载/预览/编辑）
 }
 
 export const authApi = {
@@ -203,15 +221,35 @@ export const fsApi = {
     `/api/fs/archive/raw?policyId=${policyId}&path=${encodeURIComponent(path)}&entry=${encodeURIComponent(entry)}&encoding=${encodeURIComponent(encoding)}&password=${encodeURIComponent(password)}&t=${getToken()}`,
   tasks: () => get<TaskItem[]>('/tasks'),
   starList: () => get<StarItem[]>('/stars'),
-  starAdd: (policyId: number, path: string, name: string) => post('/stars', { policyId, path, name }),
+  starAdd: (policyId: number, path: string, name: string, isDir = true) => post('/stars', { policyId, path, name, isDir }),
   starRemove: (policyId: number, path: string) => del('/stars', { policyId, path }),
+  // 重复文件清理（存储分析「同内容多副本」行动入口）：指定路径批量移入回收站
+  dupPurge: (policyId: number, paths: string[]) => post('/fs/dup-purge', { policyId, paths }),
+  // 标签体系（整组替换语义：tagSet 传入该路径的最终标签集）
+  tagList: () => get<TagItem[]>('/tags'),
+  tagCreate: (name: string, color: string) => post<TagItem>('/tags', { name, color }),
+  tagUpdate: (id: number, name: string, color: string) => put('/tags/' + id, { name, color }),
+  tagDelete: (id: number) => del('/tags/' + id),
+  tagObjects: (id: number) => get<TagObject[]>(`/tags/${id}/objects`),
+  tagSet: (policyId: number, path: string, name: string, isDir: boolean, tagIds: number[]) =>
+    post('/tags/set', { policyId, path, name, isDir, tagIds }),
+  pathTags: (policyId: number, path: string) => get<number[]>(`/fs/path-tags?policyId=${policyId}&path=${encodeURIComponent(path)}`),
+  // 最近打开（文件打开时上报；资源管理器侧栏聚合视图）
+  recentList: () => get<RecentItem[]>('/recent'),
+  recentRecord: (policyId: number, path: string, name: string, isDir: boolean) => post('/recent', { policyId, path, name, isDir }),
   fileVersions: (policyId: number, path: string) => get<FileVersionItem[]>(`/fileversions?policyId=${policyId}&path=${encodeURIComponent(path)}`),
   fileVersionRestore: (policyId: number, path: string, version: number) => post('/fileversions/restore', { policyId, path, version }),
   fileVersionDownloadUrl: (policyId: number, path: string, version: number) =>
     `/api/fileversions/download?policyId=${policyId}&path=${encodeURIComponent(path)}&version=${version}&t=${getToken()}`,
   recycleList: () => get<RecycleItem[]>('/recycle'),
   recycleRestore: (ids: number[]) => post('/recycle/restore', { ids }),
-  recyclePurge: (ids: number[], all = false) => post('/recycle/purge', { ids, all })
+  recyclePurge: (ids: number[], all = false) => post('/recycle/purge', { ids, all }),
+  // 内容全文检索（懒索引：仅本地盘文本文件；返回包装体带 partial/note）
+  searchContent: (q: string) => get<ContentSearchResult>(`/fs/global-search?q=${encodeURIComponent(q)}&kind=content`),
+  // PDF 工具箱（pdfcpu 云端处理）
+  pdfInfo: (policyId: number, path: string) => get<{ pages: number }>(`/fs/pdf/info?policyId=${policyId}&path=${encodeURIComponent(path)}`),
+  pdfMerge: (policyId: number, paths: string[], name?: string) => post<{ path: string; name: string }>('/fs/pdf/merge', { policyId, paths, name }),
+  pdfSplit: (policyId: number, path: string, span: number) => post<{ dir: string; count: number }>('/fs/pdf/split', { policyId, path, span })
 }
 
 export const shareApi = {
@@ -239,6 +277,14 @@ export const speedtestApi = {
 // 内置浏览器：签发票据（iframe 子资源凭 ?pt= 走代理，避免真实 JWT 进资源 URL）
 export const browserApi = {
   session: () => get<{ pt: string }>('/browser/session')
+}
+
+// API 令牌（可撤销第三方凭据；明文 token 仅创建响应返回一次，丢失只能重建）
+export const tokenApi = {
+  list: () => get<ApiTokenItem[]>('/tokens'),
+  create: (name: string, scopes: 'rw' | 'ro', expireDays: number) =>
+    post<{ id: number; token: string }>('/tokens', { name, scopes, expireDays }),
+  remove: (id: number) => del(`/tokens/${id}`)
 }
 
 // 用户设置 KV（播放列表 / 观看进度 / 已安装应用等 JSON）
