@@ -16,6 +16,7 @@ server/cloudpan
 server/cloudpan.exe~
 
 # ---- 运行数据（数据库 / 密钥 / 存储挂载根，绝不可提交） ----
+/data/
 server/data/
 C/
 D/
