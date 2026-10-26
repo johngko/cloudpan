@@ -338,12 +338,19 @@ func (h *SiteHandler) List(c *gin.Context) {
 	for _, s := range stars {
 		starMap[s.Path] = true
 	}
+	// 标签标记（账号级元数据，与收藏同款装饰；上限防超宽目录联查失控）
+	var tagings []model.FileTagging
+	model.DB.Where("user_id = ? AND policy_id = ?", ctxOf(c).user.ID, p.ID).Limit(5000).Find(&tagings)
+	tagMap := map[string][]uint{}
+	for _, tg := range tagings {
+		tagMap[tg.Path] = append(tagMap[tg.Path], tg.TagID)
+	}
 	items := make([]gin.H, 0, len(entries))
 	for _, e := range entries {
 		full, _ := fscore.Join(vp, e.Name)
 		items = append(items, gin.H{
 			"name": e.Name, "isDir": e.IsDir, "size": e.Size, "modTime": e.ModTime, "ext": e.Ext,
-			"path": full, "starred": starMap[full],
+			"path": full, "starred": starMap[full], "tags": tagMap[full],
 		})
 	}
 	dto.OK(c, gin.H{"policy": p, "path": vp, "items": items})
@@ -1028,49 +1035,86 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 	recycleUserDir := filepath.Join(h.Fs.RecycleDir, fmt.Sprint(x.user.ID))
 	_ = os.MkdirAll(recycleUserDir, 0o755)
 	for _, src := range in.Paths {
-		if src == "/" {
-			dto.Fail(c, 400, "不能删除根目录")
+		if msg, halt := trashMoveToRecycle(d, p, x.user.ID, recycleUserDir, src); halt {
+			dto.Fail(c, 400, msg)
 			return
 		}
-		e, err := d.Stat(src)
-		if err != nil {
-			continue
-		}
-		// 目录的 e.Size 只是目录项自身大小（通常为 0），必须记递归总大小，
-		// 否则清空回收站退款时配额会泄漏。必须在移入回收站之前统计。
-		size := e.Size
-		if e.IsDir {
-			if sz, serr := entryBytes(d, src); serr == nil {
-				size = sz
-			}
-		}
-		ts := time.Now().Format("20060102150405")
-		trashRel := ts + "_" + e.Name
-		physSrc, err := fscore.PhysicalOf(d, src)
-		if err != nil {
-			dto.Fail(c, 400, "仅本地存储支持删除")
-			return
-		}
-		trashFull := filepath.Join(recycleUserDir, trashRel)
-		if err := os.Rename(physSrc, trashFull); err != nil {
-			dto.Fail(c, 400, fmt.Sprintf("删除 %s 失败: %s", src, err.Error()))
-			return
-		}
-		// 移入回收站是物理改名：文件仍在（回收站内），副本记录随新路径走并继续计为存活副本
-		fscore.HashPathRenamed(physSrc, trashFull)
-		// 版本历史随文件一并清理（回收站不保留历史版本）
-		if srcClean, err := fscore.Clean(src); err == nil {
-			if e.IsDir {
-				fscore.PurgeDirVersions(p.ID, srcClean)
-			} else {
-				fscore.DeleteVersions(p.ID, srcClean)
-			}
-		}
-		model.DB.Create(&model.RecycleItem{UserID: x.user.ID, OwnerID: recycleOwnerID(p, physSrc), PolicyID: p.ID, OrigPath: parentOf(src),
-			TrashPath: trashRel, Name: e.Name, IsDir: e.IsDir, Size: size, DeletedAt: time.Now()})
 	}
 	touchPolicyUsage(p.ID) // 文件已移出盘根（进回收站），用量立即失效
 	middleware.Audit(c, "delete", fmt.Sprintf("%s: %v", p.Name, in.Paths))
+	dto.OK(c, nil)
+}
+
+// trashMoveToRecycle 把单个条目录入回收站：改名 → 秒传台账改名对账 → 版本清理 → 回收站落账。
+// 返回 (消息, 是否需立即中断请求)；不存在的路径静默跳过（Delete/DupPurge 共用语义）。
+func trashMoveToRecycle(d fscore.Driver, p *model.Policy, userID uint, recycleUserDir, src string) (string, bool) {
+	if src == "/" {
+		return "不能删除根目录", true
+	}
+	e, err := d.Stat(src)
+	if err != nil {
+		return "", false
+	}
+	// 目录的 e.Size 只是目录项自身大小（通常为 0），必须记递归总大小，
+	// 否则清空回收站退款时配额会泄漏。必须在移入回收站之前统计。
+	size := e.Size
+	if e.IsDir {
+		if sz, serr := entryBytes(d, src); serr == nil {
+			size = sz
+		}
+	}
+	ts := time.Now().Format("20060102150405")
+	trashRel := ts + "_" + e.Name
+	physSrc, err := fscore.PhysicalOf(d, src)
+	if err != nil {
+		return "仅本地存储支持删除", true
+	}
+	trashFull := filepath.Join(recycleUserDir, trashRel)
+	if err := os.Rename(physSrc, trashFull); err != nil {
+		return fmt.Sprintf("删除 %s 失败: %s", src, err.Error()), true
+	}
+	// 移入回收站是物理改名：文件仍在（回收站内），副本记录随新路径走并继续计为存活副本
+	fscore.HashPathRenamed(physSrc, trashFull)
+	// 版本历史随文件一并清理（回收站不保留历史版本）
+	if srcClean, err := fscore.Clean(src); err == nil {
+		if e.IsDir {
+			fscore.PurgeDirVersions(p.ID, srcClean)
+		} else {
+			fscore.DeleteVersions(p.ID, srcClean)
+		}
+	}
+	model.DB.Create(&model.RecycleItem{UserID: userID, OwnerID: recycleOwnerID(p, physSrc), PolicyID: p.ID, OrigPath: parentOf(src),
+		TrashPath: trashRel, Name: e.Name, IsDir: e.IsDir, Size: size, DeletedAt: time.Now()})
+	return "", false
+}
+
+// DupPurge 重复文件清理（存储分析「同内容多副本」的行动入口）：把指定路径批量移入回收站。
+// 「每组保留哪一份」由 UI 决策（默认保留第一份），服务端只执行回收搬移；
+// 回收站内可还原、清空退款，误删有兜底。仅本地盘（秒传台账的来源，分析接口同此约束）。
+func (h *SiteHandler) DupPurge(c *gin.Context) {
+	if !requireWritable(c) {
+		return
+	}
+	var in fsOpIn
+	if err := c.ShouldBindJSON(&in); err != nil || len(in.Paths) == 0 {
+		dto.Fail(c, 400, "参数错误")
+		return
+	}
+	p, d, ok := h.resolveWritableByID(in.PolicyID, c)
+	if !ok {
+		return
+	}
+	x := ctxOf(c)
+	recycleUserDir := filepath.Join(h.Fs.RecycleDir, fmt.Sprint(x.user.ID))
+	_ = os.MkdirAll(recycleUserDir, 0o755)
+	for _, src := range in.Paths {
+		if msg, halt := trashMoveToRecycle(d, p, x.user.ID, recycleUserDir, src); halt {
+			dto.Fail(c, 400, msg)
+			return
+		}
+	}
+	touchPolicyUsage(p.ID)
+	middleware.Audit(c, "dup_purge", fmt.Sprintf("%s: %v", p.Name, in.Paths))
 	dto.OK(c, nil)
 }
 
@@ -1168,6 +1212,11 @@ func (h *SiteHandler) Search(c *gin.Context) {
 
 // GlobalSearch 全局跨盘搜索：遍历当前用户可见的所有存储策略
 func (h *SiteHandler) GlobalSearch(c *gin.Context) {
+	// 内容全文检索走独立的懒索引路径（见 contentsearch.go）
+	if c.Query("kind") == "content" {
+		h.ContentSearch(c)
+		return
+	}
 	x := ctxOf(c)
 	kw := strings.TrimSpace(c.Query("q"))
 	var list []model.Policy
@@ -2026,15 +2075,20 @@ func (h *SiteHandler) StarAdd(c *gin.Context) {
 		PolicyID uint   `json:"policyId"`
 		Path     string `json:"path"`
 		Name     string `json:"name"`
+		IsDir    *bool  `json:"isDir"` // 缺省视为目录（存量行为）；文件收藏点击后进所在目录并选中
 	}
 	if err := c.ShouldBindJSON(&in); err != nil || in.Path == "" {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
+	isDir := true
+	if in.IsDir != nil {
+		isDir = *in.IsDir
+	}
 	var n int64
 	model.DB.Model(&model.UserStar{}).Where("user_id=? AND policy_id=? AND path=?", x.user.ID, in.PolicyID, in.Path).Count(&n)
 	if n == 0 {
-		model.DB.Create(&model.UserStar{UserID: x.user.ID, PolicyID: in.PolicyID, Path: in.Path, Name: in.Name})
+		model.DB.Create(&model.UserStar{UserID: x.user.ID, PolicyID: in.PolicyID, Path: in.Path, Name: in.Name, IsDir: isDir})
 	}
 	dto.OK(c, nil)
 }

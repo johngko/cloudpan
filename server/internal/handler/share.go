@@ -43,6 +43,7 @@ type shareCreateIn struct {
 	AllowEdit       *bool  `json:"allowEdit"` // 分享访客可否在线编辑（缺省 = 允许）
 	Encrypted       *bool  `json:"encrypted"` // 端到端加密分享（客户端加密，服务端只存密文）
 	EncSalt         string `json:"encSalt"`   // 客户端生成的 base64(16B) 随机盐
+	CollectOnly     *bool  `json:"collectOnly"` // 文件收集模式：只能上传，不能查看/下载（须为目录）
 }
 
 func (h *ShareHandler) Create(c *gin.Context) {
@@ -103,6 +104,22 @@ func (h *ShareHandler) Create(c *gin.Context) {
 		}
 		allowEdit = false
 	}
+	// 文件收集模式：只进不出（访客只可上传），必须是目录；与端到端加密互斥
+	// （加密分享走密文目录上传流，语义冲突）
+	collect := in.CollectOnly != nil && *in.CollectOnly
+	if collect {
+		if !e.IsDir {
+			dto.Fail(c, 400, "文件收集分享必须是目录")
+			return
+		}
+		if encrypted {
+			dto.Fail(c, 400, "文件收集模式与加密分享不能同时开启")
+			return
+		}
+		allowDl = false
+		preview = false
+		allowEdit = false
+	}
 	var expires *time.Time
 	if in.ExpireDays > 0 {
 		t := time.Now().AddDate(0, 0, in.ExpireDays)
@@ -112,7 +129,7 @@ func (h *ShareHandler) Create(c *gin.Context) {
 		UserID: x.user.ID, PolicyID: p.ID, Path: vp, Name: e.Name, IsDir: e.IsDir,
 		Token: genID16() + genID16(), RemainDownloads: in.RemainDownloads,
 		AllowDownload: allowDl, PreviewEnabled: preview, AllowEdit: allowEdit, ExpiresAt: expires,
-		Encrypted: encrypted, EncSalt: in.EncSalt,
+		Encrypted: encrypted, EncSalt: in.EncSalt, CollectOnly: collect,
 	}
 	if in.Password != "" {
 		sh.PasswordHash = hashPassword(in.Password)
@@ -125,6 +142,12 @@ func (h *ShareHandler) Create(c *gin.Context) {
 		// GORM default:true 标签会跳过零值（false）不写入 INSERT 列，数据库默认值 true 生效——
 		// 显式关闭在线编辑时必须回写，否则「不允许编辑」的分享实际可被编辑
 		model.DB.Model(&sh).UpdateColumn("allow_edit", false)
+	}
+	if !allowDl {
+		model.DB.Model(&sh).UpdateColumn("allow_download", false)
+	}
+	if !preview {
+		model.DB.Model(&sh).UpdateColumn("preview_enabled", false)
 	}
 	middleware.Audit(c, "share", p.Name+":"+vp)
 	dto.OK(c, sh)
@@ -528,7 +551,7 @@ func (h *ShareHandler) Info(c *gin.Context) {
 	dto.OK(c, gin.H{
 		"name": sh.Name, "isDir": sh.IsDir, "size": size, "hasPassword": sh.PasswordHash != "",
 		"allowDownload": sh.AllowDownload, "previewEnabled": sh.PreviewEnabled,
-		"allowEdit": sh.AllowEdit,
+		"allowEdit": sh.AllowEdit, "collectOnly": sh.CollectOnly,
 		"encrypted": sh.Encrypted, "encSalt": sh.EncSalt,
 		"expiresAt": sh.ExpiresAt, "owner": owner.Nickname, "createdAt": sh.CreatedAt,
 		"views": sh.Views + 1, "downloads": sh.Downloads,
@@ -573,6 +596,11 @@ func (h *ShareHandler) List(c *gin.Context) {
 	}
 	if !sh.IsDir {
 		dto.Fail(c, 400, "该分享是单文件")
+		return
+	}
+	// 文件收集模式：访客看不到任何已有文件（只进不出）
+	if sh.CollectOnly {
+		dto.OK(c, []gin.H{})
 		return
 	}
 	// 加密分享：列表来自密文目录（sharedata/<token>/），与明文盘解耦
@@ -665,6 +693,10 @@ func (h *ShareHandler) Download(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if sh.CollectOnly {
+		dto.Fail(c, 403, "文件收集模式不提供下载")
+		return
+	}
 	if !sh.AllowDownload {
 		dto.Fail(c, 403, "分享者禁止下载")
 		return
@@ -685,6 +717,10 @@ func (h *ShareHandler) Download(c *gin.Context) {
 func (h *ShareHandler) Raw(c *gin.Context) {
 	sh, _, ok := h.guard(c)
 	if !ok {
+		return
+	}
+	if sh.CollectOnly {
+		dto.FailHTTP(c, 403, "文件收集模式不提供预览")
 		return
 	}
 	if !sh.PreviewEnabled {

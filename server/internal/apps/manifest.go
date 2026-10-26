@@ -25,6 +25,7 @@ var Manifest = []Def{
 	{Key: "flowchart", Name: "流程图", Icon: "flowchart", Desc: ".drawio 流程图 / UML 在线编辑", Version: "1.0", DefaultEnabled: true},
 	{Key: "image_editor", Name: "图片编辑器", Icon: "imageedit", Desc: "TOAST UI 图片编辑器（v9os 商店移植）：画笔/橡皮/蒙版/裁剪/滤镜/文字标注，PNG 保存到云盘", Version: "2.0", DefaultEnabled: true},
 	{Key: "pdf_reader", Name: "PDF 阅读器", Icon: "pdfreader", Desc: "pdf.js PDF 阅读器（v9os 商店移植）：缩略图/大纲/查找/标注/演示模式", Version: "2.0", DefaultEnabled: true},
+	{Key: "pdf_toolbox", Name: "PDF 工具箱", Icon: "pdfreader", Desc: "云端 PDF 处理（pdfcpu）：页数信息、多文件合并、按页拆分", Version: "1.0", DefaultEnabled: true},
 	{Key: "thumbnail", Name: "图片缩略图", Icon: "image", Desc: "服务端生成图片缩略图缓存", Version: "1.0", DefaultEnabled: true},
 	{Key: "version", Name: "版本管理", Icon: "refresh", Desc: "文件覆盖时保留历史版本", Version: "1.0", DefaultEnabled: true},
 	{Key: "notify", Name: "站内通知", Icon: "bell", Desc: "任务与配额事件通知中心", Version: "1.0", DefaultEnabled: true},

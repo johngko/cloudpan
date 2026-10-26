@@ -37,6 +37,12 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		sg.GET("/list", sh.List)
 		sg.GET("/download", sh.Download)
 		sg.GET("/raw", sh.Raw)
+		// 文件收集分享（CollectOnly）匿名上传三件套：init/complete 按 IP 限速防滥用；
+		// chunk 数据面不限次数（内容校验在 init 已定死大小），但按会话归属 + st 校验
+		collectLimiter := middleware.NewIPRateLimiter(30, 10) // 30 次/分钟，突发 10
+		sg.POST("/upload/init", middleware.RateLimit(collectLimiter), sh.CollectInit)
+		sg.PUT("/upload/chunk/:sid/:idx", sh.CollectChunk)
+		sg.POST("/upload/complete", middleware.RateLimit(collectLimiter), sh.CollectComplete)
 	}
 
 	// 公开分享链接的在线 Office 编辑器配置（匿名，Cloudreve 分享模式：任何人打开分享链接可进 ONLYOFFICE 编辑器）。
@@ -108,6 +114,33 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/stars", site.StarList)
 		ug.POST("/stars", site.StarAdd)
 		ug.DELETE("/stars", site.StarRemove)
+
+		// 重复文件清理（存储分析「同内容多副本」的行动入口；仅本地盘）
+		ug.POST("/fs/dup-purge", site.DupPurge)
+
+		// PDF 工具箱（pdfcpu 云端处理；写接口按规范挂应用门）
+		ug.GET("/fs/pdf/info", site.PdfInfo)
+		ug.POST("/fs/pdf/merge", middleware.AppGate("pdf_toolbox"), site.PdfMerge)
+		ug.POST("/fs/pdf/split", middleware.AppGate("pdf_toolbox"), site.PdfSplit)
+
+		// 用户标签体系（账号级元数据，与收藏同级；游客写路由由 guest 白名单 default-deny 挡住）
+		ug.GET("/tags", site.TagList)
+		ug.POST("/tags", site.TagCreate)
+		ug.PUT("/tags/:id", site.TagUpdate)
+		ug.DELETE("/tags/:id", site.TagDelete)
+		ug.GET("/tags/:id/objects", site.TagObjects)
+		ug.POST("/tags/set", site.TagSet)
+		ug.GET("/fs/path-tags", site.PathTags)
+
+		// 最近打开（跨盘聚合，资源管理器侧栏「最近使用」视图的数据源）
+		ug.GET("/recent", site.RecentList)
+		ug.POST("/recent", site.RecentRecord)
+
+		// API 令牌（可撤销第三方凭据，见 handler/tokens.go；创建/撤销游客不可用）
+		tk := &TokenHandler{}
+		ug.GET("/tokens", tk.List)
+		ug.POST("/tokens", tk.Create)
+		ug.DELETE("/tokens/:id", tk.Delete)
 
 		// 用户设置 KV（播放列表/观看进度等）
 		ug.GET("/settings", site.UserSettingsGet)

@@ -185,6 +185,9 @@ type UploadSession struct {
 	Received     string `gorm:"type:text" json:"received"` // JSON []int 已收分片
 	Status       string `gorm:"size:16;default:uploading" json:"status"` // uploading | merging | completed | aborted
 	Error        string `gorm:"size:512" json:"error"` // 异步合并/校验失败原因
+	// ShareToken：文件收集分享（CollectOnly）的匿名上传会话绑定——非空即该会话
+	// 由分享链接匿名访客发起，落盘属主为分享创建者（UserID），凭 token+提取码校验
+	ShareToken string `gorm:"size:40;index" json:"shareToken"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -213,6 +216,10 @@ type Share struct {
 	// AllowEdit 分享访客可否在线编辑（ONLYOFFICE 编辑器 edit 权限）；默认开，
 	// 与 Cloudreve 分享模式一致：任何人打开分享链接都能在线编辑，保存走创建者目录并归档旧版本
 	AllowEdit bool `gorm:"default:true" json:"allowEdit"`
+	// CollectOnly 文件收集模式（借鉴 Cloudreve 收集表单）：分享必须是目录。
+	// 访客打开链接只能上传（匿名分片上传，落盘到创建者目录），看不到任何已有文件、
+	// 不能下载/预览——"只进不出"的作业/素材收集口。
+	CollectOnly bool `gorm:"default:false" json:"collectOnly"`
 	// Encrypted 端到端加密分享（客户端加密，服务端只存密文）：
 	// 属主在浏览器里用 PBKDF2(提取码 + EncSalt) 派生 AES 密钥，把分享文件逐个加密后
 	// 上传到 DataDir/sharedata/<token>/；服务端永远接触不到明文。
@@ -255,7 +262,79 @@ type UserStar struct {
 	PolicyID  uint   `json:"policyId"`
 	Path      string `gorm:"size:512" json:"path"`
 	Name      string `gorm:"size:255" json:"name"`
+	// IsDir 收藏对象是目录还是文件：0 存量数据全是目录；文件收藏点击后进所在目录并选中该文件
+	IsDir     bool   `gorm:"default:true" json:"isDir"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ---- 标签（用户自定义颜色标签，跨存储策略标注目录/文件） ----
+
+// FileTag 用户自定义标签：名称 + 颜色（#rrggbb），仅本人可见
+type FileTag struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	UserID    uint   `gorm:"index" json:"userId"`
+	Name      string `gorm:"size:64" json:"name"`
+	Color     string `gorm:"size:16;default:#3b91d8" json:"color"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// FileTagging 标签 ↔ 路径关联（Name/IsDir 冗余存储：聚合视图无需回源驱动取元数据）
+type FileTagging struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	TagID     uint   `gorm:"index" json:"tagId"`
+	UserID    uint   `gorm:"index:idx_tagging_obj" json:"userId"`
+	PolicyID  uint   `gorm:"index:idx_tagging_obj" json:"policyId"`
+	Path      string `gorm:"size:512;index:idx_tagging_obj" json:"path"`
+	Name      string `gorm:"size:255" json:"name"`
+	IsDir     bool   `json:"isDir"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ---- 最近打开（资源管理器「最近使用」聚合视图） ----
+
+// RecentOpen 每用户每路径一条（重复打开刷新时间），全表按用户裁剪到最近 N 条
+type RecentOpen struct {
+	ID       uint      `gorm:"primaryKey" json:"id"`
+	UserID   uint      `gorm:"uniqueIndex:idx_recent_obj" json:"userId"`
+	PolicyID uint      `gorm:"uniqueIndex:idx_recent_obj" json:"policyId"`
+	Path     string    `gorm:"size:512;uniqueIndex:idx_recent_obj" json:"path"`
+	Name     string    `gorm:"size:255" json:"name"`
+	IsDir    bool      `json:"isDir"`
+	OpenedAt time.Time `gorm:"index" json:"openedAt"`
+}
+
+// ---- API 令牌（可撤销、带作用域与有效期的第三方访问凭据） ----
+
+// ApiToken 应用专用令牌：库内只存 SHA-256（泄露库不泄露令牌本体），
+// 明文仅在创建时返回一次。Scopes：rw=完整读写（默认）；ro=只读（拒绝写方法）。
+// 与 JWT 的区别：长期有效、可单独撤销、可设过期；改密（TokenVer+1）不影响令牌。
+type ApiToken struct {
+	ID         uint       `gorm:"primaryKey" json:"id"`
+	UserID     uint       `gorm:"index" json:"userId"`
+	Name       string     `gorm:"size:64" json:"name"`
+	KeyHash    string     `gorm:"size:64;uniqueIndex" json:"-"`
+	Prefix     string     `gorm:"size:16" json:"prefix"` // 展示用前缀（cpt_xxxx…）
+	Scopes     string     `gorm:"size:16;default:rw" json:"scopes"` // rw | ro
+	ExpiresAt  *time.Time `json:"expiresAt"`            // nil = 永不过期
+	LastUsedAt *time.Time `json:"lastUsedAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+// FileText 文本文件内容索引（全文检索用，懒索引）：搜索「内容」时按需把本地盘的
+// 文本类小文件读出来入库；命中判定靠 (hash 变、缺行) 触发重索引，查询走 LIKE
+// （语料有限，够用；MySQL ngram 全文索引留作后续升级空间）。
+// 只索引本地盘——云盘内容读取要走外部 API，代价不可控。
+type FileText struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"index" json:"userId"`
+	PolicyID  uint      `gorm:"uniqueIndex:idx_ft_obj" json:"policyId"`
+	Path      string    `gorm:"size:512;uniqueIndex:idx_ft_obj" json:"path"`
+	Name      string    `gorm:"size:255" json:"name"`
+	Ext       string    `gorm:"size:16" json:"ext"`
+	Size      int64     `json:"size"`    // 原文件字节数
+	ModTime   int64     `json:"-"`       // 原文件修改时间（unix ms）：size+modtime 一致即内容未变
+	Text      string    `gorm:"type:longtext" json:"-"` // 截断后的正文（上限 256KB）
+	IndexedAt time.Time `json:"indexedAt"`
 }
 
 // UserShare 站内用户共享：把目录共享给指定用户/用户组/所有注册用户（ro 只读 / rw 可写）
@@ -449,7 +528,8 @@ func InitDB(dataDir string) {
 	log.Printf("[CloudPan] 数据库类型: %s", dbType)
 	// quota_mb 列首次新增时，SQLite 会把存量行填 0（=不限量），必须回填 -1（=随组）
 	quotaColNew := !DB.Migrator().HasColumn(&User{}, "quota_mb")
-	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &UpdateLog{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{}); err != nil {
+	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &UpdateLog{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{},
+		&FileTag{}, &FileTagging{}, &RecentOpen{}, &ApiToken{}, &FileText{}); err != nil {
 		log.Fatalf("建表失败: %v", err)
 	}
 	// 存量秒传索引回填副本行（旧版本只有 SourcePath 单源记录）

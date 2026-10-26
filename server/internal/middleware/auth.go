@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"strings"
 	"sync"
@@ -47,8 +49,44 @@ func ParseToken(tokenStr string, secret []byte) (*Claims, error) {
 	return nil, jwt.ErrTokenInvalidClaims
 }
 
+// ---- API 令牌（cpt_ 前缀，见 model.ApiToken）----
+// 长期第三方凭据：库内只存 SHA-256，鉴权时对呈现值做哈希比对；
+// ro（只读）令牌在鉴权处直接拒绝非 GET/HEAD/OPTIONS（读端点全部是 GET，见 router）。
+// 改密（TokenVer 自增）不影响 API 令牌——这是应用专用密码的通用语义（rclone 等
+// 第三方工具无法跟随网页端改密轮转）；撤销走令牌管理页，禁用账号即刻生效。
+
+var (
+	apiTokenUseMu  sync.Mutex
+	apiTokenUseAt  = map[uint]time.Time{} // LastUsedAt 写库节流（≥60s 一次），防每请求一行 UPDATE
+)
+
+// apiTokenAuth 校验 cpt_ 令牌；返回 (令牌, 用户, 错误码 0=通过)。
+func apiTokenAuth(raw string) (*model.ApiToken, *model.User) {
+	sum := sha256.Sum256([]byte(raw))
+	var t model.ApiToken
+	if model.DB.Where("key_hash = ?", hex.EncodeToString(sum[:])).First(&t).Error != nil {
+		return nil, nil
+	}
+	if t.ExpiresAt != nil && time.Now().After(*t.ExpiresAt) {
+		return nil, nil
+	}
+	var u model.User
+	if model.DB.First(&u, t.UserID).Error != nil || u.Disabled {
+		return nil, nil
+	}
+	apiTokenUseMu.Lock()
+	if time.Since(apiTokenUseAt[t.ID]) > 60*time.Second {
+		apiTokenUseAt[t.ID] = time.Now()
+		now := time.Now()
+		model.DB.Model(&model.ApiToken{}).Where("id = ?", t.ID).UpdateColumn("last_used_at", &now)
+	}
+	apiTokenUseMu.Unlock()
+	return &t, &u
+}
+
 // Auth JWT 登录鉴权，并把 User 挂到上下文
-// 支持两种令牌载体：Authorization 头（axios）与 ?t= 查询参数（img/video/a 标签直链）
+// 支持三种载体：Authorization 头（axios）、?t= 查询参数（img/video/a 标签直链）、
+// 以及 cpt_ 前缀的 API 令牌（同样支持上述两种载体）
 func Auth(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
@@ -61,7 +99,28 @@ func Auth(secret []byte) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "未登录"})
 			return
 		}
-		claims, err := ParseToken(strings.TrimPrefix(h, "Bearer "), secret)
+		tokenStr := strings.TrimPrefix(h, "Bearer ")
+		// API 令牌分支（与 JWT 互斥，按前缀区分）
+		if strings.HasPrefix(tokenStr, "cpt_") {
+			t, u := apiTokenAuth(tokenStr)
+			if t == nil || u == nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "API 令牌无效或已过期"})
+				return
+			}
+			if t.Scopes == "ro" {
+				switch c.Request.Method {
+				case "GET", "HEAD", "OPTIONS":
+				default:
+					c.AbortWithStatusJSON(http.StatusForbidden, dto.R{Code: 403, Msg: "该 API 令牌为只读"})
+					return
+				}
+			}
+			c.Set("user", u)
+			c.Set("apiToken", t)
+			c.Next()
+			return
+		}
+		claims, err := ParseToken(tokenStr, secret)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "登录已过期"})
 			return

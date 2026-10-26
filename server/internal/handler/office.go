@@ -224,6 +224,9 @@ func loadPublicShare(token string) (*model.Share, error) {
 	if !sh.Available() {
 		return nil, errors.New("分享已过期")
 	}
+	if sh.CollectOnly {
+		return nil, errors.New("文件收集分享不提供在线编辑")
+	}
 	var owner model.User
 	if err := model.DB.First(&owner, sh.UserID).Error; err != nil || owner.Disabled {
 		return nil, errors.New("分享者账号不可用")
