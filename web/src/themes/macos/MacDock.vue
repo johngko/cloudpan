@@ -11,6 +11,7 @@
         <AppIcon :name="a.icon" :size="48" class="ico" />
         <div v-if="running(a.id)" class="dot"></div>
         <div class="tip">{{ a.name }}</div>
+        <WindowPeek v-if="running(a.id)" :wins="winsOf(a.id)" />
       </div>
     </template>
 
@@ -21,6 +22,7 @@
       <AppIcon name="recycle" :size="48" class="ico" />
       <div v-if="running('recycle')" class="dot"></div>
       <div class="tip">废纸篓</div>
+      <WindowPeek v-if="running('recycle')" :wins="winsOf('recycle')" />
     </div>
   </div>
 </template>
@@ -31,6 +33,7 @@ import { useWindows } from '../../stores/windows'
 import { visibleApps, type AppDef } from '../../stores/apps'
 import { useContextMenu } from '../../stores/ui'
 import AppIcon from '../../components/AppIcon.vue'
+import WindowPeek from '../../shell/WindowPeek.vue'
 
 const emit = defineEmits<{ (e: 'launchpad'): void }>()
 const store = useWindows()
@@ -45,6 +48,9 @@ const dockApps = computed(() =>
 
 function running(appId: string) {
   return store.wins.some(w => w.app === appId)
+}
+function winsOf(appId: string) {
+  return store.wins.filter(w => w.app === appId)
 }
 // 启动新应用时图标弹跳（真实 macOS Dock 行为）
 const bouncing = ref<Set<string>>(new Set())

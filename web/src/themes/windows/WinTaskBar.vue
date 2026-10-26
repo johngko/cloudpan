@@ -30,11 +30,12 @@
 
     <!-- 运行窗口任务胶囊（1:1：每窗 38px，渐变指示条，min 时图标弹跳收起） -->
     <div class="w12-taskbar" :class="{ on: tasks.length > 0 }">
-      <a v-for="w in tasks" :key="w.id" class="w12-tapp"
+      <div v-for="w in tasks" :key="w.id" class="w12-tapp"
         :class="{ foc: store.activeId === w.id && !w.minimized && !w.minimizing, min: w.minimized || w.minimizing }"
         :title="w.title" @click.stop="clickWin(w)">
         <AppIcon :name="w.icon" :size="26" />
-      </a>
+        <WindowPeek :wins="[w]" />
+      </div>
     </div>
 
     <!-- 主题切换：白天=太阳 / 夜间=月亮，居中交叉淡化 -->
@@ -125,6 +126,7 @@ import { useSession } from '../../stores/session'
 import { useNotify } from '../../stores/notify'
 import { useAppState } from '../../stores/appstate'
 import AppIcon from '../../components/AppIcon.vue'
+import WindowPeek from '../../shell/WindowPeek.vue'
 import WinStartMenu from './WinStartMenu.vue'
 import WinSearchWin from './WinSearchWin.vue'
 import WinWidgets from './WinWidgets.vue'

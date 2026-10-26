@@ -25,6 +25,7 @@
 
     <ContextMenu />
     <DialogHost />
+    <AltTabSwitcher v-if="altTab" :wins="tabWins" :idx="altTabIdx" @pick="pickWin" @close="closeAltTab" />
     <MacLock v-if="session.locked" @unlock="session.locked = false" />
     <TransferPanel v-if="transfer.visible" />
   </div>
@@ -42,6 +43,8 @@ import { wallpaperClass } from '../../assets/wallpapers'
 import MacWindowFrame from './MacWindowFrame.vue'
 import MacMenuBar from './MacMenuBar.vue'
 import WeatherWidget from '../../shell/WeatherWidget.vue'
+import AltTabSwitcher from '../../shell/AltTabSwitcher.vue'
+import { useShellHotkeys } from '../../shell/useShellHotkeys'
 import MacDock from './MacDock.vue'
 import MacLaunchpad from './MacLaunchpad.vue'
 import MacLock from './MacLock.vue'
@@ -54,6 +57,7 @@ import { isMobileLayout, isTouchLayout } from '../../utils/mobile'
 const router = useRouter()
 const session = useSession()
 const store = useWindows()
+const { altTab, altTabIdx, tabWins, pickWin, closeAltTab } = useShellHotkeys() // Alt+Tab 切换器 + 键盘分屏（桌面全局键位）
 const transfer = useTransfer()
 const ctx = useContextMenu()
 

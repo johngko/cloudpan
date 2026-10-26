@@ -10,7 +10,7 @@
         <button class="win-ctrl" @click="minimize" title="最小化">
           <svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 8.2h8" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
         </button>
-        <button class="win-ctrl" @click="toggleMax" :title="w.maximized ? '还原' : '最大化'">
+        <button class="win-ctrl" @click="toggleMax" @mouseenter="flyEnter" @mouseleave="flyLeave" :title="w.maximized ? '还原' : '最大化'">
           <!-- Win11 标准：最大化 = 单个空心方框；还原 = 前后两叠层方框 -->
           <svg v-if="!w.maximized" width="14" height="14" viewBox="0 0 16 16">
             <rect x="3.8" y="3.8" width="8.4" height="8.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
@@ -31,6 +31,7 @@
     <template v-if="!w.maximized">
       <div v-for="dir in dirs" :key="dir" class="win-resize" :class="dir" @pointerdown="onResizeDown(dir, $event)"></div>
     </template>
+    <SnapFlyout v-if="snapFly" :win-id="w.id" @keep="flyEnter" @leave="flyLeave" />
   </div>
 </template>
 
@@ -39,12 +40,13 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useWindows, type WinState } from '../../stores/windows'
 import { appComponent } from '../registry'
 import { useWindowChrome } from '../../shell/useWindowChrome'
+import SnapFlyout from '../../shell/SnapFlyout.vue'
 import AppIcon from '../../components/AppIcon.vue'
 
 const props = defineProps<{ win: WinState }>()
 const w = props.win
 const store = useWindows()
-const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions } = useWindowChrome(w)
+const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions, snapFly, flyEnter, flyLeave } = useWindowChrome(w)
 
 const comp = computed(() => appComponent(w.app))
 const dirs = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']

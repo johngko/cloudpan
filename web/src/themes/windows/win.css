@@ -314,12 +314,15 @@ html.theme-win12 {
 .w12-widgetsbtn.show .wid4 { margin-top: -14px; }
 /* 运行窗口任务胶囊（1:1：动态宽 + 渐变指示条） */
 .w12-taskbar {
+  /* 悬停预览卡向上盖过相邻 dock 胶囊：backdrop-filter 让本元素自成层叠上下文，
+     不抬 z 的话卡片会被后面 DOM 的 dock 组盖住（hover 断流） */
+  position: relative; z-index: 2;
   border-radius: 10px; background-color: var(--w12-cm);
   -webkit-backdrop-filter: blur(20px) saturate(2); backdrop-filter: blur(20px) saturate(2);
   box-shadow: 0 1px 2px #44444460, 0 3px 25px 1px var(--w12-shadow);
   outline: 1px solid #99999950;
   padding: 3px 2px; margin: 0 3px; height: 100%;
-  display: none; align-items: center; overflow: hidden;
+  display: none; align-items: center; overflow: visible;
   transition: 80ms;
 }
 .w12-taskbar.on { display: flex; }

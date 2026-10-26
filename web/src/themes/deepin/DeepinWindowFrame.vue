@@ -7,7 +7,7 @@
       <div class="win-tb-actions" ref="tbActions" @pointerdown.stop @mousedown.stop></div>
       <div class="dde-ctrls" @mousedown.stop>
         <button class="dde-ctrl" @click="minimize" title="最小化"><AppIcon name="min" :size="13" /></button>
-        <button class="dde-ctrl" @click="toggleMax" :title="w.maximized ? '还原' : '最大化'"><AppIcon name="max" :size="12" /></button>
+        <button class="dde-ctrl" @click="toggleMax" @mouseenter="flyEnter" @mouseleave="flyLeave" :title="w.maximized ? '还原' : '最大化'"><AppIcon name="max" :size="12" /></button>
         <button class="dde-ctrl close" @click="close" title="关闭"><AppIcon name="close" :size="13" /></button>
       </div>
     </div>
@@ -17,6 +17,7 @@
     <template v-if="!w.maximized">
       <div v-for="dir in dirs" :key="dir" class="win-resize" :class="dir" @pointerdown="onResizeDown(dir, $event)"></div>
     </template>
+    <SnapFlyout v-if="snapFly" :win-id="w.id" @keep="flyEnter" @leave="flyLeave" />
   </div>
 </template>
 
@@ -25,12 +26,13 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useWindows, type WinState } from '../../stores/windows'
 import { appComponent } from '../registry'
 import { useWindowChrome } from '../../shell/useWindowChrome'
+import SnapFlyout from '../../shell/SnapFlyout.vue'
 import AppIcon from '../../components/AppIcon.vue'
 
 const props = defineProps<{ win: WinState }>()
 const w = props.win
 const store = useWindows()
-const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions } = useWindowChrome(w)
+const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions, snapFly, flyEnter, flyLeave } = useWindowChrome(w)
 
 const comp = computed(() => appComponent(w.app))
 const dirs = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']

@@ -14,6 +14,7 @@
           <AppIcon :name="a.icon" :size="30" class="ico" />
           <div v-if="running(a.id)" class="dot" :class="{ multi: winCount(a.id) > 1 }"></div>
           <div class="tip">{{ a.name }}</div>
+          <WindowPeek v-if="running(a.id)" :wins="winsOf(a.id)" />
         </div>
       </template>
       <div class="dd-sep"></div>
@@ -21,6 +22,7 @@
         <AppIcon name="recycle" :size="30" class="ico" />
         <div v-if="running('recycle')" class="dot" :class="{ multi: winCount('recycle') > 1 }"></div>
         <div class="tip">回收站</div>
+        <WindowPeek v-if="running('recycle')" :wins="winsOf('recycle')" />
       </div>
     </div>
 
@@ -78,6 +80,7 @@ import { useNotify } from '../../stores/notify'
 import { useAppState } from '../../stores/appstate'
 import { useContextMenu } from '../../stores/ui'
 import AppIcon from '../../components/AppIcon.vue'
+import WindowPeek from '../../shell/WindowPeek.vue'
 import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
 import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
@@ -101,6 +104,9 @@ const dockApps = computed(() =>
 
 function running(appId: string) {
   return store.wins.some(w => w.app === appId)
+}
+function winsOf(appId: string) {
+  return store.wins.filter(w => w.app === appId)
 }
 function winCount(appId: string) {
   return store.wins.filter(w => w.app === appId).length

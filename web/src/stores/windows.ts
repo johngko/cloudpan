@@ -10,6 +10,8 @@ function shellInsets() {
 }
 
 export interface WinRect { x: number; y: number; w: number; h: number }
+/** Snap 分区：L/R 半屏，TL..BR 四象限（Flyout 与 Win+方向键共用） */
+export type SnapZone = 'L' | 'R' | 'TL' | 'TR' | 'BL' | 'BR'
 export interface WinState {
   id: number
   app: string
@@ -46,7 +48,9 @@ export const useWindows = defineStore('windows', {
     activeId: 0
   }),
   getters: {
-    taskbarWins(state): WinState[] { return state.wins }
+    taskbarWins(state): WinState[] { return state.wins },
+    /** 焦点历史（最近使用优先）：Alt+Tab 切换器与任务栏预览取序用 */
+    mru(state): WinState[] { return [...state.wins].sort((a, b) => b.z - a.z) }
   },
   actions: {
     open(app: string, props: any = null, opts: { title?: string; icon?: string; w?: number; h?: number } = {}) {
@@ -137,6 +141,27 @@ export const useWindows = defineStore('windows', {
         w.z = ++topZ
       }
       this.focus(id)
+    },
+    /** 把窗口吸附到指定分区（Flyout / Win+方向键共用）。半屏/四象限几何按主题保留区计算 */
+    snapTo(id: number, zone: SnapZone) {
+      const w = this.wins.find(x => x.id === id)
+      if (!w) return
+      const area = this.isMaximizedArea()
+      const half = { w: Math.round(area.w / 2), h: Math.round(area.h / 2) }
+      const rects: Record<SnapZone, WinRect> = {
+        L: { x: area.x, y: area.y, w: area.w - half.w, h: area.h },
+        R: { x: area.x + half.w, y: area.y, w: area.w - half.w, h: area.h },
+        TL: { x: area.x, y: area.y, w: half.w, h: area.h - half.h },
+        TR: { x: area.x + half.w, y: area.y, w: area.w - half.w, h: area.h - half.h },
+        BL: { x: area.x, y: area.y + half.h, w: half.w, h: area.h - half.h },
+        BR: { x: area.x + half.w, y: area.y + half.h, w: area.w - half.w, h: area.h - half.h }
+      }
+      const r = rects[zone]
+      if (!r) return
+      // 从最大化吸附：maximized 关掉即可，prev 里存着原浮动几何不动
+      w.maximized = false
+      this.focus(id)
+      this.setRect(id, r)
     },
     setRect(id: number, r: Partial<WinRect>) {
       const w = this.wins.find(x => x.id === id)

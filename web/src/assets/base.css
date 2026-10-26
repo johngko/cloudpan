@@ -496,3 +496,86 @@ select.input { cursor: pointer; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ============ 窗口手感（B3）：Snap flyout / Alt+Tab 切换器 / 任务栏悬停预览 ============ */
+/* 定位锚点：预览卡以任务钮为基准向上弹出；
+   ::before 把任务钮的悬停判定向上延 14px（预览卡就贴在上方），保证移入卡片过程不断流 */
+.w12-tapp, .dock-app, .dd-app { position: relative; }
+.w12-tapp::before, .dock-app::before, .dd-app::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: 14px; }
+
+/* --- Snap Layouts flyout（悬停最大化按钮） --- */
+.win-snapfly {
+  position: absolute; z-index: 70; top: 40px; right: 8px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--stroke);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  animation: snapfly-in 0.14s ease-out;
+}
+@keyframes snapfly-in { from { opacity: 0; transform: translateY(-6px); } }
+.snapfly-row { display: flex; gap: 8px; }
+.snapfly-grid { display: grid; grid-template-columns: repeat(2, 56px); gap: 8px; }
+.snapfly-cell {
+  width: 56px; height: 34px; padding: 4px; cursor: pointer;
+  border: 1px solid var(--stroke); border-radius: 6px; background: transparent;
+}
+.snapfly-cell:hover { background: var(--hover-b); }
+.sf-prev { position: relative; display: block; width: 100%; height: 100%; border: 1px solid var(--stroke); border-radius: 3px; }
+.sf-fill { position: absolute; background: var(--accent); opacity: 0.8; border-radius: 2px; }
+
+/* --- Alt+Tab 切换器 --- */
+.alttab-mask {
+  position: fixed; inset: 0; z-index: 9700;
+  background: rgba(8, 10, 16, 0.38); backdrop-filter: blur(3px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+}
+.alttab-row {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+  max-width: 86vw; padding: 18px; border-radius: 16px;
+  background: var(--bg); border: 1px solid var(--stroke);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.alttab-cell {
+  width: 130px; padding: 14px 10px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--text);
+}
+.alttab-cell:hover { background: var(--hover-b); }
+.alttab-cell.sel { background: var(--accent-weak); border-color: var(--accent); }
+.alttab-name { font-size: 12px; max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alttab-min { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.alttab-hint { font-size: 11.5px; color: var(--text-3); }
+
+/* --- 任务栏/Dock 悬停预览卡 --- */
+.win-peek {
+  /* 卡片下缘刻意与任务钮上沿重叠 10px（透明 border-top 桥接）：
+     斜向移入也不会穿过 hover 空隙 */
+  position: absolute; left: 50%; bottom: calc(100% - 10px); transform: translateX(-50%);
+  min-width: 190px; max-width: 300px; padding: 4px; z-index: 900;
+  border-radius: 10px; background: var(--bg); border: 1px solid var(--stroke);
+  /* 顶部透明桥接边：卡片与任务钮之间无缝隙可跨（hover 判定包含 padding 区），
+     background-clip 让卡片本体不画进桥接区 */
+  border-top: 14px solid transparent; background-clip: content-box;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  /* 离场宽限 .3s：允许鼠标斜向掠过钮与卡之间的缝隙不闪断 */
+  transition: opacity 0.15s, visibility 0s 0.3s;
+}
+.w12-tapp:hover > .win-peek, .w12-tapp > .win-peek:hover,
+.dock-app:hover > .win-peek, .dock-app > .win-peek:hover,
+.dd-app:hover > .win-peek, .dd-app > .win-peek:hover {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity 0.12s 0.12s, visibility 0s 0.12s;
+}
+.win-peek-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 10px; border: none; border-radius: 7px; cursor: pointer;
+  background: transparent; color: var(--text); text-align: left;
+}
+.win-peek-row:hover { background: var(--hover-b); }
+.wp-title { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-min { flex: none; color: var(--text-3); font-size: 11px; }
+.wp-close { flex: none; display: inline-flex; padding: 3px; border: none; border-radius: 5px; background: transparent; color: var(--text-3); cursor: pointer; }
+.wp-close:hover { background: #d80d1c; color: #fff; }
+/* Dock 上已有运行窗口预览时，隐藏旧的名称 tooltip 避免重叠 */
+.dock-app:has(> .win-peek):hover .tip, .dd-app:has(> .win-peek):hover .tip { opacity: 0; }

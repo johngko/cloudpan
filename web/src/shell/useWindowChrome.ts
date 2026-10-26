@@ -193,5 +193,18 @@ export function useWindowChrome(w: WinState) {
     document.addEventListener('pointercancel', onUp)
   }
 
-  return { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions }
+  // ---- Snap Layouts flyout：悬停最大化按钮唤出（仅启用贴边分屏的主题）----
+  const snapFly = ref(false)
+  let flyTimer: number | undefined
+  function flyEnter() {
+    if (!snapEdges.value || isMobileLayout()) return
+    window.clearTimeout(flyTimer)
+    flyTimer = window.setTimeout(() => { snapFly.value = true }, 400)
+  }
+  function flyLeave() {
+    window.clearTimeout(flyTimer)
+    flyTimer = window.setTimeout(() => { snapFly.value = false }, 350)
+  }
+
+  return { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions, snapFly, flyEnter, flyLeave }
 }
