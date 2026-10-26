@@ -181,6 +181,14 @@ export const passkeyApi = {
     post<{ token: string; refreshToken: string; user: any; isGuest: boolean }>('/auth/passkey/login/finish', { username, sid, response })
 }
 
+// Web Push（B9）：VAPID 公钥 + 订阅管理（订阅本身走浏览器 PushManager，这里只上报/查询）
+export const pushApi = {
+  vapid: () => get<{ publicKey: string }>('/push/vapid'),
+  subscribe: (d: { endpoint: string; p256dh: string; auth: string }) => put('/push/subscribe', d),
+  unsubscribe: (endpoint: string) => del('/push/subscribe?endpoint=' + encodeURIComponent(endpoint)),
+  subs: () => get<{ subs: { id: number; host: string; endpoint: string; createdAt: string }[] }>('/push/subs')
+}
+
 export const siteApi = {
   publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
 }

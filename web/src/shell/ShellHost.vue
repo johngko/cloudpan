@@ -19,6 +19,7 @@ import { getToken } from '../api/http'
 import { resolveTheme, preloadApps } from '../themes/registry'
 import { settingsApi } from '../api/modules'
 import { useAppState } from '../stores/appstate'
+import { pwaDesktopStart, pwaDesktopStop } from './usePwaShell'
 
 // 外壳宿主：路由只挂载本组件，具体外壳（开机/登录/注册/桌面）按当前主题动态解析。
 // 切换主题时组件热替换，窗口等状态保存在 Pinia stores 中不丢失。
@@ -79,13 +80,14 @@ watch(() => props.screen, async (s) => {
     }
     veil.value = false
     startRotate()
+    pwaDesktopStart() // 分享收件箱/推送补订阅/相册备份循环（仅桌面激活期，见 usePwaShell）
     preloadApps() // 空闲预热应用 chunk：之后打开应用不再等网络拉取
   }
-  else { veil.value = false; stopRotate() }
+  else { veil.value = false; stopRotate(); pwaDesktopStop() }
 }, { immediate: true })
 
 // 路由离开/组件卸载时兜底清理：只靠 watch(screen) 在异常卸载路径下可能漏停
-onBeforeUnmount(stopRotate)
+onBeforeUnmount(() => { stopRotate(); pwaDesktopStop() })
 </script>
 
 <style scoped>

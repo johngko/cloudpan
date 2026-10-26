@@ -249,6 +249,69 @@
           <div v-if="upSaved" style="font-size: 12px; color: var(--success); margin-top: 14px">已保存</div>
         </template>
 
+        <!-- 手机（B9：浏览器推送 + 相册备份 / 系统分享收件箱） -->
+        <template v-else-if="tab === 'mobile'">
+          <h2 style="font-size: 19px; margin-bottom: 20px">手机</h2>
+          <div class="form-row" style="margin-bottom: 26px">
+            <label>浏览器推送（新分享/任务/通知直达手机与桌面）</label>
+            <div v-if="!pushOk" style="font-size: 12px; color: var(--text-3); max-width: 620px">
+              当前浏览器不支持 Web Push（需要 https 访问 + 支持 Service Worker 的浏览器；iOS 需把网站「添加到主屏幕」后在站点设置里允许通知）
+            </div>
+            <template v-else>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                <button class="btn primary" :disabled="pushBusy" @click="doEnablePush">{{ pushBusy ? '等待系统授权…' : '开启推送' }}</button>
+                <span style="font-size: 12px; color: var(--text-3)">开启后该浏览器的标签页即使没打开网盘页面（有 Service Worker 驻留）也能收到通知</span>
+              </div>
+              <table class="file-list" style="position: static; margin-top: 12px; max-width: 620px">
+                <thead><tr><th>设备（推送服务）</th><th>订阅于</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-for="s in pushSubs" :key="s.id">
+                    <td><code>{{ s.host }}</code></td>
+                    <td>{{ String(s.createdAt).slice(0, 16).replace('T', ' ') }}</td>
+                    <td><button class="btn" @click="dropPushSub(s)">移除</button></td>
+                  </tr>
+                  <tr v-if="!pushSubs.length"><td colspan="3" style="color: var(--text-3)">暂无订阅</td></tr>
+                </tbody>
+              </table>
+              <div style="font-size: 11.5px; color: var(--text-3); margin-top: 8px; max-width: 620px">
+                移除只停止服务端向该端点推送；本浏览器下次打开桌面还会重新上报订阅，彻底关闭请在浏览器站点设置里关闭「通知」权限
+              </div>
+            </template>
+          </div>
+          <div class="form-row">
+            <label>相册自动备份（上传到本地盘 {{ BACKUP_DIR }} 目录）</label>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px">
+              <select class="input" v-model.number="mbPolicyId" style="width: 170px">
+                <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }} ({{ p.letter }})</option>
+              </select>
+              <button class="btn" @click="chooseBackupDir">{{ mbHasDir ? '更换相册目录' : '选择相册目录' }}</button>
+              <button v-if="mbHasDir" class="btn" @click="toggleAutoBackup">{{ mbOn ? '暂停自动备份' : '恢复自动备份' }}</button>
+              <button v-if="mbHasDir" class="btn" @click="scanNow" :disabled="mbBusy">{{ mbBusy ? '扫描中…' : '立即扫描一次' }}</button>
+              <button v-if="mbHasDir" class="btn" @click="clearBackup">清除</button>
+            </div>
+            <div style="font-size: 12px; color: var(--text-3); max-width: 640px; line-height: 1.7; margin-bottom: 12px">
+              <template v-if="mbSupported">
+                选定目录后，应用打开期间每 10 分钟自动扫描一次，只上传游标里没见过的文件（按文件名+大小+修改时间去重），
+                已备份的不会重复上传。目录句柄保存在本浏览器（IndexedDB），换浏览器/设备需重新选定。
+                <b>{{ mbHasDir ? (mbOn ? '自动备份运行中' : '已选定目录，当前已暂停') : '尚未选定目录' }}</b>
+              </template>
+              <template v-else>
+                当前浏览器不支持直接读取本机相册目录（需要 Chrome/Edge），可用下方「手动增量备份」：
+                每次手选一批照片/视频，已备份过的会自动跳过
+              </template>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+              <input ref="mbFileEl" type="file" multiple accept="image/*,video/*" style="display: none" @change="manualBackup" />
+              <button class="btn" @click="pickManual">手动增量备份（手选文件）</button>
+              <span style="font-size: 12px; color: var(--text-3)">同一份文件只会备份一次，随时可用</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-3); margin-top: 14px; max-width: 640px; line-height: 1.7">
+              另外：在手机系统分享面板里把照片/视频/文本/链接分享到「CloudPan」（PWA 安装后支持），
+              回到网盘桌面会自动收下：文件进上传队列，文本/链接存成 {{ BACKUP_DIR }} 旁的「/来自分享」Markdown
+            </div>
+          </div>
+        </template>
+
         <!-- 离线下载 -->
         <template v-else-if="tab === 'offline'">
           <h2 style="font-size: 19px; margin-bottom: 20px">离线下载</h2>
@@ -396,7 +459,7 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
+import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, settingsApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
@@ -468,6 +531,7 @@ const tabs = computed(() => [
   { id: 'account', name: '账号', icon: 'user' },
   { id: 'shares', name: '我的分享', icon: 'share' },
   { id: 'upload', name: '上传', icon: 'upload' },
+  { id: 'mobile', name: '手机', icon: 'download' },
   ...(canOffline.value ? [{ id: 'offline', name: '离线下载', icon: 'download' }] : []),
   { id: 'webhook', name: 'Webhook', icon: 'share' },
   { id: 'logs', name: '操作记录', icon: 'list' },
@@ -543,6 +607,88 @@ async function removePasskey(id: number) {
     await loadPasskeys()
   } catch (e: any) { toast.error(e.message) }
 }
+
+// ---- B9 手机页签：浏览器推送 + 相册备份 ----
+import { pushApi } from '../api/modules'
+import { pushSupported, enablePush } from '../utils/pwa'
+import { fsApiSupported, pickBackupDir, getBackupHandle, clearBackupDir, runBackup, BACKUP_DIR } from '../utils/mobileBackup'
+
+const pushOk = pushSupported()
+const pushBusy = ref(false)
+const pushSubs = ref<{ id: number; host: string; endpoint: string; createdAt: string }[]>([])
+async function loadPushSubs() {
+  try { pushSubs.value = (await pushApi.subs()).subs } catch { pushSubs.value = [] }
+}
+async function doEnablePush() {
+  if (pushBusy.value) return
+  pushBusy.value = true
+  try {
+    const msg = await enablePush()
+    if (msg.startsWith('已')) toast.success(msg); else toast.error(msg)
+    await loadPushSubs()
+  } catch (e: any) {
+    toast.error(e?.message || '订阅失败')
+  } finally { pushBusy.value = false }
+}
+async function dropPushSub(s: { id: number; host: string; endpoint: string }) {
+  try {
+    await pushApi.unsubscribe(s.endpoint)
+    await loadPushSubs()
+  } catch (e: any) { toast.error(e?.message || '移除失败') }
+}
+
+const mbSupported = fsApiSupported()
+const mbHasDir = ref(false)
+const mbOn = ref(false)
+const mbBusy = ref(false)
+const mbPolicyId = ref(0)
+const mbFileEl = ref<HTMLInputElement | null>(null)
+function pickManual() { mbFileEl.value?.click() }
+async function loadMobileTab() {
+  await loadPushSubs()
+  mbHasDir.value = !!(await getBackupHandle())
+  try { mbOn.value = (await settingsApi.get(['mobile_backup'])).mobile_backup === 'on' } catch { mbOn.value = false }
+  if (!policies.value.length) { try { policies.value = await fsApi.policies() } catch { /* 下面按钮会提示 */ } }
+  if (!mbPolicyId.value) {
+    const loc = policies.value.find((p: any) => p.type === 'local') || policies.value[0]
+    mbPolicyId.value = loc?.id || 0
+  }
+}
+async function chooseBackupDir() {
+  const r = await pickBackupDir()
+  if (r === 'ok') { mbHasDir.value = true; mbOn.value = true; toast.success('相册目录已选定，自动备份已开启（应用打开期间每 10 分钟扫描一次）') }
+  else if (r === 'unsupported') toast.error('当前浏览器不支持选择本机目录，请用下方「手动增量备份」')
+}
+async function toggleAutoBackup() {
+  mbOn.value = !mbOn.value
+  try { await settingsApi.set('mobile_backup', mbOn.value ? 'on' : 'off') } catch { /* 偏好没存上不影响本会话 */ }
+}
+async function clearBackup() {
+  if (!await uiDlg.confirm('清除备份目录', '将移除本浏览器记住的相册目录（已上传到网盘的文件不受影响）？')) return
+  await clearBackupDir()
+  mbHasDir.value = false; mbOn.value = false
+}
+function mbAdd(pid: number, parent: string, files: File[]) { transfer.addFiles(pid, parent, files) }
+async function scanNow() {
+  if (!mbPolicyId.value) { toast.error('请先选择目标磁盘'); return }
+  mbBusy.value = true
+  try {
+    const n = await runBackup(mbPolicyId.value, mbAdd)
+    toast.show(n ? `发现 ${n} 个新文件，已加入上传队列（${BACKUP_DIR}）` : '没有发现新文件（游标内都已备份过）', 'info')
+  } catch (e: any) { toast.error(e?.message || '扫描失败') } finally { mbBusy.value = false }
+}
+async function manualBackup(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const files = [...(input.files || [])]
+  input.value = ''
+  if (!files.length) return
+  if (!mbPolicyId.value) { toast.error('请先选择目标磁盘'); return }
+  try {
+    const n = await runBackup(mbPolicyId.value, mbAdd, files)
+    toast.show(n ? `新增 ${n} 个文件已加入上传队列（已备份过的自动跳过）` : '所选文件都已备份过', 'info')
+  } catch (e: any) { toast.error(e?.message || '备份失败') }
+}
+watch(tab, v => { if (v === 'mobile') loadMobileTab() })
 
 // ---- B16 Webhook tab ----
 const hooks = ref<any[]>([])

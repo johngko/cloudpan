@@ -11,6 +11,7 @@ import './themes/registry' // 各主题包 CSS 随注册表静态加载
 // 使 [data-mobile] 作用域的规则能覆盖主题默认值（见 assets/mobile.css 顶部说明）
 import './assets/mobile.css'
 import { useViewport } from './stores/viewport'
+import { registerSW } from './utils/pwa'
 
 const app = createApp(App)
 app.use(createPinia())
@@ -29,3 +30,6 @@ session.loadSite()
 if (getToken()) { ensureBootData(); viewport.loadPref() }
 app.use(router)
 app.mount('#app')
+// PWA：注册 Service Worker（Share Target 收件箱 + Web Push 的接收端；
+// 处理逻辑都在登录态应用内做，SW 只负责收与弹通知）
+registerSW()

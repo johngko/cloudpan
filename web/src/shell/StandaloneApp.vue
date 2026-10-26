@@ -52,6 +52,9 @@
         <component :is="appComp" :winId="'standalone'" :props="{}" />
       </div>
     </div>
+    <!-- 独立模式没有桌面外壳挂载 DialogHost：toast/对话框宿主在此自带，
+         否则应用内所有 toast/确认框都会静默丢失 -->
+    <DialogHost />
   </div>
 </template>
 
@@ -63,6 +66,7 @@ import { ref, computed, provide, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
+import DialogHost from './DialogHost.vue'
 import { appDef } from '../stores/apps'
 import { useAppState } from '../stores/appstate'
 import { appComponent } from '../themes/registry'

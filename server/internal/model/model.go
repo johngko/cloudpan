@@ -454,6 +454,29 @@ type Passkey struct {
 	CreatedAt time.Time
 }
 
+// PushSub B9 Web Push 订阅（每用户多条：手机/桌面/多浏览器）
+type PushSub struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"uniqueIndex:idx_pushsub;index"`
+	Endpoint  string    `gorm:"uniqueIndex:idx_pushsub;size:512"`
+	P256dh    string    `gorm:"size:128"`
+	Auth      string    `gorm:"size:64"`
+	CreatedAt time.Time
+}
+
+// PhotoExif C3 照片拍摄时间缓存（EXIF DateTimeOriginal，回退 DateTime）。
+// ShotTime 为 EXIF 原始串；空表示无 EXIF，前端回落文件 mtime。
+// 唯一键必须含 UserID：本地盘策略的虚拟路径按用户隔离，同一路径属不同用户是不同文件。
+type PhotoExif struct {
+	ID       uint   `gorm:"primaryKey"`
+	UserID   uint   `gorm:"uniqueIndex:idx_pex;index"`
+	PolicyID uint   `gorm:"uniqueIndex:idx_pex"`
+	Path     string `gorm:"uniqueIndex:idx_pex;size:512"`
+	Size     int64
+	ModTime  int64
+	ShotTime string `gorm:"size:32"`
+}
+
 type SiteSetting struct {
 	Key   string `gorm:"size:64;primaryKey" json:"key"`
 	Value string `gorm:"type:text" json:"value"`
@@ -566,7 +589,7 @@ func InitDB(dataDir string) {
 	quotaColNew := !DB.Migrator().HasColumn(&User{}, "quota_mb")
 	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &UpdateLog{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{},
 		&FileTag{}, &FileTagging{}, &RecentOpen{}, &ApiToken{}, &FileText{},
-		&Webhook{}, &WebhookDelivery{}, &Passkey{}); err != nil {
+		&Webhook{}, &WebhookDelivery{}, &Passkey{}, &PhotoExif{}, &PushSub{}); err != nil {
 		log.Fatalf("建表失败: %v", err)
 	}
 	// 存量秒传索引回填副本行（旧版本只有 SourcePath 单源记录）

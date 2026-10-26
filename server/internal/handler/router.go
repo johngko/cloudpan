@@ -27,6 +27,7 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 	api.POST("/auth/refresh", middleware.RateLimit(refreshLimiter), auth.Refresh)
 	// B5 Passkey 登录：公开端点，与账号登录同级别的 IP 限速
 	pk := &PasskeyHandler{Secret: cfg.Secret}
+	push := &PushHandler{}
 	pkLimiter := middleware.NewIPRateLimiter(15, 8)
 	api.POST("/auth/passkey/login/begin", middleware.RateLimit(pkLimiter), pk.BeginLogin)
 	api.POST("/auth/passkey/login/finish", middleware.RateLimit(pkLimiter), pk.FinishLogin)
@@ -94,6 +95,13 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.GET("/fs/search", site.Search)
 		ug.GET("/fs/global-search", middleware.AppGate("global_search"), site.GlobalSearch)
 		ug.GET("/fs/properties", site.Properties)
+		// C3 照片时间流：目录内照片 EXIF 拍摄时间（带缓存）
+		ug.GET("/fs/photo-times", site.PhotoTimes)
+		// B9 Web Push 订阅管理（写挂 AppGate；游客 GuestReadOnly 已被挡）
+		ug.GET("/push/vapid", push.VapidPublicKey)
+		ug.PUT("/push/subscribe", middleware.AppGate("push"), push.Subscribe)
+		ug.DELETE("/push/subscribe", middleware.AppGate("push"), push.Unsubscribe)
+		ug.GET("/push/subs", push.Mine)
 		// 存储分析（只读；受「存储分析」功能门控，游客由 default-deny 的写白名单之外不受限，故读门控按功能可用性）
 		ug.GET("/fs/analysis", middleware.AppGateAny("storage_analysis"), site.StorageAnalysis)
 		ug.GET("/fs/raw", site.Raw)

@@ -30,8 +30,9 @@
         <div v-for="g in groups" :key="g.month" class="ph-month">
           <div class="ph-month-head">{{ g.label }} <span class="ph-month-n">{{ g.items.length }}</span></div>
           <div class="ph-grid">
-            <div v-for="f in g.items" :key="f.path" class="ph-cell" title="点击查看大图" @click="openViewer(f)">
+            <div v-for="f in g.items" :key="f.path" class="ph-cell" :title="(f.shotStr ? '拍摄 ' + f.shotStr : f.name) + ' · 点击查看大图'" @click="openViewer(f)">
               <img :src="thumbUrl(f)" loading="lazy" alt="" />
+              <span v-if="f.shotStr" class="ph-exif" title="按 EXIF 拍摄时间归档">EXIF</span>
             </div>
           </div>
         </div>
@@ -93,6 +94,14 @@ async function walk(d: string, rel: string, out: any[]) {
   }
 }
 
+// C3 时间流：EXIF 拍摄时间串 "2024:05:12 10:30:00" → 本地毫秒；无 EXIF 回落 mtime
+function exifToMs(s?: string): number {
+  if (!s) return 0
+  const m = s.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/)
+  if (!m) return 0
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime()
+}
+
 async function load() {
   if (!policyId.value) return
   loading.value = true
@@ -100,7 +109,14 @@ async function load() {
   try {
     const out: any[] = []
     await walk(dir.value, '', out)
-    photos.value = out.sort((a, b) => (b.modTime || 0) - (a.modTime || 0))
+    // 拍摄时间一次取回（服务端 EXIF 缓存）；失败不阻塞——回落 mtime 分组
+    let times: Record<string, string> = {}
+    try {
+      const d: any = await get(`/fs/photo-times?policyId=${policyId.value}&path=${encodeURIComponent(dir.value)}`)
+      times = d?.times || {}
+    } catch { /* 降级 */ }
+    for (const f of out) { f.shot = exifToMs(times[f.path]); f.shotStr = times[f.path] || '' }
+    photos.value = out.sort((a, b) => (b.shot || b.modTime || 0) - (a.shot || a.modTime || 0))
   } catch (e: any) {
     toast.error('收集图片失败：' + (e.message || '未知错误'))
   } finally {
@@ -108,12 +124,12 @@ async function load() {
   }
 }
 
-// 按月份分组（modTime → YYYY-MM，新→旧）
+// 按月份分组（拍摄时间优先，无 EXIF 回落 modTime → YYYY-MM，新→旧）
 const groups = computed(() => {
   const m = new Map<string, any[]>()
   for (const f of photos.value) {
-    const d = new Date(f.modTime || 0)
-    if (!f.modTime) continue
+    const d = new Date(f.shot || f.modTime || 0)
+    if (!f.shot && !f.modTime) continue
     const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
     if (!m.has(key)) m.set(key, [])
     m.get(key)!.push(f)
@@ -172,10 +188,14 @@ onMounted(async () => {
   gap: 6px;
 }
 .ph-cell {
-  aspect-ratio: 1; border-radius: 6px; overflow: hidden; cursor: pointer;
+  aspect-ratio: 1; border-radius: 6px; overflow: hidden; cursor: pointer; position: relative;
   background: rgba(127, 127, 127, 0.12);
 }
 .ph-cell:hover { outline: 2px solid var(--theme-1, #3b91d8) }
+.ph-exif {
+  position: absolute; right: 5px; bottom: 5px; padding: 1px 5px; border-radius: 4px;
+  font-size: 10px; color: #fff; background: rgba(0, 0, 0, 0.55); pointer-events: none;
+}
 .ph-cell img {
   width: 100%; height: 100%; object-fit: cover; display: block;
 }

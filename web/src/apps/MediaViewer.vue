@@ -389,6 +389,8 @@ onBeforeUnmount(() => { saveProgress(); destroy() })
 .mv-sub { font-size: 12px; color: #8fa5bd; margin-top: 4px; }
 .mv-nolrc { font-size: 12px; color: #5c6b7e; }
 .mv-name { font-size: 12px; color: var(--text-3); max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* B7 波形画布：CSS 决定显示尺寸，JS 按 DPR 设 backing store */
+.mv-wave { width: min(560px, 92%); height: 84px; display: block; cursor: pointer; border-radius: 8px; background: rgba(255,255,255,.04); }
 /* APlayer 深色融合 */
 .mv-audio :deep(.aplayer) { width: min(560px, 92%); background: rgba(255,255,255,.05); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
 .mv-audio :deep(.aplayer .aplayer-lrc) { text-shadow: none; }

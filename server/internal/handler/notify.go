@@ -87,6 +87,14 @@ func Notify(userID uint, typ, title, content string, refID uint) {
 	}
 	hub.publish(userID, n)
 	dispatchOutbound(userID, n)
+	// B9 Web Push：推给该用户已订阅的浏览器（异步，失败只记日志）
+	if n.Title != "" {
+		p := pushNotifyPayload{Title: n.Title, Body: truncateRunes(n.Content, 200), Type: n.Type, Tag: "cloudpan"}
+		go func() {
+			defer func() { _ = recover() }()
+			pushUser(userID, p)
+		}()
+	}
 }
 
 // 每用户保留的通知条数
