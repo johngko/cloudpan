@@ -28,6 +28,7 @@
 
     <!-- 右区：托盘（DDE tray：网络/通知/传输/时钟）+ 显示桌面窄条 -->
     <div class="tb-right">
+      <div class="dp-item" :class="{ on: desksOpen }" title="任务视图（虚拟桌面）" @click.stop="desksOpen = !desksOpen"><AppIcon name="taskview" :size="16" class="dp-ico" /></div>
       <div class="dp-item" title="小组件" @click.stop="openWidgets"><AppIcon name="grid" :size="16" class="dp-ico" /></div>
       <div class="dp-item" title="搜索" @click.stop="openSearch"><AppIcon name="search" :size="16" class="dp-ico" /></div>
       <div class="dp-item" title="网络测速" @click.stop="openSpeedtest"><AppIcon name="wifi" :size="16" class="dp-ico" /></div>
@@ -41,8 +42,12 @@
     </div>
   </div>
 
+  <!-- B8 虚拟桌面条 -->
+  <div v-if="desksOpen" class="dsk-anchor dsk-anchor-deepin" @click.stop="desksOpen = false" @click.self="desksOpen = false"><DesktopStrip /></div>
+
   <!-- 全局搜索面板（DDE：任务栏右侧搜索入口） -->
   <GlobalSearchPanel v-if="searchOpen" @close="searchOpen = false" />
+
 
   <!-- 小组件面板（与 win12 的小组件对齐） -->
   <WidgetsPanel v-if="widgetsOpen" @close="widgetsOpen = false" />
@@ -83,6 +88,7 @@ import AppIcon from '../../components/AppIcon.vue'
 import WindowPeek from '../../shell/WindowPeek.vue'
 import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
 import { globalSearchTick } from '../../shell/hotkeys'
+import DesktopStrip from '../../shell/DesktopStrip.vue'
 import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
 defineEmits<{ (e: 'launcher'): void }>()
@@ -97,6 +103,7 @@ const notifyAvail = computed(() => useAppState().isAvailable('notify'))
 const TRASH: AppDef = { id: 'recycle', name: '回收站', icon: 'recycle', w: 960, h: 600 }
 // 全局搜索面板开关（任务栏右侧搜索入口）
 const searchOpen = ref(false)
+const desksOpen = ref(false)
 watch(globalSearchTick, () => { searchOpen.value = true }) // Ctrl/⌘+K
 // 小组件面板开关
 const widgetsOpen = ref(false)

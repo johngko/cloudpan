@@ -3,13 +3,15 @@
     <!-- 标签页 -->
     <div class="exp-tabs">
       <div v-for="(t, i) in tabs" :key="i" class="exp-tab" :class="{ active: i === activeIdx }"
-        :title="tabTitle(t)" @mousedown.middle="closeTab(i)" @click="switchTab(i)">
+        :title="tabTitle(t)" @mousedown="onTabDown($event, i)" @mousedown.middle="closeTab(i)" @click="switchTab(i)">
         <AppIcon :name="t.policyId ? 'drive' : 'thispc'" :size="13" />
         <span class="t-label">{{ tabTitle(t) }}</span>
         <span class="t-close" @click.stop="closeTab(i)"><AppIcon name="close" :size="9" /></span>
       </div>
       <div class="exp-tab-add" title="新建标签页" @click="addTab(null, '/')"><AppIcon name="plus" :size="13" /></div>
+      <div v-if="isTorn" class="exp-tab-tear" title="将本窗口全部标签归位到主资源管理器窗口" @click="tearHome">↩ 归位</div>
     </div>
+    <div v-if="tearDrag" class="tear-ghost" :style="{ left: tearDrag.x + 14 + 'px', top: tearDrag.y + 14 + 'px' }">{{ tearDrag.name }}</div>
     <!-- 游客临时空间提示：上传的文件 24 小时后自动清除（后端 sweepGuestWorkspace 执行清理） -->
     <div v-if="session.isGuest && !onSharedDrive" class="guest-ttl-bar">
       <AppIcon name="info" :size="13" />
@@ -665,6 +667,69 @@ function closeTab(i: number) {
   activeIdx.value = next
   load()
 }
+
+// ---- B10 标签拖出成独立窗口（tear-off）/ 归位（tear-home）----
+// 借鉴 Chrome/VS Code：按住标签横向拖出阈值即脱离成窗（Golden Layout popout 语义）；
+// 脱离窗带 torn 标记，「归位」把全部标签交还给 id 最小的主窗口后自关闭。
+// 跨窗口交接走 window 级 CustomEvent（同一 Pinia 之外无共享实例状态，事件最省心）。
+const isTorn = !!props.props?.torn
+const tearDrag = ref<{ i: number; x: number; y: number; name: string } | null>(null)
+function onTabDown(e: MouseEvent, i: number) {
+  if (e.button !== 0 || isMobileLayout()) return // 手机布局无精确拖拽
+  if ((e.target as HTMLElement).closest('.t-close')) return
+  const sx = e.clientX, sy = e.clientY
+  const move = (ev: MouseEvent) => {
+    if (!tearDrag.value) {
+      if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 10) return
+      if (!tabs.value[i]) return
+      tearDrag.value = { i, x: ev.clientX, y: ev.clientY, name: tabTitle(tabs.value[i]) }
+    } else {
+      tearDrag.value.x = ev.clientX; tearDrag.value.y = ev.clientY
+    }
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    if (tearDrag.value) { tearDrag.value = null; tearOff(i) }
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+function cloneTab(t: Tab): Tab { return { ...t, history: [...(t.history || [])], fwdStack: [...(t.fwdStack || [])] } }
+function tearOff(i: number) {
+  const t = tabs.value[i]; if (!t) return
+  const wasOnly = tabs.value.length === 1
+  if (!wasOnly) {
+    tabs.value.splice(i, 1)
+    if (activeIdx.value >= tabs.value.length) activeIdx.value = tabs.value.length - 1
+    load()
+  }
+  store.open('explorer', { tabs: [cloneTab(t)], activeIdx: 0, torn: true })
+  if (wasOnly) store.close(props.winId)
+}
+function tearHome() {
+  window.dispatchEvent(new CustomEvent('cp-tear-home', { detail: { from: props.winId, tabs: tabs.value.map(cloneTab) } }))
+}
+function onTearHome(ev: Event) {
+  if (isTorn) return
+  const d = (ev as CustomEvent).detail
+  const mains = store.wins.filter(w => w.app === 'explorer' && !w.props?.torn)
+  if (!mains.length || Math.min(...mains.map(w => w.id)) !== props.winId) return // 只有主窗口收
+  for (const t of d.tabs) tabs.value.push(cloneTab(t))
+  activeIdx.value = tabs.value.length - 1
+  load()
+  window.dispatchEvent(new CustomEvent('cp-tear-home-done', { detail: { from: d.from } }))
+}
+function onTearHomeDone(ev: Event) {
+  const d = (ev as CustomEvent).detail
+  if (isTorn && d.from === props.winId) store.close(props.winId)
+}
+window.addEventListener('cp-tear-home', onTearHome)
+window.addEventListener('cp-tear-home-done', onTearHomeDone)
+onBeforeUnmount(() => {
+  window.removeEventListener('cp-tear-home', onTearHome)
+  window.removeEventListener('cp-tear-home-done', onTearHomeDone)
+})
 function tabTitle(t: Tab): string {
   const p = policies.value.find(x => x.id === t.policyId)
   if (!p) return '此电脑'
@@ -2638,6 +2703,18 @@ function fmtTime(ms: number) {
   justify-content: center; opacity: 0.45; flex: none; transition: background 0.12s ease, opacity 0.12s ease;
 }
 .exp-tab .t-close:hover { background: var(--danger-bg); opacity: 1; color: var(--danger); }
+/* B10 归位按钮与拖出幽灵 */
+.exp-tab-tear {
+  align-self: center; margin-left: 6px; padding: 3px 8px; border-radius: 7px; font-size: 11.5px;
+  border: 1px dashed var(--stroke); color: var(--text-2); cursor: pointer; user-select: none;
+}
+.exp-tab-tear:hover { background: var(--hover-b); color: var(--accent); }
+.tear-ghost {
+  position: fixed; z-index: 9999; pointer-events: none; padding: 5px 10px; font-size: 12px;
+  background: var(--panel-bg, #fff); border: 1px solid var(--accent); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); max-width: 240px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .exp-tab-add {
   width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center;
   justify-content: center; cursor: pointer; color: var(--text-3); flex: none;

@@ -7,10 +7,10 @@
 
 ## 实施进度（2026-10 月底更新）
 
-- **已上线七波**：波1 = A1 标签、A2 作用域 API 令牌、A4 重复文件清理、B6 最近文件、A7 容器查询/跟随系统深色；波2 = B1 内容全文检索、B4 收集式分享、A6 PDF 工具箱（pdfcpu）；波3 = B3 窗口手感（Alt+Tab、Win/Ctrl+Alt 方向键分屏、Snap Layouts flyout、任务栏/Dock 悬停预览）；波4 = B11 全局快捷键注册表 + `?` 速查 + Ctrl+K、B15 View Transitions（导航/视图/深浅色）；波5 = A9 HEIC/HEIF 前端解码（Picasa + libheif wasm）；波6 = B13 协作硬锁（编辑器心跳注册表 + 全写路径 423）、B14 断点续传（localStorage 哈希指纹缓存 + 服务端会话命中）；波7 = B16 文件事件 Webhook（持久化投递队列 + HMAC 签名 + SSRF 防护 + CP_WEBHOOK_ALLOW_PRIVATE 内网开关）、A10 补齐（分享页实时到期倒计时 + 站点品牌 Logo）。GUI 验证证据见 `docs/test-evidence/t109–t150`。
+- **已上线七波**：波1 = A1 标签、A2 作用域 API 令牌、A4 重复文件清理、B6 最近文件、A7 容器查询/跟随系统深色；波2 = B1 内容全文检索、B4 收集式分享、A6 PDF 工具箱（pdfcpu）；波3 = B3 窗口手感（Alt+Tab、Win/Ctrl+Alt 方向键分屏、Snap Layouts flyout、任务栏/Dock 悬停预览）；波4 = B11 全局快捷键注册表 + `?` 速查 + Ctrl+K、B15 View Transitions（导航/视图/深浅色）；波5 = A9 HEIC/HEIF 前端解码（Picasa + libheif wasm）；波6 = B13 协作硬锁（编辑器心跳注册表 + 全写路径 423）、B14 断点续传（localStorage 哈希指纹缓存 + 服务端会话命中）；波7 = B16 文件事件 Webhook（持久化投递队列 + HMAC 签名 + SSRF 防护 + CP_WEBHOOK_ALLOW_PRIVATE 内网开关）、A10 补齐（分享页实时到期倒计时 + 站点品牌 Logo）；波8 = B8 虚拟桌面（任务视图条 ×3 主题 + Alt+Ctrl+PageUp/Dn + 窗口按桌面过滤）、B10 资源管理器标签拖出成窗/归位（torn 窗口 + CustomEvent 交接）。GUI 验证证据见 `docs/test-evidence/t109–t155`。
 - **调研时已存在（本文判定过期）**：A5 回收站 TTL 早已实现（`tasks.go sweepRecycle` + 组配置）；B12 审计日志导出早已实现（`admin.go LogExport`，CSV+BOM+脱敏）。
 - **明确不做**：A3 TOTP、C1 S3 网关（用户决定，2026-10）。
-- **剩余**：A8、A10（品牌 Logo 已做；计数/开关早已存在）、A11（级联子菜单/方向性动画）、B2、B5、B7、B8、B9、B10、B14（哈希/缩略图进 Worker 半边）、C2–C4。
+- **剩余**：A8、A11（级联子菜单/方向性动画）、B2、B5、B7、B9、B14（哈希/缩略图进 Worker 半边）、C2–C4。
 
 ---
 

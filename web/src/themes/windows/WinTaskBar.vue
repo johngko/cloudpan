@@ -55,6 +55,9 @@
 
     <!-- 控制中心（电池）胶囊：铃铛 + wifi + 蓝牙 + 电池 -->
     <div class="w12-dock">
+      <button class="w12-dockbtn w12-desksbtn" :class="{ show: panel === 'desks' }" title="任务视图（虚拟桌面）" @click.stop="openPanel('desks')">
+        <AppIcon name="grid" :size="20" />
+      </button>
       <button class="w12-dockbtn w12-ctrlbtn" :class="{ show: panel === 'ctrl' || notify.open }" title="控制中心" @click.stop="openPanel('ctrl')" ref="ctrlBtn">
         <span v-if="notifyAvail" class="sico" title="通知" @click.stop="openNotify">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 9.5a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 19.5a2.2 2.2 0 0 0 4 0" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
@@ -91,6 +94,7 @@
   <WinStartMenu v-if="panel === 'start'" :shown="shown" @close="closePanel" @search="openPanel('search')" />
   <WinSearchWin v-if="panel === 'search'" :shown="shown" @close="closePanel" />
   <WinWidgets v-if="panel === 'widgets'" :shown="shown" @close="closePanel" />
+  <div v-if="panel === 'desks'" class="dsk-anchor" @click.stop="closePanel"><DesktopStrip /></div>
   <WinControl v-if="panel === 'ctrl'" :shown="shown" :left="ctrlLeft" @click.stop @close="closePanel" />
   <WinDateBox v-if="panel === 'datebox'" :shown="shown" :left="dateLeft" @click.stop />
 
@@ -132,6 +136,7 @@ import WinSearchWin from './WinSearchWin.vue'
 import WinWidgets from './WinWidgets.vue'
 import WinControl from './WinControl.vue'
 import WinDateBox from './WinDateBox.vue'
+import DesktopStrip from '../../shell/DesktopStrip.vue'
 import { globalSearchTick } from '../../shell/hotkeys'
 
 const store = useWindows()
@@ -141,7 +146,7 @@ const appstate = useAppState()
 // 通知被管理员对该用户禁用时隐藏铃铛（与后端 AppGate 一致，避免点开是空面板）
 const notifyAvail = computed(() => appstate.isAvailable('notify'))
 
-type PanelId = 'start' | 'search' | 'widgets' | 'ctrl' | 'datebox'
+type PanelId = 'start' | 'search' | 'widgets' | 'desks' | 'ctrl' | 'datebox'
 const panel = ref<PanelId | null>(null)
 const shown = ref(false)
 let closeTimer: number

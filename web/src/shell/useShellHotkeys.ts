@@ -102,6 +102,18 @@ export function useShellHotkeys() {
     run: () => { globalSearchTick.value++ },
   })
   reg({
+    id: 'desk-prev', group: '桌面', keys: ['Alt+Ctrl', 'PageUp'],
+    desc: '切换到上一个虚拟桌面',
+    match: e => e.ctrlKey && e.altKey && !e.shiftKey && e.code === 'PageUp',
+    run: () => store.cycleDesktop(-1),
+  })
+  reg({
+    id: 'desk-next', group: '桌面', keys: ['Alt+Ctrl', 'PageDown'],
+    desc: '切换到下一个虚拟桌面',
+    match: e => e.ctrlKey && e.altKey && !e.shiftKey && e.code === 'PageDown',
+    run: () => store.cycleDesktop(1),
+  })
+  reg({
     id: 'help', group: '桌面', keys: ['?'],
     desc: '打开 / 关闭快捷键速查（F1 同）',
     match: e => ((e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) || e.key === 'F1'),

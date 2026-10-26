@@ -609,7 +609,47 @@ select.input { cursor: pointer; }
 .hk-foot { margin-top: 4px; font-size: 11.5px; color: var(--text-3); }
 
 /* --- B15 View Transitions：主题切换交叉淡化、资源管理器导航滑动 --- */
+/* B8 虚拟桌面条（三主题共用皮肤） */
+.dsk-anchor { position: fixed; z-index: 9600; bottom: 64px; left: 50%; transform: translateX(-50%); }
+.dsk-anchor-deepin { bottom: 72px; }
+.dsk-anchor-mac { bottom: auto; top: 34px; left: auto; right: 18px; transform: none; }
+.dsk-strip {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  background: var(--panel-bg, rgba(255, 255, 255, 0.82)); border: 1px solid var(--stroke);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22); backdrop-filter: blur(18px);
+  flex-wrap: wrap; max-width: 70vw;
+}
+.dsk-chip {
+  display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px;
+  border: 1px solid var(--stroke); font-size: 13px; cursor: pointer; user-select: none;
+}
+.dsk-chip:hover { background: var(--hover-b); }
+.dsk-chip.on { border-color: var(--accent); background: var(--accent-weak); font-weight: 600; }
+.dsk-chip.dsk-add { border-style: dashed; color: var(--text-3); }
+.dsk-x { border: none; background: none; color: var(--text-3); cursor: pointer; font-size: 14px; padding: 0 2px; }
+.dsk-x:hover { color: var(--danger); }
+.dsk-hint { font-size: 11.5px; color: var(--text-3); margin-left: 4px; }
+
 .cp-brand-logo { width: 40px; height: 40px; border-radius: 10px; object-fit: contain; }
+/* B8 虚拟桌面条 */
+.dsk-anchor { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 9640; }
+.dsk-anchor-deepin { bottom: 78px; }
+.dsk-anchor-mac { top: 40px; bottom: auto; }
+.dsk-strip { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px;
+  background: var(--glass, rgba(30,30,40,.72)); border: 1px solid var(--stroke); box-shadow: 0 10px 34px rgba(0,0,0,.32); backdrop-filter: blur(18px); }
+.dsk-chip { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9px; cursor: pointer;
+  font-size: 13px; color: var(--text-1); border: 1px solid transparent; user-select: none; }
+.dsk-chip:hover { background: var(--hover-b); }
+.dsk-chip.on { border-color: var(--accent); background: var(--accent-weak); }
+.dsk-chip .dsk-x { border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 14px; padding: 0 2px; }
+.dsk-chip .dsk-x:hover { color: var(--danger); }
+.dsk-add { font-size: 15px; }
+.dsk-hint { font-size: 11px; color: var(--text-3); margin-left: 4px; }
+/* B10 标签拖出成窗：跟随光标的幽灵标签 */
+.exp-tear-ghost { position: fixed; z-index: 9900; pointer-events: none; padding: 4px 10px; border-radius: 8px;
+  font-size: 12px; background: var(--glass, rgba(30,30,40,.8)); color: var(--text-1); border: 1px solid var(--stroke);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.exp-tab.tearing { opacity: .45; }
 
 html.vt-fwd::view-transition-old(root) { animation: vt-out-left 0.2s ease both; }
 html.vt-fwd::view-transition-new(root) { animation: vt-in-right 0.26s ease both; }

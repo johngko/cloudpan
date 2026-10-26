@@ -12,9 +12,14 @@ function shellInsets() {
 export interface WinRect { x: number; y: number; w: number; h: number }
 /** Snap 分区：L/R 半屏，TL..BR 四象限（Flyout 与 Win+方向键共用） */
 export type SnapZone = 'L' | 'R' | 'TL' | 'TR' | 'BL' | 'BR'
+/** B8 虚拟桌面：窗口归属一个桌面，任务视图只在桌面间切换可见性 */
+export interface Desktop { id: number; name: string }
+
 export interface WinState {
   id: number
   app: string
+  /** 所属虚拟桌面 id（缺省 = 1 号桌面；open() 自动打上当前桌面） */
+  desktop?: number
   title: string
   icon: string
   x: number; y: number; w: number; h: number
@@ -45,12 +50,17 @@ function settle(id: number, fn: () => void, ms: number) {
 export const useWindows = defineStore('windows', {
   state: () => ({
     wins: [] as WinState[],
-    activeId: 0
+    activeId: 0,
+    desktops: [{ id: 1, name: '桌面 1' }] as Desktop[],
+    currentDesktop: 1,
+    nextDesktopId: 2
   }),
   getters: {
-    taskbarWins(state): WinState[] { return state.wins },
+    /** 当前桌面的窗口（桌面渲染/任务栏只认这些） */
+    visibleWins(state): WinState[] { return state.wins.filter(w => (w.desktop ?? 1) === state.currentDesktop) },
+    taskbarWins(state): WinState[] { return state.wins.filter(w => (w.desktop ?? 1) === state.currentDesktop) },
     /** 焦点历史（最近使用优先）：Alt+Tab 切换器与任务栏预览取序用 */
-    mru(state): WinState[] { return [...state.wins].sort((a, b) => b.z - a.z) }
+    mru(state): WinState[] { return state.wins.filter(w => (w.desktop ?? 1) === state.currentDesktop).sort((a, b) => b.z - a.z) }
   },
   actions: {
     open(app: string, props: any = null, opts: { title?: string; icon?: string; w?: number; h?: number } = {}) {
@@ -77,6 +87,7 @@ export const useWindows = defineStore('windows', {
       const off = (this.wins.length % 6) * 28
       const win: WinState = {
         id: nextId++, app, title: opts.title || appDef(app)?.name || app, icon: opts.icon || app,
+        desktop: this.currentDesktop,
         x: area ? area.x : Math.max(g.left + 8, Math.round(g.left + (maxW - w) / 2) - 80 + off),
         y: area ? area.y : Math.max(g.top + 8, Math.round(g.top + (maxH - h) / 2) - 30 + off),
         w, h, minimized: false, maximized: !!area, z: ++topZ, props: props || {}
@@ -94,6 +105,35 @@ export const useWindows = defineStore('windows', {
       if (i >= 0) this.wins.splice(i, 1)
       if (this.activeId === id) this.activeId = this.wins.length ? this.wins[this.wins.length - 1].id : 0
     },
+    // ---- B8 虚拟桌面 ----
+    addDesktop() {
+      if (this.desktops.length >= 6) return
+      const id = this.nextDesktopId++
+      this.desktops.push({ id, name: `桌面 ${id}` })
+      this.currentDesktop = id
+    },
+    switchDesktop(id: number) {
+      if (this.desktops.some(d => d.id === id)) this.currentDesktop = id
+    },
+    cycleDesktop(dir: number) {
+      if (this.desktops.length < 2) return
+      const i = this.desktops.findIndex(d => d.id === this.currentDesktop)
+      const n = ((i + dir) % this.desktops.length + this.desktops.length) % this.desktops.length
+      this.currentDesktop = this.desktops[n].id
+    },
+    removeDesktop(id: number) {
+      if (this.desktops.length <= 1) return
+      const rest = this.desktops.filter(d => d.id !== id)
+      const dest = rest[0].id
+      for (const w of this.wins) if ((w.desktop ?? 1) === id) w.desktop = dest
+      this.desktops = rest
+      if (this.currentDesktop === id) this.currentDesktop = dest
+    },
+    moveWinToDesktop(winId: number, desktopId: number) {
+      const w = this.wins.find(x => x.id === winId)
+      if (w && this.desktops.some(d => d.id === desktopId)) w.desktop = desktopId
+    },
+
     focus(id: number) {
       const w = this.wins.find(x => x.id === id)
       if (!w) return

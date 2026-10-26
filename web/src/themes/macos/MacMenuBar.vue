@@ -14,6 +14,7 @@
 
     <div class="mb-right">
       <div class="mb-item" title="小组件" @click.stop="openWidgets"><AppIcon name="grid" :size="15" class="mb-ico" /></div>
+      <div class="mb-item" title="任务视图（虚拟桌面）" @click.stop="desksOpen = !desksOpen"><AppIcon name="layers" :size="15" class="mb-ico" /></div>
       <div class="mb-item" title="搜索" @click.stop="openSearch"><AppIcon name="search" :size="15" class="mb-ico" /></div>
       <div class="mb-item" title="网络测速" @click.stop="openSpeedtest"><AppIcon name="wifi" :size="15" class="mb-ico" /></div>
       <div v-if="notifyAvail" class="mb-item mb-badge" title="通知" @click.stop="notify.openPanel()">
@@ -36,8 +37,12 @@
     </div>
   </div>
 
+  <!-- B8 虚拟桌面条 -->
+  <div v-if="desksOpen" class="dsk-anchor dsk-anchor-mac" @click.stop="desksOpen = false" @click.self="desksOpen = false"><DesktopStrip /></div>
+
   <!-- 全局搜索面板（Spotlight 位置：菜单栏右侧搜索图标） -->
   <GlobalSearchPanel v-if="searchOpen" @close="searchOpen = false" />
+
 
   <!-- 小组件面板（与 win12 的小组件对齐） -->
   <WidgetsPanel v-if="widgetsOpen" @close="widgetsOpen = false" />
@@ -77,6 +82,7 @@ import { appDef } from '../../stores/apps'
 import AppIcon from '../../components/AppIcon.vue'
 import GlobalSearchPanel from '../../shell/GlobalSearchPanel.vue'
 import { globalSearchTick } from '../../shell/hotkeys'
+import DesktopStrip from '../../shell/DesktopStrip.vue'
 import WidgetsPanel from '../../shell/WidgetsPanel.vue'
 
 const store = useWindows()
@@ -91,6 +97,7 @@ const menuX = ref(-1)
 const clock = ref('')
 // 全局搜索面板开关（Spotlight 位置）
 const searchOpen = ref(false)
+const desksOpen = ref(false)
 watch(globalSearchTick, () => { searchOpen.value = true }) // Ctrl/⌘+K
 // 小组件面板开关
 const widgetsOpen = ref(false)
@@ -137,7 +144,9 @@ const openItems = computed<MBItem[]>(() => {
       ]
     case 'window':
       return [
-        ...store.wins.map((w: WinState) => ({
+        { label: '任务视图（虚拟桌面）…', icon: 'taskview', onClick: () => { closeMenu(); desksOpen.value = true } },
+        { sep: true },
+        ...store.visibleWins.map((w: WinState) => ({
           label: w.title, icon: w.icon,
           onClick: () => store.focus(w.id)
         })),

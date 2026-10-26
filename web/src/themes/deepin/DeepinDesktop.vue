@@ -16,7 +16,7 @@
     <!-- 窗口层 -->
     <!-- 多窗口必须用 TransitionGroup：Transition 只渲染第一个子节点，第二个窗口会被吞掉 -->
     <TransitionGroup name="win-anim">
-      <DeepinWindowFrame v-for="w in store.wins" :key="w.id" :win="w" />
+      <DeepinWindowFrame v-for="w in store.visibleWins" :key="w.id" :win="w" />
     </TransitionGroup>
 
     <DeepinDock @launcher="launcher = !launcher" />

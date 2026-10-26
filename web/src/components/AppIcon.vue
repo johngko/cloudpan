@@ -205,6 +205,7 @@ const ui: Record<string, string> = {
   rename: S(`<path d="M14.5 5.5l4 4L9 19H5v-4l9.5-9.5z"/><path d="M12.5 7.5l4 4"/>`),
   trash: S(`<path d="M5 7h14M10 4h4M6.5 7l1 12.5a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/>`),
   grid: S(`<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/>`),
+  taskview: S(`<rect x="3" y="6" width="11" height="9" rx="1.6"/><rect x="10" y="3.5" width="11" height="9" rx="1.6"/>`),
   list: S(`<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="0.9" fill="currentColor"/><circle cx="5" cy="12" r="0.9" fill="currentColor"/><circle cx="5" cy="18" r="0.9" fill="currentColor"/>`),
   preview: S(`<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3.5 15.5l4.2-4.2 3.3 3.2 4.3-4.3 4.7 4.6"/><circle cx="9" cy="9" r="1.7"/>`),
   folderPlain: S(`<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 17V7.5z"/>`),
