@@ -55,45 +55,47 @@ const (
 	proxyUA           = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-// ---- 短时效代理票据 pt = base64url(uid|exp) . base64url(HMAC-SHA256) ----
+// ---- 短时效代理票据 pt = base64url(uid|ver|exp) . base64url(HMAC-SHA256) ----
+// 载荷带上用户令牌版本 ver：改密后 TokenVer 自增，存量票据随之失效（与 JWT 同语义）。
 
-func (h *BrowserHandler) proxyToken(uid uint) string {
-	payload := fmt.Sprintf("%d|%d", uid, time.Now().Add(proxyTokenTTL).Unix())
+func (h *BrowserHandler) proxyToken(uid, ver uint) string {
+	payload := fmt.Sprintf("%d|%d|%d", uid, ver, time.Now().Add(proxyTokenTTL).Unix())
 	b := base64.RawURLEncoding.EncodeToString([]byte(payload))
 	mac := hmac.New(sha256.New, h.Secret)
 	mac.Write([]byte(b))
 	return b + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// proxyTokenUID 验签并检查有效期，返回 uid
-func (h *BrowserHandler) proxyTokenUID(pt string) (uint, bool) {
+// proxyTokenUID 验签并检查有效期，返回 uid 与令牌版本
+func (h *BrowserHandler) proxyTokenUID(pt string) (uint, uint, bool) {
 	parts := strings.SplitN(pt, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return 0, false
+		return 0, 0, false
 	}
 	mac := hmac.New(sha256.New, h.Secret)
 	mac.Write([]byte(parts[0]))
 	rawMac, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	if !hmac.Equal(rawMac, mac.Sum(nil)) {
-		return 0, false
+		return 0, 0, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
-	f := strings.SplitN(string(raw), "|", 2)
-	if len(f) != 2 {
-		return 0, false
+	f := strings.SplitN(string(raw), "|", 3)
+	if len(f) != 3 {
+		return 0, 0, false
 	}
 	uid, e1 := strconv.ParseUint(f[0], 10, 64)
-	exp, e2 := strconv.ParseInt(f[1], 10, 64)
-	if e1 != nil || e2 != nil || time.Now().Unix() > exp {
-		return 0, false
+	ver, e2 := strconv.ParseUint(f[1], 10, 64)
+	exp, e3 := strconv.ParseInt(f[2], 10, 64)
+	if e1 != nil || e2 != nil || e3 != nil || time.Now().Unix() > exp {
+		return 0, 0, false
 	}
-	return uint(uid), true
+	return uint(uid), uint(ver), true
 }
 
 // auth 代理路由专用鉴权：登录 JWT（Authorization 头或 ?t=）与短时效票据 ?pt=
@@ -106,9 +108,10 @@ func (h *BrowserHandler) auth(c *gin.Context) {
 		tok = t
 	}
 	if tok != "" {
-		if claims, err := middleware.ParseToken(tok, h.Secret); err == nil {
+		if claims, err := middleware.ParseToken(tok, h.Secret); err == nil && claims.Kind != middleware.TokenKindRefresh {
 			var u model.User
-			if model.DB.First(&u, claims.UID).Error == nil && !u.Disabled {
+			// 与 middleware.Auth 一致：同时校验禁用状态与令牌版本（改密后旧令牌/票据失效）
+			if model.DB.First(&u, claims.UID).Error == nil && !u.Disabled && u.TokenVer == claims.Ver {
 				c.Set("user", &u)
 				c.Next()
 				return
@@ -116,9 +119,9 @@ func (h *BrowserHandler) auth(c *gin.Context) {
 		}
 	}
 	if pt := c.Query("pt"); pt != "" {
-		if uid, ok := h.proxyTokenUID(pt); ok {
+		if uid, ver, ok := h.proxyTokenUID(pt); ok {
 			var u model.User
-			if model.DB.First(&u, uid).Error == nil && !u.Disabled {
+			if model.DB.First(&u, uid).Error == nil && !u.Disabled && u.TokenVer == ver {
 				c.Set("user", &u)
 				c.Next()
 				return
@@ -131,7 +134,7 @@ func (h *BrowserHandler) auth(c *gin.Context) {
 // Session 签发代理票据（前端拿到后拼进 iframe src 与刷新请求）
 func (h *BrowserHandler) Session(c *gin.Context) {
 	u := middleware.CurrentUser(c)
-	dto.OK(c, gin.H{"pt": h.proxyToken(u.ID)})
+	dto.OK(c, gin.H{"pt": h.proxyToken(u.ID, u.TokenVer)})
 }
 
 // ---- URL 重写 ----
@@ -339,7 +342,7 @@ func (h *BrowserHandler) Proxy(c *gin.Context) {
 			pt := c.Query("pt")
 			if pt == "" {
 				if u := middleware.CurrentUser(c); u != nil {
-					pt = h.proxyToken(u.ID)
+					pt = h.proxyToken(u.ID, u.TokenVer)
 				}
 			}
 			html := toUTF8(body, ct, string(body))

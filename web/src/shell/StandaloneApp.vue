@@ -39,6 +39,8 @@
         <b style="font-size: 13px">{{ app?.name }}</b>
         <span style="font-size: 11px; color: var(--text-3)">独立模式</span>
         <div style="flex: 1"></div>
+        <!-- 应用操作区（与窗口模式同一挂载点）：独立模式没有窗口标题栏，操作按钮落在顶栏右侧 -->
+        <div class="win-tb-actions" ref="tbActions"></div>
         <button class="tool-btn" title="返回桌面" @click="goHash('#/desktop')">
           <AppIcon name="grid" :size="14" /> 桌面
         </button>
@@ -57,7 +59,7 @@
 // 独立应用模式（#/app/<app>）：不经过桌面外壳，直接全屏打开单个应用。
 // 开关：站点设置 standalone_apps（默认开；关闭后访问显示拦截页）。
 // 鉴权：未登录显示极简登录（账号 / 游客），登录后按功能门控校验再渲染。
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, provide, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import AppIcon from '../components/AppIcon.vue'
@@ -68,6 +70,7 @@ import { wallpaperClass } from '../assets/wallpapers'
 import { useSession } from '../stores/session'
 import { authApi, appsApi } from '../api/modules'
 import { getToken, setToken, clearToken } from '../api/http'
+import { TITLEBAR_ACTIONS } from './useWindowChrome'
 
 const route = useRoute()
 const session = useSession()
@@ -88,6 +91,10 @@ const errMsg = ref('')
 const username = ref('')
 const password = ref('')
 const site = ref<any>({ guestLogin: false, standaloneApps: true, theme: 'win12' })
+
+// 顶栏右侧的应用操作区挂载点（与窗口标题栏同一注入键，应用组件无需感知自己跑在哪种外壳里）
+const tbActions = ref<HTMLElement | null>(null)
+provide(TITLEBAR_ACTIONS, tbActions)
 
 const wpClass = computed(() => wallpaperClass(session.wallpaper))
 

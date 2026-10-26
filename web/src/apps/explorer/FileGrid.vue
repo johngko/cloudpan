@@ -45,9 +45,10 @@ defineEmits<{
 /* 条目级样式随条目一起搬（父组件是 scoped，跨组件选择器够不着）；
    基础布局（.file-item/.f-ico/.f-name/.file-grid 等）在全局 base.css */
 .g-badge {
-  position: absolute; top: 6px; left: 8px; z-index: 2;
+  position: absolute; top: 7px; left: 9px; z-index: 2;
   background: linear-gradient(135deg, var(--theme-1), var(--theme-2));
-  color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  color: #fff; font-size: 10px; font-weight: 600; padding: 1.5px 7px; border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.28); box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 /* 实时协作「正在编辑」绿点（悬停提示协作者名单） */
 .editing-dot {
@@ -58,16 +59,17 @@ defineEmits<{
 .f-name .editing-dot { margin-right: 5px; }
 /* Win11 叠加复选框：悬停或选中时显示 */
 .f-check {
-  position: absolute; top: 6px; right: 8px; z-index: 3; width: 17px; height: 17px;
-  margin: 0; cursor: pointer; opacity: 0; transition: opacity 0.1s; accent-color: var(--theme-2);
+  position: absolute; top: 7px; right: 9px; z-index: 3; width: 16px; height: 16px;
+  margin: 0; cursor: pointer; opacity: 0; transition: opacity 0.12s ease; accent-color: var(--theme-2);
 }
 .file-item:hover .f-check, .file-item.selected .f-check { opacity: 1; }
-.f-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.f-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,.14); }
 /* 搜索命中高亮（按片段渲染成 <mark>，不做 v-html） */
 .f-name mark {
   background: color-mix(in srgb, var(--theme-2) 40%, transparent);
   color: inherit; border-radius: 2px; padding: 0 1px;
 }
-/* 大文件夹窗口化：行高必须固定，窗口计算才成立（普通目录不套用） */
-.file-grid.virtual .file-item { height: 104px; }
+/* 大文件夹窗口化：行高必须固定，窗口计算才成立（普通目录不套用）
+   （112 = 12+10 内边距 + 46 图标 + 8 间距 + 两行 12px×1.35 名称 + 2 边框，取整留余） */
+.file-grid.virtual .file-item { height: 112px; }
 </style>

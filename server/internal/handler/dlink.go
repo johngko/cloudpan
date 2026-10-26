@@ -91,15 +91,19 @@ func (h *DLHandler) Create(c *gin.Context) {
 	}
 	hours := int64(24)
 	fmt.Sscanf(c.DefaultQuery("expireHours", "24"), "%d", &hours)
-	ttl := time.Duration(hours) * time.Hour
+	// 直链为无状态 HMAC，服务端无法吊销：禁止签发"永久"直链，最长 720h（30 天）
 	if hours <= 0 {
-		ttl = time.Duration(100*365*24) * time.Hour // 永久
+		hours = 24
 	}
+	if hours > 720 {
+		hours = 720
+	}
+	ttl := time.Duration(hours) * time.Hour
 	token := h.sign(officeTarget{PolicyID: policyID, UID: u.ID, Path: vp}, ttl)
 	dto.OK(c, gin.H{
 		"url":       "/api/dl?token=" + token,
 		"expireAt":  time.Now().Add(ttl).UnixMilli(),
-		"permanent": hours <= 0,
+		"permanent": false,
 		"name":      e.Name,
 		"size":      e.Size,
 	})

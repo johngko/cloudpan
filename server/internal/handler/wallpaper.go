@@ -49,7 +49,8 @@ func (h *SiteHandler) Wallpaper(c *gin.Context) {
 		return
 	}
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: ssrfHTTP.Transport, // 复用拨号层 IP 复检，消除"校验后二次解析"的 DNS rebinding 窗口
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= wallpaperMaxRedir {
 				return errors.New("重定向次数过多")

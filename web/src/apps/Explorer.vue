@@ -17,10 +17,12 @@
     </div>
     <!-- 工具栏 -->
     <div class="app-toolbar">
-      <button class="tool-btn" :disabled="!canBack" @click="back" title="后退"><AppIcon name="back" :size="16" /></button>
-      <button class="tool-btn" :disabled="!fwdStack.length" @click="fwd" title="前进"><AppIcon name="fwd" :size="16" /></button>
-      <button class="tool-btn" :disabled="!currentPolicy || path === '/'" @click="goUp" title="上级"><AppIcon name="up" :size="16" /></button>
-      <button class="tool-btn" @click="refresh" title="刷新"><AppIcon name="refresh" :size="16" /></button>
+      <div class="seg">
+        <button class="tool-btn" :disabled="!canBack" @click="back" title="后退"><AppIcon name="back" :size="16" /></button>
+        <button class="tool-btn" :disabled="!fwdStack.length" @click="fwd" title="前进"><AppIcon name="fwd" :size="16" /></button>
+        <button class="tool-btn" :disabled="!currentPolicy || path === '/'" @click="goUp" title="上级"><AppIcon name="up" :size="16" /></button>
+        <button class="tool-btn" @click="refresh" title="刷新"><AppIcon name="refresh" :size="16" /></button>
+      </div>
       <div class="crumb" style="flex: 1; margin: 0 8px">
         <span v-if="!currentPolicy">此电脑</span>
         <template v-else-if="onSharedDrive">
@@ -83,7 +85,7 @@
 
     <div style="flex: 1; position: relative; display: flex; overflow: hidden">
       <!-- 侧栏 -->
-      <div class="exp-side" :class="{ 'm-open': navOpen }" @click="navOpen = false" style="width: 210px; flex: none; border-right: 1px solid var(--stroke); overflow: auto; padding: 8px 6px">
+      <div class="exp-side" :class="{ 'm-open': navOpen }" @click="navOpen = false" style="width: 210px; flex: none; border-right: 1px solid var(--stroke); overflow: auto; padding: 10px 8px">
         <div class="side-title">快速访问</div>
         <div v-for="s in stars" :key="s.id" class="side-item" :title="s.name"
           @click="openPolicyId(s.policyId, s.path)">
@@ -245,11 +247,11 @@
     </div>
 
     <div class="statusbar">
-      <span>{{ currentPolicy ? (onSharedDrive ? sharedStatusPath : currentPolicy.name + path) : '此电脑' }}</span>
-      <span v-if="currentPolicy">{{ items.length }} 个项目</span>
-      <span v-if="selPaths.length">已选中 {{ selPaths.length }} 项</span>
+      <span class="sb-path">{{ currentPolicy ? (onSharedDrive ? sharedStatusPath : currentPolicy.name + path) : '此电脑' }}</span>
+      <span v-if="currentPolicy" class="sb-pill">{{ items.length }} 个项目</span>
+      <span v-if="selPaths.length" class="sb-pill on">已选中 {{ selPaths.length }} 项</span>
       <span style="flex: 1"></span>
-      <span v-if="clip.mode">{{ clip.mode === 'cut' ? '已剪切' : '已复制' }} {{ clip.items.length }} 项</span>
+      <span v-if="clip.mode" class="sb-pill">{{ clip.mode === 'cut' ? '已剪切' : '已复制' }} {{ clip.items.length }} 项</span>
     </div>
 
     <input ref="fileInput" type="file" multiple style="display: none" @change="onFilePicked" />
@@ -2082,12 +2084,12 @@ const virtualList = computed(() => viewMode.value === 'list' && sortedItems.valu
 
 // 与 base.css 的 .file-grid 保持一致（项宽/间距/内边距），用于按容器宽度推算列数
 const GRID_ITEM_W = 100
-const GRID_GAP = 4
-const GRID_PAD = 10
+const GRID_GAP = 6
+const GRID_PAD = 12
 // 固定行高的兜底值（与下方 .virtual 的 CSS 一致）：首次渲染即按它窗口化，
 // 避免「先全渲染 3000 项再收敛」；真实值由 measureView 从 DOM 量得后自动修正
-const GRID_ROW_H_FALLBACK = 108 // 104 项高 + 4 间距
-const LIST_ROW_H_FALLBACK = 34
+const GRID_ROW_H_FALLBACK = 118 // 112 项高 + 6 间距
+const LIST_ROW_H_FALLBACK = 36
 const VIEWPORT_FALLBACK = 800
 
 /** 量取当前视图容器的列数/行高/可视高度/滚动位置 */
@@ -2379,49 +2381,74 @@ function fmtTime(ms: number) {
 <style scoped>
 /* 多标签 */
 .exp-tabs {
-  display: flex; align-items: flex-end; gap: 4px; padding: 6px 10px 0;
+  display: flex; align-items: flex-end; gap: 5px; padding: 8px 12px 0;
   border-bottom: 1px solid var(--stroke-b); overflow-x: auto; flex: none;
 }
 .exp-tab {
-  display: flex; align-items: center; gap: 6px; padding: 5px 8px; min-width: 100px; max-width: 180px;
-  border-radius: 8px 8px 0 0; font-size: 12px; color: var(--text-2); cursor: pointer;
-  border: 1px solid transparent; border-bottom: none; flex: none;
+  display: flex; align-items: center; gap: 7px; padding: 7px 10px; min-width: 100px; max-width: 180px;
+  border-radius: 9px 9px 0 0; font-size: 12px; color: var(--text-2); cursor: pointer;
+  border: 1px solid transparent; border-bottom: none; flex: none; position: relative;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .exp-tab:hover { background: var(--hover-b); }
 .exp-tab.active { background: var(--card); color: var(--text); border-color: var(--stroke-b); }
+/* 活动标签顶部主题渐变指示条（Fluent 签名细节） */
+.exp-tab.active::before {
+  content: ''; position: absolute; top: 0; left: 12px; right: 12px; height: 2.5px;
+  border-radius: 2px; background: linear-gradient(90deg, var(--theme-1), var(--theme-2));
+}
 .exp-tab .t-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .exp-tab .t-close {
-  width: 16px; height: 16px; border-radius: 4px; display: flex; align-items: center;
-  justify-content: center; opacity: 0.45; flex: none;
+  width: 16px; height: 16px; border-radius: 5px; display: flex; align-items: center;
+  justify-content: center; opacity: 0.45; flex: none; transition: background 0.12s ease, opacity 0.12s ease;
 }
-.exp-tab .t-close:hover { background: var(--hover-b); opacity: 1; color: var(--danger); }
+.exp-tab .t-close:hover { background: var(--danger-bg); opacity: 1; color: var(--danger); }
 .exp-tab-add {
-  width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center;
+  width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center;
   justify-content: center; cursor: pointer; color: var(--text-3); flex: none;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .exp-tab-add:hover { background: var(--hover-b); color: var(--text); }
 
 /* 游客临时空间提示条 */
 .guest-ttl-bar {
-  display: flex; align-items: center; gap: 6px; padding: 4px 12px; flex: none;
+  display: flex; align-items: center; gap: 6px; padding: 5px 12px; flex: none;
   font-size: 12px; color: var(--text-2);
-  background: var(--hover-b); border-bottom: 1px solid var(--stroke-b);
+  background: var(--accent-weak); border-bottom: 1px solid var(--stroke-b);
 }
 .guest-ttl-bar :deep(svg) { color: var(--accent, var(--text-2)); flex: none; }
 
-.side-title { font-size: 11.5px; color: var(--text-3); padding: 8px 10px 4px; }
+.side-title { font-size: 11px; font-weight: 600; color: var(--text-3); padding: 10px 10px 6px; letter-spacing: 0.5px; }
+/* 侧栏：macOS Finder 式毛玻璃 vibrancy（半透明 + 饱和提升，透出窗口底材） */
+.exp-side {
+  background: color-mix(in srgb, var(--card) 62%, transparent);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+}
 .side-item {
-  display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 5px;
-  font-size: 13px; cursor: pointer; color: var(--text-2);
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px;
+  font-size: 13px; cursor: pointer; color: var(--text-2); margin-bottom: 2px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .side-item:hover { background: var(--hover-b); color: var(--text); }
-.side-item.active { background: var(--accent-weak); color: var(--text); }
+.side-item.active { background: var(--accent-weak); color: var(--text); font-weight: 500; }
+/* 选中项图标染主题色（AppIcon 根元素 = svg 或 img，均带本组件作用域属性） */
+.side-item.active svg { color: var(--theme-2); }
 .side-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sel-rect { position: absolute; border: 1px solid var(--theme-2); background: var(--accent-weak); z-index: 100; }
 .rubber-band {
-  position: absolute; border: 1px solid var(--theme-2);
-  background: var(--accent-weak); border-radius: 2px; z-index: 60; pointer-events: none;
+  position: absolute; border: 1px solid color-mix(in srgb, var(--theme-2) 75%, transparent);
+  background: var(--accent-weak); border-radius: 4px; z-index: 60; pointer-events: none;
 }
+
+/* 分段式导航组（macOS 工具栏语言）：后退/前进/上级/刷新收进一个胶囊底座 */
+.seg {
+  display: flex; align-items: center; gap: 1px; padding: 2px; flex: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid var(--stroke-b); border-radius: 10px;
+}
+.seg .tool-btn { padding: 5px 8px; border-radius: 8px; }
+.seg .tool-btn + .tool-btn { margin-left: 1px; }
 /* 条目级样式（角标/编辑徽章/复选框/缩略图/高亮）已随条目迁到
    ./explorer/FileGrid.vue 与 FileList.vue —— 本组件是 scoped，跨组件选择器够不着 */
 .file-list th input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--theme-2); cursor: pointer; }
@@ -2434,38 +2461,42 @@ function fmtTime(ms: number) {
 .od-status { font-size: 12px; color: var(--text-3); flex: none; }
 .file-list thead th { user-select: none; white-space: nowrap; }
 .file-list thead th:hover { color: var(--text); background: var(--hover-b); }
-.file-list thead th.sort-active { color: var(--theme-2); }
+.file-list thead th.sort-active { color: var(--theme-2); font-weight: 600; box-shadow: inset 0 -2px 0 var(--theme-2); }
 .sort-arrow { font-size: 10px; }
-.preview-pane { width: 244px; flex: none; border-left: 1px solid var(--stroke); padding: 14px; overflow: auto; background: var(--card); }
-.pp-head { font-size: 12px; color: var(--text-3); margin-bottom: 10px; }
-.pp-thumb { height: 132px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; background: var(--bg50); border-radius: 8px; overflow: hidden; }
+.preview-pane { width: 248px; flex: none; border-left: 1px solid var(--stroke-b); padding: 16px 14px; overflow: auto; background: var(--bg50); }
+.pp-head { font-size: 11.5px; font-weight: 600; color: var(--text-3); letter-spacing: 1px; margin-bottom: 12px; }
+.pp-thumb { height: 148px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; background: var(--hover-b); border-radius: var(--radius); overflow: hidden; }
 .pp-img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .pp-name { font-size: 14px; font-weight: 600; word-break: break-all; margin-bottom: 12px; line-height: 1.4; }
-.pp-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 5px 0; border-bottom: 1px solid var(--bg50); color: var(--text-3); }
+.pp-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--bg50); color: var(--text-3); }
 .pp-row b { color: var(--text); font-weight: 500; text-align: right; word-break: break-all; }
 .pp-actions { display: flex; gap: 8px; margin-top: 10px; }
 .pp-actions .btn { flex: 1; padding: 6px 0; }
 
 /* 此电脑：驱动器卡片（Win11 资源管理器标准样式） */
-.sec-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
-.drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; max-width: 820px; }
+.sec-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 12px; letter-spacing: 0.2px; }
+.drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; max-width: 820px; }
 .drive-card {
   display: flex; gap: 14px; align-items: center; padding: 16px 18px;
-  border-radius: var(--radius-sm); border: 1px solid var(--stroke-b); cursor: default;
-  background: var(--card); transition: background 0.12s, border-color 0.12s, transform 0.12s;
+  border-radius: var(--radius); border: 1px solid var(--stroke-b); cursor: default;
+  background: var(--card);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.18s var(--anim-pop), box-shadow 0.18s ease;
 }
-.drive-card:hover { background: var(--hover-b); transform: translateY(-1px); }
-.drive-card.sel { background: var(--accent-weak); border-color: #3b91d855; }
+.drive-card:hover { background: var(--hover-b); transform: translateY(-2px); box-shadow: var(--shadow); }
+.drive-card.sel {
+  background: var(--accent-weak); border-color: color-mix(in srgb, var(--theme-2) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-2) 22%, transparent);
+}
 .drive-name {
   font-size: 13.5px; font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.drive-bar { height: 6px; border-radius: 3px; background: rgba(125,125,135,0.28); margin: 9px 0 6px; overflow: hidden; }
+.drive-bar { height: 5px; border-radius: 3px; background: rgba(125,125,135,0.22); margin: 9px 0 7px; overflow: hidden; }
 .dark .drive-bar { background: rgba(255,255,255,0.14); }
 .drive-bar-fill {
   height: 100%; border-radius: 3px;
   background: linear-gradient(90deg, var(--theme-1), var(--theme-2));
-  transition: width 0.3s;
+  transition: width 0.4s var(--anim-pop);
 }
 .drive-bar-fill.full { background: var(--danger); }
 .drive-sub { font-size: 11px; color: var(--text-3); }
@@ -2498,5 +2529,18 @@ function fmtTime(ms: number) {
 .file-list .vpad { pointer-events: none; }
 .file-list .vpad td { padding: 0; border: none; }
 .file-list .vpad:hover td { background: transparent; }
+
+/* 状态栏：Finder/deepin 式信息胶囊（路径常驻，计数/剪贴板为小圆片） */
+.sb-path { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-pill {
+  padding: 2px 10px; border-radius: 999px; flex: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.sb-pill.on { background: var(--accent-weak); color: var(--theme-2); font-weight: 500; }
+
+/* 三系融合微调：macOS 下侧栏更通透（突出 vibrancy），deepin 下条目更圆润 */
+.theme-macos .exp-side { background: color-mix(in srgb, var(--card) 45%, transparent); }
+.theme-deepin .side-item { border-radius: 10px; }
+.theme-deepin .seg { border-radius: 12px; }
 </style>
 /* ZTESTMARKERQWX 9f3a */

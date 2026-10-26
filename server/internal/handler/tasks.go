@@ -843,7 +843,8 @@ func (h *OfflineHandler) Create(c *gin.Context) {
 	if err != nil || dest == "" {
 		dest = "/"
 	}
-	if !x.group.CanUsePolicy(in.PolicyID) && x.user.Role != "admin" {
+	var pol model.Policy
+	if err := model.DB.First(&pol, in.PolicyID).Error; err != nil || !policyUsable(x.user, x.group, &pol) {
 		dto.Fail(c, 403, "无权使用该存储")
 		return
 	}

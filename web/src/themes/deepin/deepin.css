@@ -224,6 +224,9 @@ html.theme-deepin {
 .dde-ctrl:hover { background: rgba(120,120,128,0.16); color: var(--text); }
 /* treeland：关闭 hover = 纯红 */
 .dde-ctrl.close:hover { background: #FF0000; color: #fff; }
+/* 标题栏应用操作区（Teleport 注入）：.dde-ctrls 绝对定位在右侧（3 × 46px），操作区同样贴在它左边，
+   标题仍由 flex 居中，不受操作区宽窄影响 */
+.theme-deepin .win-tb-actions { position: absolute; right: 138px; top: 0; height: 40px; }
 
 /* ============ 桌面（图标左上网格，同真实 DDE） ============ */
 .theme-deepin .desktop-icons { bottom: calc(var(--shell-bottom) + 18px); }

@@ -17,11 +17,21 @@ type Claims struct {
 	UID  uint   `json:"uid"`
 	Role string `json:"role"`
 	Ver  uint   `json:"ver"` // 用户令牌版本（User.TokenVer）：改密后旧令牌立即失效
+	Kind string `json:"kind"`
 	jwt.RegisteredClaims
 }
 
-func MakeToken(uid uint, role string, ver uint, secret []byte, ttl time.Duration) (string, error) {
-	claims := Claims{UID: uid, Role: role, Ver: ver,
+// 令牌用途（Claims.Kind）：访问令牌只能用于访问受保护端点，刷新令牌只能用于
+// /auth/refresh 续期。二者分离后，泄露的访问令牌无法再"续成"新的长期刷新令牌。
+// 存量令牌无 kind 字段（解析为空），访问侧按访问令牌兼容处理，刷新侧一律拒绝
+// （旧刷新令牌仅需重新登录一次）。
+const (
+	TokenKindAccess  = "access"
+	TokenKindRefresh = "refresh"
+)
+
+func MakeToken(uid uint, role, kind string, ver uint, secret []byte, ttl time.Duration) (string, error) {
+	claims := Claims{UID: uid, Role: role, Kind: kind, Ver: ver,
 		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)), IssuedAt: jwt.NewNumericDate(time.Now())}}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(secret)
 }
@@ -54,6 +64,11 @@ func Auth(secret []byte) gin.HandlerFunc {
 		claims, err := ParseToken(strings.TrimPrefix(h, "Bearer "), secret)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "登录已过期"})
+			return
+		}
+		// 刷新令牌不得当作访问令牌使用（只能在 /auth/refresh 续期）；空 kind = 存量访问令牌，兼容放行
+		if claims.Kind == TokenKindRefresh {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.R{Code: 401, Msg: "令牌类型错误"})
 			return
 		}
 		var user model.User

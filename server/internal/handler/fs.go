@@ -54,6 +54,15 @@ var (
 
 const siteSettingsTTL = 30 * time.Second
 
+// internalSiteSettingKeys 内部标记键：只供后端逻辑读写（seed/迁移代码直接查库），
+// 不对管理端下发。设置页保存时会把拿到的配置整包回传，写入白名单（siteSettingKeys）
+// 会拒绝未知键——若把内部键发给前端，整包回传就会报「不支持的设置项」，
+// 堵死站点设置的保存与 ONLYOFFICE 连接测试（实测缺陷）。
+var internalSiteSettingKeys = map[string]bool{
+	"visitor_group_synced":    true, // 访客组同步标记（model.seed 维护）
+	"default_policies_seeded": true, // 默认存储策略已预置标记（model.seed 维护）
+}
+
 func GetSiteSettings() map[string]string {
 	siteSettingsMu.RLock()
 	if siteSettingsMap != nil && time.Since(siteSettingsAt) < siteSettingsTTL {
@@ -67,6 +76,9 @@ func GetSiteSettings() map[string]string {
 	var rows []model.SiteSetting
 	model.DB.Find(&rows)
 	for _, r := range rows {
+		if internalSiteSettingKeys[r.Key] {
+			continue
+		}
 		m[r.Key] = r.Value
 	}
 	siteSettingsMu.Lock()
@@ -145,7 +157,7 @@ func (h *SiteHandler) Policies(c *gin.Context) {
 		if x.user.Role != "admin" && p.Type == "builtin" {
 			continue
 		}
-		if x.user.Role != "admin" && !x.group.CanUsePolicy(p.ID) {
+		if !policyUsable(x.user, x.group, &p) {
 			continue
 		}
 		if p.Type == "local" && (p.UsageAt == nil || time.Since(*p.UsageAt) > 10*time.Minute) {
@@ -209,6 +221,26 @@ type ctx3 struct {
 
 func ctxOf(c *gin.Context) ctx3 {
 	return ctx3{user: middleware.CurrentUser(c), group: middleware.GroupOf(c)}
+}
+
+// policyUsable 当前用户是否可访问该存储策略（授权判定的统一入口）。
+// 除用户组授权外，游客（guest 共享账号）只能访问本地临时空间：云盘驱动忽略
+// 用户维度隔离（全站共享命名空间），绝不能对匿名访客开放，否则可枚举/下载/改写
+// 所有用户存放在云盘上的内容。绕过 fscore.Resolve 直接按 ID 取策略的端点必须走这里。
+func policyUsable(u *model.User, g *model.UserGroup, p *model.Policy) bool {
+	if u == nil || p == nil {
+		return false
+	}
+	if u.Role == "admin" {
+		return true
+	}
+	if g == nil || !g.CanUsePolicy(p.ID) {
+		return false
+	}
+	if model.IsGuestUser(u) && p.Type != "local" {
+		return false
+	}
+	return true
 }
 
 // userOfID 按 ID 加载用户（后台任务/分享等无请求上下文的场景定位数据属主）
@@ -607,12 +639,15 @@ func commitQuotaCore(x ctx3, owner *model.User, delta int64) (bool, string) {
 		return true, ""
 	}
 	group := x.group
-	if owner.ID != x.user.ID && u.GroupID > 0 {
-		// 属主配额按属主所在组
-		var og model.UserGroup
+	if owner.ID != x.user.ID {
+		// 属主配额一律按属主所在组判定（属主无组时不以操作者所在组顶替，
+		// 否则审计/管理与写入者的组配额错配）
 		group = nil
-		if model.DB.First(&og, u.GroupID).Error == nil {
-			group = &og
+		if u.GroupID > 0 {
+			var og model.UserGroup
+			if model.DB.First(&og, u.GroupID).Error == nil {
+				group = &og
+			}
 		}
 	}
 	limit, limited := effectiveQuotaBytes(&u, group)
@@ -1157,7 +1192,7 @@ func (h *SiteHandler) GlobalSearch(c *gin.Context) {
 		}
 		for i := range list {
 			p := &list[i]
-			if x.user.Role != "admin" && !x.group.CanUsePolicy(p.ID) {
+			if !policyUsable(x.user, x.group, p) {
 				continue
 			}
 			d, err := h.Fs.DriverFor(p, x.user)
@@ -1193,7 +1228,7 @@ func (h *SiteHandler) GlobalSearch(c *gin.Context) {
 	}
 	for i := range list {
 		p := &list[i]
-		if x.user.Role != "admin" && !x.group.CanUsePolicy(p.ID) {
+		if !policyUsable(x.user, x.group, p) {
 			continue
 		}
 		d, err := h.Fs.DriverFor(p, x.user)
@@ -1900,6 +1935,9 @@ func (h *SiteHandler) RecycleRestore(c *gin.Context) {
 		if err := model.DB.First(&p, item.PolicyID).Error; err != nil {
 			continue
 		}
+		if !policyUsable(x.user, x.group, &p) {
+			continue // 策略不可用（如已撤销授权/游客访问云盘）则不恢复
+		}
 		if p.ReadOnly {
 			continue // 只读策略不应有回收站条目（防御性兜底）
 		}
@@ -2056,6 +2094,10 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 	var pol model.Policy
 	if err := model.DB.First(&pol, in.PolicyID).Error; err != nil {
 		dto.Fail(c, 400, "策略不存在")
+		return
+	}
+	if !policyUsable(x.user, x.group, &pol) {
+		dto.Fail(c, 403, "无权使用该存储")
 		return
 	}
 	if pol.ReadOnly {

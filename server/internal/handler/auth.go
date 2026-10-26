@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -23,11 +24,11 @@ func (h *AuthHandler) issueTokens(u *model.User) (string, string, error) {
 	if model.IsGuestUser(u) {
 		ttl, refresh = 24*time.Hour, 7*24*time.Hour
 	}
-	token, err := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, ttl)
+	token, err := middleware.MakeToken(u.ID, u.Role, middleware.TokenKindAccess, u.TokenVer, h.Secret, ttl)
 	if err != nil {
 		return "", "", err
 	}
-	rt, err := middleware.MakeToken(u.ID, u.Role, u.TokenVer, h.Secret, refresh)
+	rt, err := middleware.MakeToken(u.ID, u.Role, middleware.TokenKindRefresh, u.TokenVer, h.Secret, refresh)
 	return token, rt, err
 }
 
@@ -37,6 +38,19 @@ var loginFails sync.Map // key -> *failInfo
 type failInfo struct {
 	count int
 	until time.Time
+}
+
+// dummyPasswordHash 用于抹平"用户不存在/账号禁用"与"密码错误"两条返回路径的
+// bcrypt 耗时差（前者若直接返回会比后者快 ~50ms，可被按响应时长枚举用户名）。
+// 进程启动时生成一次；比较结果恒被丢弃。
+var dummyPasswordHash = func() string {
+	b, _ := bcrypt.GenerateFromPassword([]byte("cloudpan-timing-equalizer"), bcrypt.DefaultCost)
+	return string(b)
+}()
+
+// dummyCompare 在"用户不存在/禁用"路径上执行一次等价耗时的 bcrypt 比较，抹平时序侧信道
+func dummyCompare(pwd string) {
+	_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(pwd))
 }
 
 func loginLocked(key string) bool {
@@ -76,19 +90,29 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
-	lockKey := c.ClientIP() + "|" + in.Username
-	if loginLocked(lockKey) {
+	// 锁定键规范化：用户名大小写不敏感（MySQL utf8mb4_unicode_ci 下 admin/Admin 命中同一账号），
+	// 若直接用原始输入，轮换大小写变体即可为每个变体建独立计数桶、绕过 5 次锁定。
+	// 先查库、命中后用规范用户名；未命中时用 lowercase(trim) 兜底。
+	preKey := c.ClientIP() + "|" + strings.ToLower(strings.TrimSpace(in.Username))
+	if loginLocked(preKey) {
 		dto.Fail(c, 4291, "失败次数过多，账号已临时锁定，请 15 分钟后再试")
 		return
 	}
 	var u model.User
 	if err := model.DB.Where("username = ?", in.Username).First(&u).Error; err != nil {
-		loginFail(lockKey)
+		dummyCompare(in.Password) // 抹平与密码错误路径的耗时差，防时序枚举
+		loginFail(preKey)
 		dto.Fail(c, 4001, "用户名或密码错误")
+		return
+	}
+	lockKey := c.ClientIP() + "|" + strings.ToLower(u.Username)
+	if loginLocked(lockKey) {
+		dto.Fail(c, 4291, "失败次数过多，账号已临时锁定，请 15 分钟后再试")
 		return
 	}
 	// 枚举防护：账号禁用与密码错误返回完全一致的提示，避免借响应差异枚举有效用户名
 	if u.Disabled {
+		dummyCompare(in.Password)
 		dto.Fail(c, 4001, "用户名或密码错误")
 		return
 	}
@@ -98,6 +122,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	loginFails.Delete(lockKey)
+	loginFails.Delete(preKey)
 	now := time.Now()
 	model.DB.Model(&u).UpdateColumn("last_login_at", &now)
 	token, rt, err := h.issueTokens(&u)
@@ -122,6 +147,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 	claims, err := middleware.ParseToken(in.RefreshToken, h.Secret)
 	if err != nil {
+		dto.Fail(c, 401, "刷新令牌无效或已过期，请重新登录")
+		return
+	}
+	// 只接受刷新令牌：访问令牌不得续期成新的长期刷新令牌（泄露的访问令牌不能无限延长会话）
+	if claims.Kind != middleware.TokenKindRefresh {
 		dto.Fail(c, 401, "刷新令牌无效或已过期，请重新登录")
 		return
 	}
@@ -172,6 +202,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误：用户名 2-32 位，密码至少 6 位")
+		return
+	}
+	if msg := validNewUsername(in.Username); msg != "" {
+		dto.Fail(c, 400, msg)
 		return
 	}
 	settings := GetSiteSettings()
@@ -279,6 +313,31 @@ func (h *AuthHandler) SetWebdavPassword(c *gin.Context) {
 func hashPassword(pwd string) string {
 	b, _ := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	return string(b)
+}
+
+// validNewUsername 新建账号（注册 / 管理员创建）的用户名约束，返回空串表示合法：
+// 禁首尾空白、禁空白与控制字符（防 " admin"、"ad\nmin" 之类仅靠排序规则侥幸区分的名字），
+// 禁系统托管账号名 guest（IsGuestUser 按用户名精确匹配，必须杜绝任何同名变体被创建）。
+// 允许非 ASCII（如中文用户名），只做安全相关的收紧。
+func validNewUsername(name string) string {
+	if name == "" {
+		return "用户名不能为空"
+	}
+	if name != strings.TrimSpace(name) {
+		return "用户名首尾不能含空白"
+	}
+	if n := len([]rune(name)); n < 2 || n > 32 {
+		return "用户名长度需 2-32 位"
+	}
+	for _, r := range name {
+		if r < 0x21 || r == 0x7f || unicode.IsSpace(r) {
+			return "用户名不能包含空白或控制字符"
+		}
+	}
+	if strings.EqualFold(name, model.GuestUsername) {
+		return "该用户名为系统保留"
+	}
+	return ""
 }
 
 // MyLogs 当前用户自己的操作记录（只读）。

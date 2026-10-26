@@ -3,6 +3,8 @@
     <!-- DDE 25 标题栏：标题居中、无左侧图标，右侧细线按钮（close hover 纯红见 css） -->
     <div class="dde-titlebar" @pointerdown="onTitlebarDown" @dblclick="toggleMax">
       <span class="dde-title">{{ w.title }}</span>
+      <!-- 应用操作区：由应用组件 Teleport 注入（.dde-ctrls 为绝对定位，操作区样式见 deepin.css） -->
+      <div class="win-tb-actions" ref="tbActions" @pointerdown.stop @mousedown.stop></div>
       <div class="dde-ctrls" @mousedown.stop>
         <button class="dde-ctrl" @click="minimize" title="最小化"><AppIcon name="min" :size="13" /></button>
         <button class="dde-ctrl" @click="toggleMax" :title="w.maximized ? '还原' : '最大化'"><AppIcon name="max" :size="12" /></button>
@@ -28,7 +30,7 @@ import AppIcon from '../../components/AppIcon.vue'
 const props = defineProps<{ win: WinState }>()
 const w = props.win
 const store = useWindows()
-const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown } = useWindowChrome(w)
+const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions } = useWindowChrome(w)
 
 const comp = computed(() => appComponent(w.app))
 const dirs = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']

@@ -171,8 +171,10 @@ button, input, textarea, select { font-family: inherit; color: inherit; outline:
 .input {
   background: var(--bg); border: 1px solid var(--stroke); color: var(--text);
   border-radius: var(--radius-sm); padding: 7px 12px; font-size: 13px; min-width: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.input:focus { border-color: var(--theme-2); }
+/* 聚焦：主题色描边 + 柔光晕（deepin 风格） */
+.input:focus { border-color: var(--theme-2); box-shadow: 0 0 0 3px var(--accent-weak); }
 select.input { cursor: pointer; }
 
 /* ============ 开机屏（基座，外观细节由主题提供） ============ */
@@ -352,21 +354,35 @@ select.input { cursor: pointer; }
 
 /* ============ 应用内通用 ============ */
 .app-root { flex: 1; display: flex; flex-direction: column; overflow: hidden; color: var(--text); }
+/* 窗口标题栏内的应用操作区：应用组件 Teleport 注入，紧邻最小化/最大化/关闭按钮左侧。
+   做成透明背景 + 继承标题栏文字色，三套主题（win12/macos/deepin）通用 */
+.win-tb-actions { display: flex; align-items: center; gap: 2px; align-self: center; flex: none; }
+.win-tb-actions:empty { display: none; }
+.win-tb-actions .tool-btn { padding: 4px 8px; font-size: 12.5px; color: inherit; }
+.win-tb-actions .tool-btn:hover { background: rgba(127, 127, 127, 0.18); }
 .app-toolbar {
   display: flex; align-items: center; gap: 4px; padding: 6px 10px; flex: none;
   border-bottom: 1px solid var(--stroke-b);
 }
 .tool-btn {
-  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
   background: transparent; border: none; color: var(--text); font-size: 13px; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
 }
 .tool-btn:hover { background: var(--hover-b); }
+/* 按压回弹：轻微缩放给出「按到了」的触觉反馈 */
+.tool-btn:active:not(:disabled) { transform: scale(0.96); }
 .tool-btn:disabled { opacity: 0.35; cursor: default; }
 .tool-btn:disabled:hover { background: transparent; }
 .tool-sep { width: 1px; height: 20px; background: var(--stroke-b); margin: 0 4px; }
-.crumb { display: flex; align-items: center; gap: 2px; font-size: 13px; color: var(--text-2); overflow: hidden; }
-.crumb span { padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; }
-.crumb span:hover { background: var(--hover-b); color: var(--text); }
+/* 地址栏：Win11 圆角胶囊容器（面包屑段悬停浮起） */
+.crumb {
+  display: flex; align-items: center; gap: 2px; font-size: 13px; color: var(--text-2); overflow: hidden;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid var(--stroke-b); border-radius: 999px; padding: 2px 4px;
+}
+.crumb span { padding: 3px 8px; border-radius: 999px; cursor: pointer; white-space: nowrap; transition: background 0.12s ease, color 0.12s ease; }
+.crumb span:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
 .statusbar {
   flex: none; display: flex; align-items: center; gap: 16px; padding: 5px 14px;
   border-top: 1px solid var(--stroke-b); font-size: 12px; color: var(--text-3);
@@ -398,35 +414,49 @@ select.input { cursor: pointer; }
 
 /* ============ 文件视图 ============ */
 .file-grid {
-  flex: 1; overflow: auto; padding: 10px; display: grid;
-  grid-template-columns: repeat(auto-fill, 100px); gap: 4px; align-content: start;
+  flex: 1; overflow: auto; padding: 12px; display: grid;
+  grid-template-columns: repeat(auto-fill, 100px); gap: 6px; align-content: start;
 }
 .file-item {
-  width: 100px; padding: 10px 4px 8px; border-radius: var(--radius-sm); text-align: center;
+  width: 100px; padding: 12px 4px 10px; border-radius: var(--radius); text-align: center;
   border: 1px solid transparent; cursor: default; position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .file-item:hover { background: var(--hover-b); }
-.file-item.selected { background: color-mix(in srgb, var(--theme-2) 19%, transparent); border-color: color-mix(in srgb, var(--theme-2) 38%, transparent); }
-.file-item .f-ico { width: 46px; height: 46px; margin: 0 auto 6px; }
+.file-item.selected {
+  background: color-mix(in srgb, var(--theme-2) 16%, transparent);
+  border-color: color-mix(in srgb, var(--theme-2) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-2) 20%, transparent);
+}
+/* 悬停时图标轻微上浮放大（Fluent 微动效；不参与布局不影响窗口化测量） */
+.file-item .f-ico { width: 46px; height: 46px; margin: 0 auto 8px; transition: transform 0.18s var(--anim-pop); }
+.file-item:hover .f-ico { transform: translateY(-2px) scale(1.05); }
 .file-item .f-name {
-  font-size: 12px; line-height: 1.3; word-break: break-all; color: var(--text);
+  font-size: 12px; line-height: 1.35; word-break: break-all; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .file-list { flex: 1; overflow: auto; }
 .file-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .file-list th {
-  text-align: left; padding: 7px 14px; font-weight: 400; color: var(--text-3);
+  text-align: left; padding: 8px 14px; font-weight: 500; color: var(--text-3);
   border-bottom: 1px solid var(--stroke-b); position: sticky; top: 0; z-index: 1;
-  background: var(--bg70); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); font-size: 12px;
+  background: var(--bg70); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  font-size: 12px; letter-spacing: 0.3px; transition: color 0.12s ease, background 0.12s ease;
 }
-.file-list td { padding: 7px 14px; border-bottom: 1px solid var(--hover-b); color: var(--text); }
+.file-list td { padding: 8px 14px; border-bottom: 1px solid var(--hover-b); color: var(--text); transition: background 0.12s ease; }
+/* 悬停行两端做圆角，去掉「整行直角抹灰」的生硬感 */
 .file-list tr:hover td { background: var(--hover-b); }
-.file-list tr.selected td { background: color-mix(in srgb, var(--theme-2) 19%, transparent); }
+.file-list tr:hover td:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.file-list tr:hover td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+.file-list tr.selected td { background: color-mix(in srgb, var(--theme-2) 16%, transparent); }
 
 .empty-hint {
-  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px;
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px;
   align-items: center; justify-content: center; color: var(--text-3); pointer-events: none;
 }
+.empty-hint svg, .empty-hint img { animation: hint-float 3.2s ease-in-out infinite; }
+.empty-hint div { font-size: 13px; }
+@keyframes hint-float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-7px) } }
 
 /* ============ 照片壁纸（Unsplash 免费授权下载，存 public/wallpapers/） ============
    key 全局唯一（ph- 前缀），三主题共用；cover 铺满，桌面 ::before 噪点层自动叠加 */

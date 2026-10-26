@@ -1,8 +1,16 @@
-import { computed } from 'vue'
+import { computed, provide, ref, type InjectionKey, type Ref } from 'vue'
 import { useWindows, type WinState } from '../stores/windows'
 import { useSession } from '../stores/session'
 import { resolveTheme } from '../themes/registry'
 import { isMobileLayout } from '../utils/mobile'
+
+/**
+ * 窗口标题栏内的「应用操作区」挂载点。
+ * 提供方：各主题的 WindowFrame（见 useWindowChrome 内的 provide）与独立应用模式的 StandaloneApp。
+ * 使用方：应用组件把自己的一排操作按钮 Teleport 进去（如 Office 编辑器的「编辑/下载」），
+ * 与最小化/最大化/关闭同排显示，不再为两个按钮单占一行工具条。
+ */
+export const TITLEBAR_ACTIONS: InjectionKey<Ref<HTMLElement | null>> = Symbol('win-titlebar-actions')
 
 /**
  * 窗口框架共享行为（各主题的 WindowFrame 组件复用）：
@@ -64,6 +72,10 @@ function updateSnapGhost(g: Geo, cx: number, cy: number) {
 export function useWindowChrome(w: WinState) {
   const store = useWindows()
   const session = useSession()
+
+  // 标题栏操作区占位元素：模板 ref 绑到标题栏内的 .win-tb-actions，供应用组件 Teleport 注入按钮
+  const tbActions = ref<HTMLElement | null>(null)
+  provide(TITLEBAR_ACTIONS, tbActions)
 
   const geo = computed(() => resolveTheme(session.osTheme).geometry)
   const snapEdges = computed(() => resolveTheme(session.osTheme).snapEdges)
@@ -181,5 +193,5 @@ export function useWindowChrome(w: WinState) {
     document.addEventListener('pointercancel', onUp)
   }
 
-  return { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown }
+  return { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions }
 }

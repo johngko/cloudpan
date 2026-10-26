@@ -4,6 +4,8 @@
     <div class="win-titlebar" @pointerdown="onTitlebarDown" @dblclick="toggleMax">
       <span class="t-ico"><AppIcon :name="w.icon" :size="22" /></span>
       <span class="t-txt">{{ w.title }}</span>
+      <!-- 应用操作区：由应用组件 Teleport 注入（如 Office 的「编辑/下载」），紧邻窗口控制钮左侧 -->
+      <div class="win-tb-actions" ref="tbActions" @pointerdown.stop @mousedown.stop></div>
       <div class="win-controls" @mousedown.stop>
         <button class="win-ctrl" @click="minimize" title="最小化">
           <svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 8.2h8" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
@@ -42,7 +44,7 @@ import AppIcon from '../../components/AppIcon.vue'
 const props = defineProps<{ win: WinState }>()
 const w = props.win
 const store = useWindows()
-const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown } = useWindowChrome(w)
+const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions } = useWindowChrome(w)
 
 const comp = computed(() => appComponent(w.app))
 const dirs = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']

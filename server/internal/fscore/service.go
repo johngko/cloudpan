@@ -68,6 +68,12 @@ func (s *Service) Resolve(user *model.User, group *model.UserGroup, policyID uin
 	if user.Role != "admin" && !group.CanUsePolicy(p.ID) {
 		return nil, nil, errors.New("无权访问该存储")
 	}
+	// 游客（guest 共享账号）只能访问本地临时空间：云盘驱动忽略用户维度隔离
+	// （全站共享同一云盘命名空间），若对匿名访客开放，可枚举/下载/改写所有用户
+	// 存放在云盘上的内容（访客组 AllowedPolicyIDs 为空时 CanUsePolicy 默认全放行）。
+	if model.IsGuestUser(user) && p.Type != "local" {
+		return nil, nil, errors.New("游客只能访问本地临时空间")
+	}
 	d, err := s.DriverFor(&p, user)
 	if err != nil {
 		return nil, nil, err

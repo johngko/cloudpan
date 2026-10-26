@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/webdav"
 
 	"cloudpan/internal/fscore"
+	"cloudpan/internal/middleware"
 	"cloudpan/internal/model"
 )
 
@@ -150,7 +151,8 @@ func DavAuth() gin.HandlerFunc {
 			return
 		}
 		// 与 Web 登录同一套失败锁定（IP+用户名，5 次失败锁 15 分钟），防 WebDAV 密码暴破
-		lockKey := c.ClientIP() + "|" + user
+		// 用户名规范化（大小写不敏感，见 Login 中的说明），避免轮换大小写绕过锁定
+		lockKey := c.ClientIP() + "|" + strings.ToLower(strings.TrimSpace(user))
 		if loginLocked(lockKey) {
 			c.String(http.StatusTooManyRequests, "失败次数过多，已临时锁定，请 15 分钟后再试")
 			c.Abort()
@@ -158,14 +160,15 @@ func DavAuth() gin.HandlerFunc {
 		}
 		var u model.User
 		if err := model.DB.Where("username = ? AND disabled = false", user).First(&u).Error; err != nil {
+			dummyCompare(pass) // 抹平与密码错误路径的耗时差，防时序枚举
 			loginFail(lockKey)
-			c.String(http.StatusUnauthorized, "用户不存在")
+			c.String(http.StatusUnauthorized, "用户名或密码错误")
 			c.Abort()
 			return
 		}
 		if u.WebdavPasswordHash == "" || bcryptCompare(u.WebdavPasswordHash, pass) != nil {
 			loginFail(lockKey)
-			c.String(http.StatusUnauthorized, "WebDAV 密码错误（请在设置中先行设置）")
+			c.String(http.StatusUnauthorized, "用户名或密码错误")
 			c.Abort()
 			return
 		}
@@ -230,10 +233,15 @@ func DavHandler(svc *fscore.Service) http.Handler {
 // RegisterDav 挂到 gin（非 /api 前缀）。WebDAV 方法多为非标准动词，需逐个注册
 func RegisterDav(r *gin.Engine, svc *fscore.Service) {
 	handler := DavHandler(svc)
+	limiter := middleware.NewIPRateLimiter(30, 10) // /dav 独立 IP 限流（30 次/分钟），防批量探测与口令爆破
 	dav := func(c *gin.Context) {
 		// 功能门控：WebDAV 被管理员停用时拒绝挂载
 		if !model.AppEnabled("webdav") {
 			c.String(http.StatusForbidden, "WebDAV 已被管理员停用")
+			return
+		}
+		if !limiter.Allow(c.ClientIP()) {
+			c.String(http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
 			return
 		}
 		DavAuth()(c)

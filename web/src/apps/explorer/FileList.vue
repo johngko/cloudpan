@@ -63,6 +63,6 @@ defineEmits<{
   color: inherit; border-radius: 2px; padding: 0 1px;
 }
 /* 大文件夹窗口化：行高固定 + 名称单行省略（普通目录不套用） */
-.file-list.virtual tbody tr { height: 34px; }
+.file-list.virtual tbody tr { height: 36px; }
 .file-list.virtual .fn-nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

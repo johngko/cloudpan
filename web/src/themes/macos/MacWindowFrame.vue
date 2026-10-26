@@ -8,6 +8,8 @@
       </div>
       <span class="mac-title">{{ w.title }}</span>
       <span class="mac-tb-spacer"></span>
+      <!-- 应用操作区：由应用组件 Teleport 注入（macOS 控制钮在左，操作区落在标题栏右端） -->
+      <div class="win-tb-actions" ref="tbActions" @pointerdown.stop @mousedown.stop></div>
     </div>
     <div class="win-body">
       <component :is="comp" :win-id="w.id" :props="w.props" />
@@ -27,7 +29,7 @@ import { useWindowChrome } from '../../shell/useWindowChrome'
 const props = defineProps<{ win: WinState }>()
 const w = props.win
 const store = useWindows()
-const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown } = useWindowChrome(w)
+const { style, focusWin, minimize, toggleMax, close, onTitlebarDown, onResizeDown, tbActions } = useWindowChrome(w)
 
 const comp = computed(() => appComponent(w.app))
 const dirs = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']

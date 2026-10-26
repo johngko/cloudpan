@@ -78,6 +78,10 @@ func (h *AdminHandler) UserCreate(c *gin.Context) {
 		dto.Fail(c, 400, "参数错误")
 		return
 	}
+	if msg := validNewUsername(in.Username); msg != "" {
+		dto.Fail(c, 400, msg)
+		return
+	}
 	var n int64
 	model.DB.Model(&model.User{}).Where("username = ?", in.Username).Count(&n)
 	if n > 0 {

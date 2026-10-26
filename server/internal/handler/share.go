@@ -257,6 +257,10 @@ func (h *ShareHandler) EncryptFile(c *gin.Context) {
 		dto.Fail(c, 404, "存储已失效")
 		return
 	}
+	if !policyUsable(x.user, x.group, &p) {
+		dto.Fail(c, 403, "无权访问该存储")
+		return
+	}
 	d, err := h.Site.Fs.DriverFor(&p, x.user)
 	if err != nil {
 		dto.Fail(c, 400, err.Error())

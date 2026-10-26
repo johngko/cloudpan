@@ -1,15 +1,13 @@
 <template>
   <div class="app-root">
-    <div class="app-toolbar">
-      <!-- 文件名不在此重复显示：窗口标题栏已有（DS 编辑器顶栏也会显示文档名） -->
-      <AppIcon name="office" :size="16" />
-      <div style="flex: 1"></div>
-
+    <!-- 操作按钮不再独占一行工具条：Teleport 到窗口标题栏「最小化/最大化/关闭」左侧
+         （挂载点由窗口框架/独立模式提供；标题栏已有应用图标与文件名，故这里不再重复放图标） -->
+    <Teleport v-if="tbActions" :to="tbActions">
       <!-- 编辑模式切换 -->
       <span v-if="fallbackMode && sheets.length > 1" style="font-size: 12px; color: var(--text-3); margin-right: 6px">
         工作表 {{ sheetIdx + 1 }}/{{ sheets.length }}
       </span>
-        <button v-if="fallbackMode && sheets.length > 1" class="tool-btn" @click="sheetIdx = (sheetIdx + 1) % sheets.length">
+      <button v-if="fallbackMode && sheets.length > 1" class="tool-btn" @click="sheetIdx = (sheetIdx + 1) % sheets.length">
         <AppIcon name="fwd" :size="14" />切换
       </button>
 
@@ -23,7 +21,7 @@
       </template>
 
       <button class="tool-btn" @click="download"><AppIcon name="download" :size="15"/>下载</button>
-    </div>
+    </Teleport>
 
     <!-- ONLYOFFICE 在线编辑（placeholder id 带 winId：多开时 DocsAPI 按 id 挂载，固定 id 会全挂进首个窗口） -->
     <div v-show="mode === 'ds'" style="flex: 1; position: relative">
@@ -91,17 +89,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue'
 import axios from 'axios'
 import { get, post, put } from '../api/http'
 import { rawUrl, downloadUrl, userShareApi, type UploadInit } from '../api/modules'
 import { useSession } from '../stores/session'
 import { useToast } from '../stores/dialog'
 import AppIcon from '../components/AppIcon.vue'
+import { TITLEBAR_ACTIONS } from '../shell/useWindowChrome'
 
 const props = defineProps<{ winId: number; props: any }>()
 const session = useSession()
 const toast = useToast()
+// 标题栏操作区挂载点（窗口框架 / 独立模式注入）：操作按钮渲染到标题栏，不再占一行工具条
+const tbActions = inject(TITLEBAR_ACTIONS, null)
 const ext = computed(() => (props.props?.ext || '').toLowerCase())
 
 // 文件来源：本地盘（policyId+path）或共享盘（shareId+rel，perm 来自共享）
