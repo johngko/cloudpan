@@ -64,6 +64,27 @@ func (d *DavFS) physical(ctx context.Context, name string) (string, error) {
 	return ld.Physical(rest)
 }
 
+// davRejectIfEditLocked B13：WebDAV 写路径被他人编辑锁持有则拒绝
+// （与 Web 端写路径同一注册表；返回的 error 由 webdav 库转为 5xx，客户端可读到文本）
+func (d *DavFS) davRejectIfEditLocked(ctx context.Context, name string) error {
+	p, rest, err := d.resolve(name)
+	if err != nil || rest == "/" {
+		return nil // 解析不到路径交给后续 physical 报错
+	}
+	var uid uint
+	if v := ctx.Value(davUserKey{}); v != nil {
+		if u, ok := v.(*model.User); ok && u != nil {
+			uid = u.ID
+		}
+	}
+	if vp, ok := cleanLockPath(rest); ok {
+		if en := editLockHeldByOther(p.ID, vp, uid); en != nil {
+			return fmt.Errorf("423 locked: 文件正被 %s 编辑，请关闭编辑器后再写入", en.Name)
+		}
+	}
+	return nil
+}
+
 func (d *DavFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
 	phys, err := d.physical(ctx, name)
 	if err != nil {
@@ -73,6 +94,11 @@ func (d *DavFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error 
 }
 
 func (d *DavFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
+	if flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND) != 0 {
+		if err := d.davRejectIfEditLocked(ctx, name); err != nil {
+			return nil, err
+		}
+	}
 	phys, err := d.physical(ctx, name)
 	if err != nil {
 		return nil, err
@@ -84,6 +110,9 @@ func (d *DavFS) OpenFile(ctx context.Context, name string, flag int, perm os.Fil
 }
 
 func (d *DavFS) RemoveAll(ctx context.Context, name string) error {
+	if err := d.davRejectIfEditLocked(ctx, name); err != nil {
+		return err
+	}
 	phys, err := d.physical(ctx, name)
 	if err != nil {
 		return err
@@ -95,6 +124,9 @@ func (d *DavFS) RemoveAll(ctx context.Context, name string) error {
 }
 
 func (d *DavFS) Rename(ctx context.Context, oldName, newName string) error {
+	if err := d.davRejectIfEditLocked(ctx, oldName); err != nil {
+		return err
+	}
 	oldPhys, err := d.physical(ctx, oldName)
 	if err != nil {
 		return err

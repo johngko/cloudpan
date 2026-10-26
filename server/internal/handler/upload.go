@@ -139,6 +139,11 @@ func (h *UploadHandler) Init(c *gin.Context) {
 	if in.ChunkSize < 1<<10 || in.ChunkSize > 64<<20 {
 		in.ChunkSize = 8 << 20
 	}
+	// B13 协作硬锁：目标同名文件在他人编辑器中持锁时早失败（省流量；
+	// Complete 处再查一次兜「上传途中被别人抢先打开编辑」的窗口）
+	if vp, err2 := fscore.Join(parent, in.Name); err2 == nil && rejectIfEditLocked(c, in.PolicyID, vp) {
+		return
+	}
 	p, d, err := h.Site.Fs.Resolve(x.user, x.group, in.PolicyID)
 	if err != nil {
 		dto.Fail(c, 403, err.Error())
@@ -377,6 +382,10 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 	d, err := h.Site.Fs.DriverFor(&p, mergeUser(x, &sess))
 	if err != nil {
 		dto.Fail(c, 400, err.Error())
+		return
+	}
+	// B13 协作硬锁兜底：合并落盘前再查一次（Init 之后文件可能被他人打开编辑）
+	if vp, err2 := fscore.Clean(sess.ParentPath + "/" + sess.Name); err2 == nil && rejectIfEditLocked(c, sess.PolicyID, vp) {
 		return
 	}
 	// 管理员本地盘视图（AdminLocalDriver）同样支持分块上传：按目标路径路由到具体物理根

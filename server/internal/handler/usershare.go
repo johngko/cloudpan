@@ -470,6 +470,10 @@ func (h *UserShareHandler) Upload(c *gin.Context) {
 	// 覆盖同名文件、落盘、秒传台账一致性统一由 LocalDriver.CreateFile 负责
 	// （覆盖前摘掉旧内容的副本记录 + 边写边算哈希登记新内容），调用点不再自行实现
 	//
+	// B13 协作硬锁：目标文件被他人编辑器持锁时拒绝（覆盖写会打断编辑会话）
+	if rejectIfEditLocked(c, sh.PolicyID, vp) {
+		return
+	}
 	// 配额：共享盘写入落在「共享创建者」的隔离目录里（用的是创建者的盘），
 	// 因此按创建者的配额预检并计入创建者的用量；超额则拒绝，不让被共享者把创建者的空间写爆
 	owner := userOfID(sh.OwnerID)
@@ -550,6 +554,10 @@ func (h *UserShareHandler) UploadInit(c *gin.Context) {
 	vp, err := fscore.Join(full, in.Name)
 	if err != nil {
 		dto.Fail(c, 400, "文件名非法")
+		return
+	}
+	// B13 协作硬锁（Init 早失败 + Complete 兜底在普通上传链路，共享 Init 这里查一次）
+	if rejectIfEditLocked(c, sh.PolicyID, vp) {
 		return
 	}
 	x := ctxOf(c)
@@ -634,6 +642,14 @@ func (h *UserShareHandler) Delete(c *gin.Context) {
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
 		return
+	}
+	// B13 协作硬锁：不能删除他人正在编辑的文件
+	for _, rel := range in.Rels {
+		if full, ok := userShareFull(sh, rel); ok {
+			if rejectIfEditLocked(c, sh.PolicyID, full) {
+				return
+			}
+		}
 	}
 	var released int64
 	for _, rel := range in.Rels {

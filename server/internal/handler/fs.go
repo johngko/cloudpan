@@ -427,6 +427,10 @@ func (h *SiteHandler) Rename(c *gin.Context) {
 	} else {
 		in.NewName = sn
 	}
+	// B13 协作硬锁：他人编辑器持锁时拒绝（重命名会断掉编辑会话的保存路径）
+	if vp, ok2 := cleanLockPath(in.Path); ok2 && rejectIfEditLocked(c, p.ID, vp) {
+		return
+	}
 	if err := d.Rename(in.Path, in.NewName); err != nil {
 		dto.Fail(c, 400, "重命名失败："+err.Error())
 		return
@@ -466,6 +470,12 @@ func (h *SiteHandler) Move(c *gin.Context) {
 	if dst != "/" {
 		if e, err := d.Stat(dst); err != nil || !e.IsDir {
 			dto.Fail(c, 400, "目标目录不存在")
+			return
+		}
+	}
+	// B13 协作硬锁：源路径被他人编辑中时拒绝
+	for _, src := range in.Paths {
+		if vp, ok2 := cleanLockPath(src); ok2 && rejectIfEditLocked(c, p.ID, vp) {
 			return
 		}
 	}
@@ -970,6 +980,10 @@ func (h *SiteHandler) CrossMove(c *gin.Context) {
 			dto.Fail(c, 400, fmt.Sprintf("非法源路径 %s", it.Path))
 			return
 		}
+		// B13 协作硬锁：移走他人正在编辑的源文件会断掉其保存路径
+		if rejectIfEditLocked(c, it.PolicyID, src) {
+			return
+		}
 		sz, serr := entryBytes(sd, src)
 		if serr != nil {
 			dto.Fail(c, 404, fmt.Sprintf("源 %s 不存在", src))
@@ -1034,6 +1048,12 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 	x := ctxOf(c)
 	recycleUserDir := filepath.Join(h.Fs.RecycleDir, fmt.Sprint(x.user.ID))
 	_ = os.MkdirAll(recycleUserDir, 0o755)
+	// B13 协作硬锁：不能删除他人正在编辑的文件
+	for _, src := range in.Paths {
+		if vp, ok2 := cleanLockPath(src); ok2 && rejectIfEditLocked(c, p.ID, vp) {
+			return
+		}
+	}
 	for _, src := range in.Paths {
 		if msg, halt := trashMoveToRecycle(d, p, x.user.ID, recycleUserDir, src); halt {
 			dto.Fail(c, 400, msg)
@@ -1165,6 +1185,10 @@ func (h *SiteHandler) WriteText(c *gin.Context) {
 	}
 	if e, err := d.Stat(vp); err == nil && e.IsDir {
 		dto.Fail(c, 400, "目标是目录")
+		return
+	}
+	// B13 协作硬锁：记事本保存同样被编辑锁拦截（编辑器打开时用别的写入通道会互相覆盖）
+	if rejectIfEditLocked(c, p.ID, vp) {
 		return
 	}
 	// 配额校验 + 记账（覆盖写入按新旧大小差值）
@@ -2142,6 +2166,10 @@ func (h *SiteHandler) FileVersionRestore(c *gin.Context) {
 	var ver model.FileVersion
 	if err := model.DB.Where("version=? AND path=? AND policy_id=? AND user_id=?", in.Version, in.Path, in.PolicyID, x.user.ID).First(&ver).Error; err != nil {
 		dto.Fail(c, 404, "版本不存在")
+		return
+	}
+	// B13 协作硬锁：版本还原会覆盖当前文件，编辑中拒绝
+	if vp, ok2 := cleanLockPath(in.Path); ok2 && rejectIfEditLocked(c, in.PolicyID, vp) {
 		return
 	}
 	// 找到当前路径对应的策略

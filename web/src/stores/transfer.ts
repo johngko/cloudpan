@@ -85,6 +85,34 @@ export const CONCURRENCY_MAX = 8
 export interface UploadPrefs { concurrency: number; chunkMB: number }
 const DEFAULT_PREFS: UploadPrefs = { concurrency: 3, chunkMB: 8 }
 
+// ---- B14 断点续传：文件指纹 → SHA-256 缓存（localStorage）----
+// 会话续传本身由服务端兜底：InitUpload 按（用户,属主,策略,目录,名,大小,哈希）
+// 命中活跃 uploading 会话并返回已收分片列表——刷新页面后重新选同一个文件，
+// init 就拿到断点。客户端唯一多付的成本是整文件重算哈希（大文件可达数分钟）。
+// 按指纹（策略|目录|名|大小|lastModified）缓存哈希：重选时直接复用，
+// 秒传判定同样命中。只存指纹与哈希摘要，不存任何文件内容；200 条封顶，
+// 超限砍最旧一半（插入序近似时间序）。
+const HASH_CACHE_KEY = 'cp_uphash1'
+function hashFingerprint(t: Pick<TransferTask, 'shareId' | 'policyId' | 'parent' | 'name' | 'size'>, file?: File): string {
+  return `${t.shareId || 0}|${t.policyId}|${t.parent}|${t.name}|${t.size}|${file?.lastModified ?? 0}`
+}
+function loadHashCache(): Record<string, string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(HASH_CACHE_KEY) || '{}')
+    return v && typeof v === 'object' ? v as Record<string, string> : {}
+  } catch { return {} }
+}
+function saveHashCache(t: TransferTask): void {
+  if (!t.hash) return
+  try {
+    const m = loadHashCache()
+    m[hashFingerprint(t, t.file)] = t.hash
+    const ks = Object.keys(m)
+    if (ks.length > 200) for (const k of ks.slice(0, ks.length - 100)) delete m[k]
+    localStorage.setItem(HASH_CACHE_KEY, JSON.stringify(m))
+  } catch { /* 配额满：放弃本次缓存，不影响上传 */ }
+}
+
 // 虚拟路径拼接（slash 风格，parent 恒以 / 开头）
 function joinVP(parent: string, sub: string): string {
   if (!sub) return parent
@@ -221,10 +249,14 @@ export const useTransfer = defineStore('transfer', {
     },
     async hashFile(t: TransferTask) {
       if (t.hash) return // 重试路径：复用首遍哈希，避免 6GB 文件重算
+      // B14：刷新后重选同一文件 → 指纹命中缓存，跳过整文件重算直接续传/秒传
+      const hit = loadHashCache()[hashFingerprint(t, t.file)]
+      if (hit) { t.hash = hit; return }
       if (t.size === 0) {
         // 0 字节不读文件本体：部分浏览器内核里来自文件夹拖拽的 File 占位项
         // （空文件夹退化成的 0 字节项）不可读，arrayBuffer() 会直接抛错
         t.hash = EMPTY_SHA256
+        saveHashCache(t)
         return
       }
       if (t.size <= SMALL_FILE) {
@@ -238,6 +270,7 @@ export const useTransfer = defineStore('transfer', {
         // 注意：crypto.subtle 仅在安全上下文（HTTPS/localhost）存在，
         // 内网通过 http://IP 访问时需回退到纯 JS 实现（sha256 内部已处理）
         t.hash = await sha256(buf)
+        saveHashCache(t)
         return
       }
       // 大文件：逐块读取 + 增量哈希。峰值内存 = 一个读取块（4MB）。
@@ -250,6 +283,7 @@ export const useTransfer = defineStore('transfer', {
         h.update(new Uint8Array(buf))
       }
       t.hash = h.digest()
+      saveHashCache(t)
     },
     async pollProgress(t: TransferTask) {
       if (!t.sessionId) return

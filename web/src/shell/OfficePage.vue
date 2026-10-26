@@ -146,6 +146,27 @@ function startCollab() {
   collabTimer = window.setInterval(pollStatus, 20000)
 }
 
+// B13 协作硬锁：关闭编辑器时主动放锁（keepalive 保证 unload 期间请求仍发出），
+// 否则要等 90s 心跳 TTL 才解锁，别人短时间删不掉/改不动这个文件。
+function releaseLock() {
+  try {
+    if (isShare.value) {
+      const p = new URLSearchParams({ path: q.path || '', st: q.st || '', sess: sessID, release: '1' })
+      fetch(`/api/s/${shareToken}/office/status?${p}`, { keepalive: true })
+    } else {
+      const base = q.shareId
+        ? `shareId=${q.shareId}&rel=${encodeURIComponent(q.rel || '')}`
+        : `policyId=${q.policyId}&path=${encodeURIComponent(q.path || '')}`
+      const t = getToken()
+      fetch(`/api/office/status?${base}&sess=${sessID}&release=1`, {
+        keepalive: true,
+        headers: t ? { Authorization: 'Bearer ' + t } : {},
+      })
+    }
+  } catch { /* 放锁失败由 90s TTL 兜底 */ }
+}
+window.addEventListener('beforeunload', releaseLock)
+
 async function loadScript(src: string): Promise<void> {
   if ((window as any).DocsAPI) return
   await new Promise<void>((resolve, reject) => {
@@ -205,7 +226,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', releaseLock)
   if (collabTimer) window.clearInterval(collabTimer)
+  releaseLock()
   try { editor?.destroyEditor?.() } catch {}
 })
 

@@ -538,6 +538,7 @@ func (h *OfficeHandler) Status(c *gin.Context) {
 	}
 	var docKey string
 	var modTime int64
+	release := c.Query("release") == "1" // 编辑器关闭时 keepalive 发一次，主动放锁
 	if shareID != 0 {
 		if h.LoadShare == nil {
 			dto.Fail(c, 500, "共享服务不可用")
@@ -563,6 +564,12 @@ func (h *OfficeHandler) Status(c *gin.Context) {
 		}
 		docKey = docKeyFor(sh.PolicyID, full, e.ModTime)
 		modTime = e.ModTime
+		// B13 协作硬锁：编辑模式的每次心跳顺带续锁；release=1 主动放锁
+		if release {
+			releaseEditLock(sh.PolicyID, full, sess)
+		} else if mode == "edit" {
+			touchEditLock(sh.PolicyID, full, sess, u.ID, name)
+		}
 	} else {
 		v, err := fscore.Clean(c.Query("path"))
 		if err != nil {
@@ -585,6 +592,11 @@ func (h *OfficeHandler) Status(c *gin.Context) {
 		}
 		docKey = docKeyFor(policyID, v, e.ModTime)
 		modTime = e.ModTime
+		if release {
+			releaseEditLock(policyID, v, sess)
+		} else if mode == "edit" {
+			touchEditLock(policyID, v, sess, u.ID, name)
+		}
 	}
 	dto.OK(c, gin.H{"docKey": docKey, "modTime": modTime, "editors": touchEditSession(docKey, sess, name, mode)})
 }
@@ -634,6 +646,13 @@ func (h *OfficeHandler) StatusShare(c *gin.Context) {
 		return
 	}
 	docKey := docKeyFor(p.ID, vp, e.ModTime)
+	// B13：分享链接的编辑者同样持硬锁（匿名 uid=0，属主写入也会被挡——
+	// 这正是「检出即锁」语义；编辑器关闭/90s 无心跳自动放锁）
+	if c.Query("release") == "1" {
+		releaseEditLock(p.ID, vp, sess)
+	} else if mode == "edit" {
+		touchEditLock(p.ID, vp, sess, 0, "访客（分享链接）")
+	}
 	dto.OK(c, gin.H{"docKey": docKey, "modTime": e.ModTime, "editors": touchEditSession(docKey, sess, "访客", mode)})
 }
 
