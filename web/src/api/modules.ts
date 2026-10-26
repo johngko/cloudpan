@@ -171,6 +171,16 @@ export const authApi = {
   setWebdavPassword: (password: string) => put('/users/me/webdav-password', { password })
 }
 
+export const passkeyApi = {
+  list: () => get<{ id: number; name: string; cred: string; createdAt: string }[]>('/auth/passkey'),
+  remove: (id: number) => del('/auth/passkey?id=' + id),
+  registerBegin: () => post<{ sid: string; options: any }>('/auth/passkey/register/begin', {}),
+  registerFinish: (sid: string, response: any) => post<{ name: string }>('/auth/passkey/register/finish', { sid, response }),
+  loginBegin: (username: string) => post<{ sid: string; options: any }>('/auth/passkey/login/begin', { username }),
+  loginFinish: (username: string, sid: string, response: any) =>
+    post<{ token: string; refreshToken: string; user: any; isGuest: boolean }>('/auth/passkey/login/finish', { username, sid, response })
+}
+
 export const siteApi = {
   publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
 }

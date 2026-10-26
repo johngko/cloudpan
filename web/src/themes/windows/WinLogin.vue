@@ -20,6 +20,9 @@
           @keyup.enter="doLogin" :style="{ opacity: stage === 'form' ? 1 : 0, transition: 'opacity 300ms' }" />
         <div class="w12-login-err">{{ errMsg }}</div>
         <button class="w12-login-btn" :disabled="loading" @click="doLogin">{{ loading ? '登录中' : '登录' }}</button>
+        <div class="w12-login-switch" v-if="pkSupported">
+          <a @click="passkeyLogin">{{ pkBusy ? 'Passkey 验证中…' : '使用 Passkey 登录' }}</a>
+        </div>
         <div class="w12-login-switch" v-if="session.site.guestLogin">
           <a @click="mode = 'guest'">← 以游客身份进入</a>
         </div>
@@ -63,6 +66,7 @@ import { useSession } from '../../stores/session'
 import { wallpaperClass } from '../../assets/wallpapers'
 import { setToken } from '../../api/http'
 import { renderMD } from '../../utils/markdown'
+import { usePasskeyLogin } from '../../shell/usePasskeyLogin'
 
 const router = useRouter()
 const session = useSession()
@@ -70,6 +74,7 @@ const session = useSession()
 const noticeHtml = computed(() => renderMD(session.site.announcement || ''))
 // 登录模式：guest=游客登录（默认）/ account=账号密码。站点关闭游客登录后强制账号模式
 const mode = ref<'guest' | 'account'>('guest')
+const { pkBusy, pkSupported, passkeyLogin } = usePasskeyLogin({ getUsername: () => username.value, onErr: m => { errMsg.value = m } })
 const username = ref('')
 const password = ref('')
 const loading = ref(false)

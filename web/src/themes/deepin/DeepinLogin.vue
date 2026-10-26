@@ -25,6 +25,9 @@
           <input class="input" type="password" placeholder="密码" v-model="password" />
           <button class="btn primary" type="submit" :disabled="loading">{{ loading ? '登录中…' : '登 录' }}</button>
         </form>
+        <div class="dde-login-switch" v-if="pkSupported">
+          <a @click="passkeyLogin">{{ pkBusy ? 'Passkey 验证中…' : '使用 Passkey 登录' }}</a>
+        </div>
         <div class="dde-login-switch" v-if="session.site.guestLogin">
           <a @click="mode = 'guest'">← 以游客身份进入</a>
         </div>
@@ -58,6 +61,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSession } from '../../stores/session'
+import { usePasskeyLogin } from '../../shell/usePasskeyLogin'
 import { wallpaperClass } from '../../assets/wallpapers'
 import { setToken } from '../../api/http'
 import AppIcon from '../../components/AppIcon.vue'
@@ -69,6 +73,7 @@ const session = useSession()
 const noticeHtml = computed(() => renderMD(session.site.announcement || ''))
 // 登录模式：guest=游客登录（默认）/ account=账号密码。站点关闭游客登录后强制账号模式
 const mode = ref<'guest' | 'account'>('guest')
+const { pkBusy, pkSupported, passkeyLogin } = usePasskeyLogin({ getUsername: () => username.value, onErr: msg => { errMsg.value = msg } })
 const username = ref('')
 const password = ref('')
 const loading = ref(false)

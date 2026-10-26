@@ -25,6 +25,11 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 	api.POST("/auth/register", middleware.RateLimit(regLimiter), auth.Register)
 	api.POST("/auth/guest", middleware.RateLimit(guestLimiter), auth.GuestLogin)
 	api.POST("/auth/refresh", middleware.RateLimit(refreshLimiter), auth.Refresh)
+	// B5 Passkey 登录：公开端点，与账号登录同级别的 IP 限速
+	pk := &PasskeyHandler{Secret: cfg.Secret}
+	pkLimiter := middleware.NewIPRateLimiter(15, 8)
+	api.POST("/auth/passkey/login/begin", middleware.RateLimit(pkLimiter), pk.BeginLogin)
+	api.POST("/auth/passkey/login/finish", middleware.RateLimit(pkLimiter), pk.FinishLogin)
 
 	// 公开分享（受「公开分享」功能门控）
 	sh := &ShareHandler{Site: site, Secret: cfg.Secret}
@@ -67,6 +72,12 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.PUT("/users/me", auth.UpdateMe)
 		ug.PUT("/users/me/password", auth.ChangePassword)
 		ug.PUT("/users/me/webdav-password", auth.SetWebdavPassword)
+
+		// B5 Passkey 管理（写操作挂 AppGate；未知 key 默认放行，游客经 GuestReadOnly 已被挡）
+		ug.GET("/auth/passkey", pk.List)
+		ug.POST("/auth/passkey/register/begin", middleware.AppGate("passkey"), pk.BeginRegister)
+		ug.POST("/auth/passkey/register/finish", middleware.AppGate("passkey"), pk.FinishRegister)
+		ug.DELETE("/auth/passkey", middleware.AppGate("passkey"), pk.Delete)
 
 		ug.GET("/policies", site.Policies)
 

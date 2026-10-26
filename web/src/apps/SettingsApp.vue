@@ -125,6 +125,27 @@
               <div v-else style="font-size: 12px; color: var(--text-3); margin-top: 6px">当前用户组未启用 WebDAV</div>
             </div>
             <div class="form-row" style="margin-top: 22px">
+              <label>Passkey（指纹 / 面容 / 安全密钥，免密登录）</label>
+              <div v-if="!pkOk" style="font-size: 12px; color: var(--text-3); max-width: 620px">当前访问环境不支持 WebAuthn（需要 https 或 localhost 访问）</div>
+              <template v-else>
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <button class="btn" :disabled="pkBusy" @click="registerPasskey">{{ pkBusy ? '等待系统验证…' : '注册新 Passkey' }}</button>
+                  <span style="font-size: 12px; color: var(--text-3)">最多 10 个；登录页输入用户名后即可用 Passkey 免密进入</span>
+                </div>
+                <table class="file-list" style="position: static; margin-top: 12px; max-width: 560px">
+                  <thead><tr><th>凭据</th><th>注册于</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr v-for="p in passkeys" :key="p.id">
+                      <td><code>{{ p.cred || p.name }}</code></td>
+                      <td>{{ String(p.createdAt).slice(0, 16).replace('T', ' ') }}</td>
+                      <td><button class="btn" @click="removePasskey(p.id)">删除</button></td>
+                    </tr>
+                    <tr v-if="!passkeys.length"><td colspan="3" style="color: var(--text-3)">暂无 Passkey</td></tr>
+                  </tbody>
+                </table>
+              </template>
+            </div>
+            <div class="form-row" style="margin-top: 22px">
               <label>API 令牌（第三方工具/脚本的独立凭据）</label>
               <div style="font-size: 12px; color: var(--text-3); max-width: 620px; line-height: 1.7; margin-bottom: 10px">
                 用于 rclone、CLI、自动化脚本等第三方访问，支持 <code>Authorization: Bearer 令牌</code> 请求头与 <code>?t=令牌</code> 参数；
@@ -375,10 +396,11 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
+import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
 import { get as aget, post as apost, del as adel } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
+import { parsePKOptions, credToJSON, passkeySupported } from '../utils/passkey'
 import AppIcon from '../components/AppIcon.vue'
 import { useViewport } from '../stores/viewport'
 
@@ -487,7 +509,40 @@ async function removeToken(t: ApiTokenItem) {
     await loadTokens()
   } catch (e: any) { toast.error(e?.message || '撤销失败') }
 }
-watch(tab, v => { if (v === 'account' && !session.isGuest) loadTokens() }, { immediate: true })
+watch(tab, v => { if (v === 'account' && !session.isGuest) { loadTokens(); loadPasskeys() } }, { immediate: true })
+
+// B5 Passkey 管理（账号页签懒加载）
+const passkeys = ref<{ id: number; name: string; cred: string; createdAt: string }[]>([])
+const pkBusy = ref(false)
+const pkOk = passkeySupported()
+async function loadPasskeys() {
+  try { passkeys.value = await passkeyApi.list() } catch { passkeys.value = [] }
+}
+async function registerPasskey() {
+  if (pkBusy.value) return
+  pkBusy.value = true
+  try {
+    const b = await passkeyApi.registerBegin()
+    const pk = parsePKOptions(b.options)
+    const cred: any = await navigator.credentials.create({ publicKey: pk })
+    if (!cred) { toast.error('已取消'); return }
+    await passkeyApi.registerFinish(b.sid, credToJSON(cred))
+    toast.success('Passkey 注册成功')
+    await loadPasskeys()
+  } catch (e: any) {
+    toast.error(e && e.name === 'NotAllowedError' ? '验证超时或被取消' : (e?.message || '注册失败'))
+  } finally {
+    pkBusy.value = false
+  }
+}
+async function removePasskey(id: number) {
+  const ok = await uiDlg.confirm('删除 Passkey', '删除后该凭据将无法用于免密登录？')
+  if (!ok) return
+  try {
+    await passkeyApi.remove(id)
+    await loadPasskeys()
+  } catch (e: any) { toast.error(e.message) }
+}
 
 // ---- B16 Webhook tab ----
 const hooks = ref<any[]>([])

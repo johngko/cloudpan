@@ -443,6 +443,17 @@ type WebhookDelivery struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// Passkey（B5 WebAuthn 凭据）：CredID=凭据 ID hex（唯一键，SignCount 回写定位）；
+// CredJSON = go-webauthn webauthn.Credential 整体序列化（公钥/描述符/计数器）
+type Passkey struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"index"`
+	CredID    string    `gorm:"size:128;uniqueIndex"`
+	Name      string    `gorm:"size:100"`
+	CredJSON  string    `gorm:"type:text"`
+	CreatedAt time.Time
+}
+
 type SiteSetting struct {
 	Key   string `gorm:"size:64;primaryKey" json:"key"`
 	Value string `gorm:"type:text" json:"value"`
@@ -555,7 +566,7 @@ func InitDB(dataDir string) {
 	quotaColNew := !DB.Migrator().HasColumn(&User{}, "quota_mb")
 	if err := DB.AutoMigrate(&User{}, &UserGroup{}, &Policy{}, &FileHash{}, &FileHashCopy{}, &UploadSession{}, &Share{}, &RecycleItem{}, &UserStar{}, &UserShare{}, &FileVersion{}, &Task{}, &UpdateLog{}, &Notification{}, &UserSetting{}, &SiteSetting{}, &AuditLog{}, &SystemApp{},
 		&FileTag{}, &FileTagging{}, &RecentOpen{}, &ApiToken{}, &FileText{},
-		&Webhook{}, &WebhookDelivery{}); err != nil {
+		&Webhook{}, &WebhookDelivery{}, &Passkey{}); err != nil {
 		log.Fatalf("建表失败: %v", err)
 	}
 	// 存量秒传索引回填副本行（旧版本只有 SourcePath 单源记录）
