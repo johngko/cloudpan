@@ -42,6 +42,11 @@ type User struct {
 	UsedBytes          int64  `gorm:"default:0" json:"usedBytes"`
 	// 令牌版本：改密/重置密码时自增，使该用户旧 JWT 立即失效（旧令牌内嵌旧版本号，中间件比对拒绝）
 	TokenVer           uint   `gorm:"default:0" json:"-"`
+	// A3 两步验证：TOTPSeed 存密封后的完整 otpauth:// URI（enc:v1: 前缀，密钥同站点敏感设置）；
+	// TOTPRecovery 为恢复码 sha256 十六进制哈希的 JSON 数组（一次性，用后即删）
+	TOTPSeed           string `gorm:"size:512" json:"-"`
+	TOTPEnabled        bool   `gorm:"default:false" json:"totpEnabled"`
+	TOTPRecovery       string `gorm:"type:text" json:"-"`
 	CreatedAt          time.Time `json:"createdAt"`
 	LastLoginAt        *time.Time  `json:"lastLoginAt"`
 }

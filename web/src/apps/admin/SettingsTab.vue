@@ -96,6 +96,12 @@
       <label class="ac-switch"><input type="checkbox" :checked="settings.webdav_enabled === 'true'" @change="settings.webdav_enabled = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
     </div>
     <div class="ac-set-sep"></div>
+    <div class="ac-set-title">两步验证（TOTP）</div>
+    <div class="ac-set-row">
+      <div class="ac-set-lbl"><b>全站强制两步验证</b><span>开启后：未绑定 TOTP 的用户被挡住全部写操作（仅可查看/下载），需先到「设置 → 账号」扫码绑定；管理员同样适用。已有恢复码兜底，不会永久锁死</span></div>
+      <label class="ac-switch"><input type="checkbox" :checked="settings.totp_enforce === 'true'" @change="settings.totp_enforce = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
+    </div>
+    <div class="ac-set-sep"></div>
     <div class="ac-set-title">通知外发</div>
     <div class="ac-set-row">
       <div class="ac-set-lbl"><b>Webhook 地址</b><span>通知产生时 POST JSON 到该地址（任务/配额/系统）；留空关闭</span></div>

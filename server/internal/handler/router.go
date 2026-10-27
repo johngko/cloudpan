@@ -67,12 +67,21 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 
 	// 需登录（GuestReadOnly：游客共享账号只读兜底，见 middleware/guest.go）
 	ug := api.Group("", middleware.Auth(cfg.Secret), middleware.GuestReadOnly())
+	ug.Use(enforceTotpWrite) // A3：站点开启强制 2FA 后，未绑定用户的写操作 428
 	{
 		ug.GET("/auth/me", auth.Me)
 		ug.GET("/audit/mine", auth.MyLogs) // 只读：本人操作记录（按 user_id 严格过滤）
 		ug.PUT("/users/me", auth.UpdateMe)
 		ug.PUT("/users/me/password", auth.ChangePassword)
 		ug.PUT("/users/me/webdav-password", auth.SetWebdavPassword)
+
+		// A3 两步验证（TOTP + 恢复码）自助管理；绑定/解绑需验证码在场
+		ug.GET("/me/totp", auth.TotpStatus)
+		ug.POST("/me/totp/setup", middleware.AppGate("totp"), auth.TotpSetup)
+		ug.GET("/me/totp/qrcode", auth.TotpQrcode)
+		ug.POST("/me/totp/enable", middleware.AppGate("totp"), auth.TotpEnable)
+		ug.POST("/me/totp/disable", middleware.AppGate("totp"), auth.TotpDisable)
+		ug.POST("/me/totp/recovery-regen", middleware.AppGate("totp"), auth.TotpRegen)
 
 		// B5 Passkey 管理（写操作挂 AppGate；未知 key 默认放行，游客经 GuestReadOnly 已被挡）
 		ug.GET("/auth/passkey", pk.List)

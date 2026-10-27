@@ -146,6 +146,41 @@
               </template>
             </div>
             <div class="form-row" style="margin-top: 22px">
+              <label>两步验证（TOTP 动态口令）</label>
+              <template v-if="totp.enabled">
+                <div style="font-size:12px; color:var(--text-3); max-width:620px">已启用：登录时口令之后还需输入验证器 App 的 6 位码（或一次性恢复码）。</div>
+                <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center">
+                  <input class="input" v-model="totpCode" placeholder="验证码或恢复码" style="width:200px" />
+                  <button class="btn" @click="regenRecovery">重新生成恢复码</button>
+                  <button class="btn" @click="disableTotp">关闭两步验证</button>
+                </div>
+              </template>
+              <template v-else-if="totp.step === 'setup'">
+                <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px">
+                  <img :src="totpQr" style="width:200px; height:200px; border-radius:10px; background:#fff" alt="TOTP 绑定二维码" />
+                  <div style="font-size:12.5px; color:var(--text-3); max-width:440px; line-height:1.7">
+                    用任意验证器 App（Google Authenticator / 微软验证器 / Aegis 等）扫码，
+                    或手动录入密钥：<code style="user-select:all">{{ totpSecret }}</code>
+                    <input class="input" v-model="totpCode" placeholder="App 显示的 6 位码" style="width:160px; margin-top:8px; display:block" />
+                    <div style="display:flex; gap:8px; margin-top:8px">
+                      <button class="btn" @click="enableTotp">启用</button>
+                      <button class="btn" @click="totp.step = 'idle'">取消</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                  <button class="btn" @click="startTotpSetup">开启两步验证</button>
+                  <span style="font-size:12px; color:var(--text-3)">登录多一道动态口令；管理员可在管理后台开启全站强制</span>
+                </div>
+              </template>
+              <div v-if="totpRecovery.length" style="margin-top:10px; padding:10px 12px; border-radius:8px; background:var(--accent-weak); font-size:12.5px; max-width:620px">
+                ⚠️ 一次性恢复码（每个仅能用一次，请立即妥善保存，此后不再显示）：<br />
+                <code v-for="rc in totpRecovery" :key="rc" style="display:inline-block; margin:4px 12px 0 0; user-select:all">{{ rc }}</code>
+              </div>
+            </div>
+            <div class="form-row" style="margin-top: 22px">
               <label>API 令牌（第三方工具/脚本的独立凭据）</label>
               <div style="font-size: 12px; color: var(--text-3); max-width: 620px; line-height: 1.7; margin-bottom: 10px">
                 用于 rclone、CLI、自动化脚本等第三方访问，支持 <code>Authorization: Bearer 令牌</code> 请求头与 <code>?t=令牌</code> 参数；
@@ -472,8 +507,8 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, settingsApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
-import { get as aget, post as apost, del as adel } from '../api/http'
+import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, settingsApi, totpApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
+import { get as aget, post as apost, del as adel, setToken } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
 import { parsePKOptions, credToJSON, passkeySupported } from '../utils/passkey'
@@ -586,7 +621,7 @@ async function removeToken(t: ApiTokenItem) {
     await loadTokens()
   } catch (e: any) { toast.error(e?.message || '撤销失败') }
 }
-watch(tab, v => { if (v === 'account' && !session.isGuest) { loadTokens(); loadPasskeys() } }, { immediate: true })
+watch(tab, v => { if (v === 'account' && !session.isGuest) { loadTokens(); loadPasskeys(); loadTotp() } }, { immediate: true })
 
 // B5 Passkey 管理（账号页签懒加载）
 const passkeys = ref<{ id: number; name: string; cred: string; createdAt: string }[]>([])
@@ -619,6 +654,62 @@ async function removePasskey(id: number) {
     await passkeyApi.remove(id)
     await loadPasskeys()
   } catch (e: any) { toast.error(e.message) }
+}
+
+// ---- A3 两步验证（TOTP + 恢复码）账号页签 ----
+const totp = ref({ enabled: false, step: 'idle' as 'idle' | 'setup' })
+const totpSecret = ref('')
+const totpCode = ref('')
+const totpQr = ref('')
+const totpRecovery = ref<string[]>([])
+async function loadTotp() {
+  try {
+    const s = await totpApi.status()
+    totp.value.enabled = s.enabled
+  } catch { /* 游客/网络异常：保持原状 */ }
+}
+function startTotpSetup() {
+  totpApi.setup().then(r => {
+    totpSecret.value = r.secret
+    totpQr.value = totpApi.qrcodeUrl() // ?t= 约定，验证器扫码前不经 axios
+    totpCode.value = ''
+    totp.value.step = 'setup'
+  }).catch((e: any) => toast.error(e?.message || '生成密钥失败'))
+}
+async function enableTotp() {
+  const code = totpCode.value.trim()
+  if (!code) { toast.error('请输入验证码'); return }
+  try {
+    const r = await totpApi.enable(code)
+    setToken(r.token, r.refreshToken) // 启用时 TokenVer 自增踢旧会话，换发新令牌
+    totpRecovery.value = r.recoveryCodes
+    totp.value = { enabled: true, step: 'idle' }
+    totpCode.value = ''
+    toast.success('两步验证已启用')
+    session.loadMe()
+  } catch (e: any) { toast.error(e?.message || '启用失败') }
+}
+async function disableTotp() {
+  const code = totpCode.value.trim()
+  if (!code) { toast.error('关闭两步验证需要当前验证码或恢复码'); return }
+  try {
+    await totpApi.disable(code)
+    totp.value.enabled = false
+    totpRecovery.value = []
+    totpCode.value = ''
+    toast.success('两步验证已关闭')
+    session.loadMe()
+  } catch (e: any) { toast.error(e?.message || '关闭失败') }
+}
+async function regenRecovery() {
+  const code = totpCode.value.trim()
+  if (!code) { toast.error('需先用当前验证码确认身份'); return }
+  try {
+    const r = await totpApi.regen(code)
+    totpRecovery.value = r.recoveryCodes
+    totpCode.value = ''
+    toast.success('已生成新恢复码（旧码全部作废）')
+  } catch (e: any) { toast.error(e?.message || '生成失败') }
 }
 
 // ---- B9 手机页签：浏览器推送 + 相册备份 ----

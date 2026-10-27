@@ -459,7 +459,7 @@ var siteSettingKeys = map[string]bool{
 	"site_name": true, "announcement": true, "site_theme": true, "public_url": true,
 	"register_open": true, "register_invite_code": true, "guest_login": true,
 	"demo_share": true, "standalone_apps": true, "wallpaper_catalog": true, "brand_logo": true,
-	"video_transcode": true, "webdav_enabled": true,
+	"video_transcode": true, "webdav_enabled": true, "totp_enforce": true,
 	"onlyoffice_url": true, "onlyoffice_jwt": true, "onlyoffice_dses": true,
 	"notify_webhook_url": true, "notify_webhook_token": true,
 	"notify_email_enabled": true, "notify_email_host": true, "notify_email_port": true,

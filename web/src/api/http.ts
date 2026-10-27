@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios'
+import { useToast } from '../stores/dialog'
 
 export const http = axios.create({ baseURL: '/api', timeout: 60000 })
 
@@ -94,6 +95,16 @@ http.interceptors.response.use(
     if (ax?.response?.status === 401) {
       clearToken()
       if (location.hash !== '#/login') location.hash = '#/login'
+    }
+    // A3 强制两步验证：428 用后端信封文案提示（默认 axios message 只有状态码），并弹一次 toast
+    if (ax?.response?.status === 428) {
+      const msg = (ax.response.data as { msg?: string } | undefined)?.msg || '本站已强制两步验证，请先绑定'
+      ax.message = msg
+      try {
+        useToast().error(msg)
+      } catch {
+        // pinia 未就绪（极早期请求）：文案已并入 message，调用方仍可见
+      }
     }
     return Promise.reject(err)
   }

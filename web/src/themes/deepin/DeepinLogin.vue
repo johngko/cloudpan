@@ -105,7 +105,7 @@ async function doGuestLogin() {
   errMsg.value = ''
   try {
     const res = await import('../../api/modules').then(m => m.authApi.guest())
-    setToken(res.token, res.refreshToken)
+    setToken(res.token!, res.refreshToken!)
     await session.loadMe()
     stage.value = 'welcome'
     setTimeout(() => router.replace('/desktop'), 900)
@@ -123,8 +123,8 @@ async function doLogin() {
   if (!username.value || !password.value || loading.value) return
   loading.value = true
   try {
-    const res = await import('../../api/modules').then(m => m.authApi.login(username.value, password.value))
-    setToken(res.token, res.refreshToken)
+    const res = await import('../../shell/usePasswordLogin').then(m => m.loginWithSecondFactor(username.value, password.value))
+    setToken(res.token!, res.refreshToken!)
     await session.loadMe()
     stage.value = 'welcome'
     setTimeout(() => router.replace('/desktop'), 900)

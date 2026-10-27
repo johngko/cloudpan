@@ -3,6 +3,7 @@ export interface User {
   id: number; username: string; nickname: string; avatar: number
   role: string; groupId: number; usedBytes: number
   appPerms?: Record<string, boolean> // 个人应用权限覆盖（键缺失=跟随用户组）
+  totpEnabled?: boolean // A3 两步验证绑定状态
 }
 export interface UserGroup {
   id: number; name: string; quotaMB: number; allowShare: boolean; allowWebdav: boolean
@@ -158,9 +159,15 @@ export interface ShareCreateIn {
   collectOnly?: boolean // 文件收集模式：只进不出（须为目录；强制禁下载/预览/编辑）
 }
 
+export interface LoginResult {
+  token?: string; refreshToken?: string; user?: User; isGuest?: boolean
+  // 口令已通过但账号启用了两步验证：无 token，需带 totp 码重发（见 shell/usePasswordLogin.ts）
+  needTotp?: boolean
+}
+
 export const authApi = {
   // isGuest：是否游客共享账号（系统托管身份，前端据此隐藏账号自管理入口；后端另有 GuestReadOnly 兜底）
-  login: (username: string, password: string) => post<{ token: string; refreshToken: string; user: User; isGuest: boolean }>('/auth/login', { username, password }),
+  login: (username: string, password: string, totp?: string) => post<LoginResult>('/auth/login', { username, password, totp }),
   // 游客登录：登录页「游客登录」入口，无需凭据（后端为共享游客账号签发 24h 令牌）
   guest: () => post<{ token: string; refreshToken: string; user: User; isGuest: boolean }>('/auth/guest', {}),
   register: (username: string, password: string, nickname: string, inviteCode: string) =>
@@ -169,6 +176,16 @@ export const authApi = {
   updateMe: (d: MeUpdateIn) => put<User>('/users/me', d),
   changePassword: (old_: string, new_: string) => put('/users/me/password', { old: old_, new: new_ }),
   setWebdavPassword: (password: string) => put('/users/me/webdav-password', { password })
+}
+
+// A3 两步验证：绑定自助管理（二维码走 ?t= 约定的图片资源）
+export const totpApi = {
+  status: () => get<{ enabled: boolean; seedPending: boolean }>('/me/totp'),
+  setup: () => post<{ otpauth: string; secret: string }>('/me/totp/setup'),
+  qrcodeUrl: () => '/api/me/totp/qrcode?t=' + encodeURIComponent(getToken() || ''),
+  enable: (code: string) => post<{ recoveryCodes: string[]; token: string; refreshToken: string }>('/me/totp/enable', { code }),
+  disable: (code: string) => post('/me/totp/disable', { code }),
+  regen: (code: string) => post<{ recoveryCodes: string[] }>('/me/totp/recovery-regen', { code })
 }
 
 export const passkeyApi = {
@@ -201,7 +218,7 @@ export const clipApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; totpEnforce?: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
 }
 
 // 在线 Office：实时协作「正在编辑」状态

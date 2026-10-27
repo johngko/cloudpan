@@ -137,6 +137,7 @@ func (h *SiteHandler) PublicInfo(c *gin.Context) {
 		"announcement":     s["announcement"],
 		"guestLogin":       guestLogin,
 		"theme":            theme,
+		"totpEnforce":      s["totp_enforce"] == "true", // A3：登录页/客户端据此提示绑定
 		"demoShare":        demoShare,
 		"brandLogo":        strings.TrimSpace(s["brand_logo"]),
 		"wallpaperCatalog": wpCatalog,

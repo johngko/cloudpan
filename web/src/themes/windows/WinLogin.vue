@@ -118,7 +118,7 @@ async function doGuestLogin() {
   errMsg.value = ''
   try {
     const res = await import('../../api/modules').then(m => m.authApi.guest())
-    setToken(res.token, res.refreshToken)
+    setToken(res.token!, res.refreshToken!)
     await session.loadMe()
     enterDesktop()
   } catch (e: any) {
@@ -134,8 +134,8 @@ async function doLogin() {
   loading.value = true
   errMsg.value = ''
   try {
-    const res = await import('../../api/modules').then(m => m.authApi.login(username.value, password.value))
-    setToken(res.token, res.refreshToken)
+    const res = await import('../../shell/usePasswordLogin').then(m => m.loginWithSecondFactor(username.value, password.value))
+    setToken(res.token!, res.refreshToken!)
     await session.loadMe()
     enterDesktop()
   } catch (e: any) {

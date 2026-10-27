@@ -3,6 +3,9 @@
        未返回时把功能应用/自装应用全部隐藏造成图标"先缺后补"的闪现 -->
   <div v-if="veil" class="shell-veil"><div class="shell-veil-spin"></div></div>
   <component v-else :is="theme[screen]" />
+  <!-- 开机/登录/注册屏没有桌面壳可挂 DialogHost：登录页两步验证弹码等 uiDlg
+       对话框需要宿主（桌面屏由三主题桌面自行挂载，此处跳过避免双挂） -->
+  <DialogHost v-if="screen !== 'Desktop'" />
   <!-- 功能权限拉取失败（网络/服务异常）：不阻塞桌面（入口按放行显示），但明确提示并可一键重试 -->
   <div v-if="!veil && screen === 'Desktop' && appstate.loadFailed" class="shell-degraded" role="alert">
     <span>功能权限加载失败（网络或服务异常），入口显隐可能与实际权限不一致。</span>
@@ -20,6 +23,7 @@ import { resolveTheme, preloadApps } from '../themes/registry'
 import { settingsApi } from '../api/modules'
 import { useAppState } from '../stores/appstate'
 import { pwaDesktopStart, pwaDesktopStop } from './usePwaShell'
+import DialogHost from './DialogHost.vue'
 
 // 外壳宿主：路由只挂载本组件，具体外壳（开机/登录/注册/桌面）按当前主题动态解析。
 // 切换主题时组件热替换，窗口等状态保存在 Pinia stores 中不丢失。

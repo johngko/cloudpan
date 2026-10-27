@@ -85,6 +85,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var in struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
+		Totp     string `json:"totp"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		dto.Fail(c, 400, "参数错误")
@@ -120,6 +121,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		loginFail(lockKey)
 		dto.Fail(c, 4001, "用户名或密码错误")
 		return
+	}
+	// A3 两步验证：口令通过后若已绑定 TOTP，要求验证码/恢复码。
+	// 无码 → needTotp（前端弹码输入）；码错 → 与口令错误完全同形响应（防区分枚举）+计入锁定桶。
+	if u.TOTPEnabled {
+		if strings.TrimSpace(in.Totp) == "" {
+			dto.OK(c, gin.H{"needTotp": true})
+			return
+		}
+		if !totpVerify(&u, in.Totp) {
+			loginFail(lockKey)
+			dto.Fail(c, 4001, "用户名或密码错误")
+			return
+		}
 	}
 	loginFails.Delete(lockKey)
 	loginFails.Delete(preKey)
