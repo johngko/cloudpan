@@ -47,6 +47,12 @@ type User struct {
 	TOTPSeed           string `gorm:"size:512" json:"-"`
 	TOTPEnabled        bool   `gorm:"default:false" json:"totpEnabled"`
 	TOTPRecovery       string `gorm:"type:text" json:"-"`
+	// C1 S3 网关凭据（每用户一组 SigV4 密钥）：S3Secret 密封存储（enc:v1），
+	// 明文只在创建/轮换时展示一次；S3Scope = rw | ro（ro 令牌拒绝一切写）
+	S3Key            string `gorm:"size:32;uniqueIndex" json:"-"`
+	S3Secret         string `gorm:"size:256" json:"-"`
+	S3Scope          string `gorm:"size:8" json:"-"`
+	S3CreatedAt      *time.Time `json:"-"`
 	CreatedAt          time.Time `json:"createdAt"`
 	LastLoginAt        *time.Time  `json:"lastLoginAt"`
 }

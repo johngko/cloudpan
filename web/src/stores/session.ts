@@ -41,7 +41,7 @@ export const useSession = defineStore('session', {
     group: null as UserGroup | null,
     // 游客共享账号：系统托管身份（全体访客共用），无账号自管理入口（后端 GuestReadOnly 兜底）
     isGuest: false,
-    site: { siteName: 'CloudPan', registerOpen: false, needInviteCode: false, officeConfigured: false, announcement: '', guestLogin: false, theme: 'win12', demoShare: '', wallpaperCatalog: [] as { name: string; url: string }[], brandLogo: '' },
+    site: { siteName: 'CloudPan', registerOpen: false, needInviteCode: false, officeConfigured: false, announcement: '', guestLogin: false, theme: 'win12', demoShare: '', wallpaperCatalog: [], brandLogo: '' } as Awaited<ReturnType<typeof siteApi.publicInfo>>,
     wallpaper: localStorage.getItem('cp_wallpaper') || 'win12',
     // 深色偏好三态：auto=跟随系统（新用户默认）；light/dark=手动固定（老用户保留原选择）
     darkMode: initDarkMode() as 'auto' | 'light' | 'dark',

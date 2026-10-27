@@ -180,6 +180,40 @@
                 <code v-for="rc in totpRecovery" :key="rc" style="display:inline-block; margin:4px 12px 0 0; user-select:all">{{ rc }}</code>
               </div>
             </div>
+            <div v-if="session.site?.s3Enabled" class="form-row" style="margin-top: 22px">
+              <label>S3 兼容网关（rclone / Cyberduck / boto3 等）</label>
+              <div style="font-size: 12px; color: var(--text-3); max-width: 620px; line-height: 1.7; margin-bottom: 10px">
+                把网盘挂载为标准 S3：端点 <code style="user-select:all">{{ s3Endpoint }}</code>（path-style），
+                Bucket 为 <code>disk-C</code> / <code>disk-D</code>…（对应本地盘符，小写亦可），Region 任意（如 us-east-1），签名 V4。
+                每组密钥明文只显示一次，丢失只能轮换；只读密钥会拒绝一切写请求。
+              </div>
+              <template v-if="s3Info.configured">
+                <div style="display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; align-items:center">
+                  Access Key：<code style="user-select:all">{{ s3Info.accessKey }}</code>
+                  <span style="font-size:12px; color:var(--text-3)">{{ s3Info.scope === 'ro' ? '只读' : '读写' }} · 创建于 {{ String(s3Info.createdAt).slice(0, 16).replace('T', ' ') }}</span>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center">
+                  <select class="input" v-model="s3Scope" style="width:110px">
+                    <option value="rw">读写</option>
+                    <option value="ro">只读</option>
+                  </select>
+                  <button class="btn" @click="s3Rotate">轮换密钥</button>
+                  <button class="btn" @click="s3Remove">删除凭据</button>
+                </div>
+              </template>
+              <template v-else>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                  <select class="input" v-model="s3Scope" style="width:110px">
+                    <option value="rw">读写</option>
+                    <option value="ro">只读</option>
+                  </select>
+                  <button class="btn" @click="s3Create">创建 S3 密钥</button>
+                </div>
+              </template>
+              <div v-if="s3SecretShown" style="margin-top:10px; padding:10px 12px; border-radius:8px; background:var(--accent-weak); font-size:12.5px; max-width:620px">
+                ⚠️ Secret Key（仅此一次显示，请立即保存）：<code style="user-select:all; word-break:break-all">{{ s3SecretShown }}</code>
+              </div>
+            </div>
             <div class="form-row" style="margin-top: 22px">
               <label>API 令牌（第三方工具/脚本的独立凭据）</label>
               <div style="font-size: 12px; color: var(--text-3); max-width: 620px; line-height: 1.7; margin-bottom: 10px">
@@ -507,7 +541,7 @@ import { canUseOffline } from '../stores/apps'
 import { useTransfer, CHUNK_MB_OPTIONS, CONCURRENCY_MAX } from '../stores/transfer'
 import { wallpaperClass } from '../assets/wallpapers'
 import { availableThemes, resolveTheme } from '../themes/registry'
-import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, settingsApi, totpApi, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
+import { passkeyApi, fsApi, shareApi, authApi, userShareApi, auditApi, tokenApi, settingsApi, totpApi, s3Api, type AuditItem, type ApiTokenItem, webhookApi } from '../api/modules'
 import { get as aget, post as apost, del as adel, setToken } from '../api/http'
 import { useToast, useUiDialog } from '../stores/dialog'
 import { copyText } from '../utils/clipboard'
@@ -621,7 +655,7 @@ async function removeToken(t: ApiTokenItem) {
     await loadTokens()
   } catch (e: any) { toast.error(e?.message || '撤销失败') }
 }
-watch(tab, v => { if (v === 'account' && !session.isGuest) { loadTokens(); loadPasskeys(); loadTotp() } }, { immediate: true })
+watch(tab, v => { if (v === 'account' && !session.isGuest) { loadTokens(); loadPasskeys(); loadTotp(); loadS3() } }, { immediate: true })
 
 // B5 Passkey 管理（账号页签懒加载）
 const passkeys = ref<{ id: number; name: string; cred: string; createdAt: string }[]>([])
@@ -710,6 +744,44 @@ async function regenRecovery() {
     totpCode.value = ''
     toast.success('已生成新恢复码（旧码全部作废）')
   } catch (e: any) { toast.error(e?.message || '生成失败') }
+}
+
+// ---- C1 S3 网关凭据（账号页签）----
+const s3Endpoint = location.origin + '/s3'
+const s3Info = ref({ configured: false, accessKey: '', scope: '', createdAt: '' })
+const s3Scope = ref<'rw' | 'ro'>('rw')
+const s3SecretShown = ref('')
+async function loadS3() {
+  try {
+    const s = await s3Api.status()
+    s3Info.value = { configured: s.configured, accessKey: s.accessKey || '', scope: s.scope || '', createdAt: s.createdAt || '' }
+  } catch { /* 网关未启用时卡片本就隐藏 */ }
+}
+async function s3Create() {
+  try {
+    const r = await s3Api.create(s3Scope.value)
+    s3Info.value = { configured: true, accessKey: r.accessKey, scope: r.scope, createdAt: new Date().toISOString() }
+    s3SecretShown.value = r.secret
+    toast.success('S3 密钥已创建（Secret 仅此一次显示）')
+  } catch (e: any) { toast.error(e?.message || '创建失败') }
+}
+async function s3Rotate() {
+  if (!(await uiDlg.confirm('轮换 S3 密钥', '旧 Access Key/Secret 立即失效，正在使用的 S3 客户端需更新配置。继续？', { danger: true, okText: '轮换' }))) return
+  try {
+    const r = await s3Api.reset(s3Scope.value)
+    s3Info.value = { configured: true, accessKey: r.accessKey, scope: r.scope, createdAt: new Date().toISOString() }
+    s3SecretShown.value = r.secret
+    toast.success('已轮换（Secret 仅此一次显示）')
+  } catch (e: any) { toast.error(e?.message || '轮换失败') }
+}
+async function s3Remove() {
+  if (!(await uiDlg.confirm('删除 S3 凭据', '删除后该 Access Key 将无法访问 S3 网关，需要时可重新创建。', { danger: true, okText: '删除' }))) return
+  try {
+    await s3Api.remove()
+    s3Info.value = { configured: false, accessKey: '', scope: '', createdAt: '' }
+    s3SecretShown.value = ''
+    toast.success('S3 凭据已删除')
+  } catch (e: any) { toast.error(e?.message || '删除失败') }
 }
 
 // ---- B9 手机页签：浏览器推送 + 相册备份 ----

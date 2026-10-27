@@ -188,6 +188,14 @@ export const totpApi = {
   regen: (code: string) => post<{ recoveryCodes: string[] }>('/me/totp/recovery-regen', { code })
 }
 
+// C1 S3 兼容网关：每用户一组 SigV4 凭据；明文 secret 只在创建/轮换响应里出现一次
+export const s3Api = {
+  status: () => get<{ configured: boolean; accessKey?: string; scope?: string; createdAt?: string }>('/me/s3'),
+  create: (scope: 'rw' | 'ro') => post<{ accessKey: string; secret: string; scope: string }>('/me/s3/create', { scope }),
+  reset: (scope: 'rw' | 'ro') => post<{ accessKey: string; secret: string; scope: string }>('/me/s3/reset', { scope }),
+  remove: () => post('/me/s3/delete', {})
+}
+
 export const passkeyApi = {
   list: () => get<{ id: number; name: string; cred: string; createdAt: string }[]>('/auth/passkey'),
   remove: (id: number) => del('/auth/passkey?id=' + id),
@@ -218,7 +226,7 @@ export const clipApi = {
 }
 
 export const siteApi = {
-  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; totpEnforce?: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
+  publicInfo: () => get<{ siteName: string; registerOpen: boolean; needInviteCode: boolean; officeConfigured: boolean; announcement: string; guestLogin: boolean; theme: string; demoShare: string; standaloneApps: boolean; totpEnforce?: boolean; s3Enabled?: boolean; wallpaperCatalog: { name: string; url: string }[]; brandLogo?: string }>('/site/public')
 }
 
 // 在线 Office：实时协作「正在编辑」状态

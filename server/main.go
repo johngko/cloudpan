@@ -126,6 +126,7 @@ func main() {
 	handler.InitTaskPool(site.Fs, cfg.Sub("bt_tmp"))
 	handler.Setup(r, cfg, site)
 	handler.RegisterDav(r, site.Fs)
+	handler.RegisterS3(r, site)
 	web.Register(r)
 
 	// 显式监听器（而非 r.Run）：系统更新自重启（syscall.Exec）继承 FD 表，

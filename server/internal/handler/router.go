@@ -89,6 +89,12 @@ func Setup(r *gin.Engine, cfg *config.Config, site *SiteHandler) {
 		ug.POST("/auth/passkey/register/finish", middleware.AppGate("passkey"), pk.FinishRegister)
 		ug.DELETE("/auth/passkey", middleware.AppGate("passkey"), pk.Delete)
 
+		// C1 S3 网关每用户凭据自助管理（写操作挂 AppGate）
+		ug.GET("/me/s3", site.S3Status)
+		ug.POST("/me/s3/create", middleware.AppGate("s3"), site.S3Create)
+		ug.POST("/me/s3/reset", middleware.AppGate("s3"), site.S3Reset)
+		ug.POST("/me/s3/delete", middleware.AppGate("s3"), site.S3Delete)
+
 		ug.GET("/policies", site.Policies)
 
 		ug.GET("/fs/list", site.List)

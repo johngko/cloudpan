@@ -102,6 +102,12 @@
       <label class="ac-switch"><input type="checkbox" :checked="settings.totp_enforce === 'true'" @change="settings.totp_enforce = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
     </div>
     <div class="ac-set-sep"></div>
+    <div class="ac-set-title">S3 兼容网关</div>
+    <div class="ac-set-row">
+      <div class="ac-set-lbl"><b>启用 S3 网关</b><span>端点 /s3（path-style，SigV4 签名）。用户在「设置 → 账号」自助创建每用户 Access Key/Secret（可选只读），rclone、Cyberduck、boto3 等标准 S3 客户端可直接挂载网盘；关闭后网关立即整体 403</span></div>
+      <label class="ac-switch"><input type="checkbox" :checked="settings.s3_enabled === 'true'" @change="settings.s3_enabled = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" /><span class="ac-slider"></span></label>
+    </div>
+    <div class="ac-set-sep"></div>
     <div class="ac-set-title">通知外发</div>
     <div class="ac-set-row">
       <div class="ac-set-lbl"><b>Webhook 地址</b><span>通知产生时 POST JSON 到该地址（任务/配额/系统）；留空关闭</span></div>
