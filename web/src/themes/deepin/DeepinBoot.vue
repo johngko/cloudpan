@@ -9,6 +9,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getToken } from '../../api/http'
 import AppIcon from '../../components/AppIcon.vue'
 
 const router = useRouter()
@@ -18,6 +19,8 @@ const pct = ref(0)
 // 卸载后停止流程，防止残留的 replace('/login') 把已登录用户踢回登录页
 let alive = true
 onMounted(async () => {
+  // 会话恢复：刷新后令牌还在（sessionStorage 同标签页存活）→ 跳过开机动画直接回桌面
+  if (getToken()) { router.replace('/desktop'); return }
   if (!alive) return
   stageText.value = 'Deepin CloudPan'
   await sleep(350)

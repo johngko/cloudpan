@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getToken } from '../../api/http'
 
 const router = useRouter()
 // 阶段一 = boot.html（BIOS 双进度条，20 步 × 300ms，步长曲线 [0,0,1,3,7,17,20]）
@@ -73,6 +74,9 @@ let timer: number | undefined
 let tLogo: number | undefined, tFade: number | undefined, tLogin: number | undefined
 
 onMounted(() => {
+  // 会话恢复：同标签页整页刷新（F5/地址栏导航/Edge 休眠标签唤醒/升级后自动刷新）时
+  // sessionStorage 令牌仍在 → 跳过开机动画直接回桌面，不重演 BIOS+登录（曾表现为"一刷新就要重新登录"）
+  if (getToken()) { router.replace('/desktop'); return }
   const progress = [0, 0, 1, 3, 7, 17, 20]
   let i = 0
   timer = window.setInterval(() => {
