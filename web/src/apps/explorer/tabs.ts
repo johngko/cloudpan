@@ -15,6 +15,10 @@ export interface ExplorerTab {
   viewMode: 'grid' | 'list'
   history: string[]
   fwdStack: string[]
+  /** 标签级列表缓存：该标签最近一次目录列表及对应路径。
+   *  切换/新建标签时即时恢复本标签内容，不再闪现上一标签的列表或空帧（2026-10-27 闪屏反馈） */
+  items?: unknown[]
+  itemsPath?: string
 }
 
 /** 新建标签页的初始状态（大图标视图、无搜索、无历史） */

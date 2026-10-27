@@ -574,7 +574,7 @@ import { userShareApi } from '../api/modules'
 import { collectDropFiles } from '../utils/drop'
 import { createEncryptedShare } from '../utils/shareEncrypt'
 import { copyText } from '../utils/clipboard'
-import { withViewTransition, vtNavigate } from '../utils/viewTransition'
+import { withViewTransition } from '../utils/viewTransition'
 import { sortEntries, nextSort } from './explorer/sortEntries'
 import type { TaskItem } from '../api/modules'
 import { uniqueName, batchRename } from './explorer/fileNames'
@@ -648,16 +648,24 @@ const viewMode = computed<'grid' | 'list'>({
 const history = computed<string[]>(() => activeTab.value?.history ?? [])
 const fwdStack = computed<string[]>(() => activeTab.value?.fwdStack ?? [])
 
+// 切标签瞬间用该标签自己的缓存列表（命中路径才算）：不再先显示上一标签的列表、
+// 也无需等网络才出内容——旧行为是"先闪现别处目录/空白，再跳回来"，肉眼即"闪一下"
+function syncTabItems() {
+  const t = activeTab.value
+  items.value = (t && t.items && t.itemsPath === t.path) ? t.items as FileItem[] : []
+}
 function addTab(policyId: number | null = null, p = '/') {
   tabs.value.push(newTab(policyId, p))
   activeIdx.value = tabs.value.length - 1
   selSet.value = new Set()
+  syncTabItems()
   load()
 }
 function switchTab(i: number) {
   if (i === activeIdx.value) return
   activeIdx.value = i
   selSet.value = new Set()
+  syncTabItems()
   load()
 }
 function closeTab(i: number) {
@@ -665,6 +673,7 @@ function closeTab(i: number) {
   const next = activeIdxAfterClose(tabs.value.length, i, activeIdx.value)
   if (next === null) { store.close(props.winId); return }
   activeIdx.value = next
+  syncTabItems()
   load()
 }
 
@@ -1008,7 +1017,6 @@ function back() {
   if (cur === null) return
   t.fwdStack.push(path.value)
   path.value = cur
-  navDir = 'back'
   load()
 }
 function fwd() {
@@ -1018,7 +1026,6 @@ function fwd() {
   if (next === null) return
   t.history.push(path.value)
   path.value = next
-  navDir = 'fwd'
   load()
 }
 function goUp() {
@@ -1029,12 +1036,8 @@ function goto(p: string) {
   if (!currentPolicy.value) return
   pushHistory(p)
   path.value = p
-  navDir = 'fwd'
   load()
 }
-
-// 本次 load 结果用哪个方向的 View Transition（back=从左滑回，fwd=向右滑入/钻入）
-let navDir: 'back' | 'fwd' | null = null
 
 async function load() {
   if (!currentPolicy.value) return
@@ -1042,26 +1045,39 @@ async function load() {
   loading.value = true
   searching.value = false
   selSet.value = new Set()
+  const tab = activeTab.value
+  const wantPath = path.value
+  const wantPolicy = currentPolicy.value.id
   try {
-    if (currentPolicy.value.id === SHARED_POLICY) {
+    if (wantPolicy === SHARED_POLICY) {
       await loadShared()
       return
     }
-    const d = await fsApi.list(currentPolicy.value.id, path.value)
-    const dir = navDir; navDir = null
-    vtNavigate(() => { items.value = d.items }, dir)
+    const d = await fsApi.list(wantPolicy, wantPath)
+    // 竞态守卫：fetch 期间用户可能已切标签/再导航，旧结果直接丢弃（否则会把已离开的
+    // 目录列表盖到当前视图上，表现为"先显示别处内容再跳回来"）
+    if (activeTab.value !== tab || path.value !== wantPath) return
+    // 直接换列表，不再用 View Transition：全窗口快照交叉淡化在窗口密集的网盘里
+    // 观感就是"页面刷了一下"（2026-10-27 录屏反馈）
+    items.value = d.items
+    if (tab && !tab.keyword) { tab.items = d.items; tab.itemsPath = wantPath } // 标签级缓存：切回即恢复
     // 侧栏「文件收藏」跳转：进入所在目录后自动选中该文件（预览面板即时可见）
     if (pendingSelect.value) {
       const want = pendingSelect.value
       pendingSelect.value = ''
       if (d.items.some(x => x.path === want)) selSet.value = new Set([want])
     }
-    store.setTitle(props.winId, `${currentPolicy.value.name} (${currentPolicy.value.letter})${path.value === '/' ? '' : ' - ' + path.value}`)
+    store.setTitle(props.winId, `${currentPolicy.value.name} (${currentPolicy.value.letter})${wantPath === '/' ? '' : ' - ' + wantPath}`)
   } catch (e: any) {
+    if (activeTab.value !== tab || path.value !== wantPath) return
     items.value = []
+    if (tab) { tab.items = []; tab.itemsPath = wantPath }
     store.setTitle(props.winId, '文件资源管理器')
     if (path.value !== '/') { path.value = '/'; load() }
-  } finally { loading.value = false }
+  } finally {
+    // 只有"仍是本次导航"时才熄 loading：迟到的旧 fetch 不能把新导航的加载态抹掉
+    if (activeTab.value === tab && path.value === wantPath) loading.value = false
+  }
 }
 
 // 共享虚拟盘加载：根 = 共享给我列表（重名附创建者区分）；内部走 /shared/:id/list
